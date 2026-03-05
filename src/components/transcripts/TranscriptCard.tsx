@@ -46,7 +46,7 @@ export function TranscriptCard({
         <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between mb-1 gap-2">
             <Link
-              to={`/transcript/${transcript.id}`}
+              to={`/app/transcript/${transcript.id}`}
               className="text-sm sm:text-base font-semibold text-slate-900 dark:text-white hover:text-indigo-600 dark:hover:text-indigo-400 truncate focus:outline-none focus:underline">
 
               {transcript.filename}

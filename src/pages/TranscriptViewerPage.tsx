@@ -86,7 +86,7 @@ export function TranscriptViewerPage() {
           Transcript not found
         </h2>
         <button
-          onClick={() => navigate('/')}
+          onClick={() => navigate('/app')}
           className="text-indigo-600 dark:text-indigo-400 hover:underline">
 
           Return to Dashboard
@@ -260,7 +260,7 @@ export function TranscriptViewerPage() {
       <header className="flex-shrink-0 border-b border-slate-200 dark:border-slate-800 px-3 sm:px-6 py-2 sm:py-3 flex items-center justify-between bg-white dark:bg-slate-900 z-10 gap-2">
         <div className="flex items-center gap-2 sm:gap-4 min-w-0">
           <Link
-            to="/"
+            to="/app"
             className="p-1.5 text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 rounded-md transition-colors flex-shrink-0">
 
             <ChevronLeftIcon className="h-5 w-5" />

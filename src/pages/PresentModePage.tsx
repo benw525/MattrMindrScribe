@@ -18,7 +18,7 @@ export function PresentModePage() {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        navigate(`/transcript/${id}`);
+        navigate(`/app/transcript/${id}`);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -64,7 +64,7 @@ export function PresentModePage() {
         </div>
 
         <button
-          onClick={() => navigate(`/transcript/${id}`)}
+          onClick={() => navigate(`/app/transcript/${id}`)}
           className="flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-white transition-colors">
 
           <XIcon className="h-5 w-5" />

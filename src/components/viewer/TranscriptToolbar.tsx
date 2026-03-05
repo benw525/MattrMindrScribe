@@ -98,7 +98,7 @@ export function TranscriptToolbar({
       </button>
 
       <button
-        onClick={() => navigate(`/transcript/${transcriptId}/present`)}
+        onClick={() => navigate(`/app/transcript/${transcriptId}/present`)}
         className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-sm font-medium text-white bg-slate-900 dark:bg-slate-700 hover:bg-slate-800 dark:hover:bg-slate-600 rounded-md transition-colors shadow-sm">
 
         <MaximizeIcon className="h-4 w-4" />
