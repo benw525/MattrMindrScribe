@@ -21,6 +21,11 @@ export function AuthPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    if (mode === 'register' && !name.trim()) {
+      toast.error('Please enter your full name');
+      return;
+    }
+
     if (!email || !/\S+@\S+\.\S+/.test(email)) {
       toast.error('Please enter a valid email address');
       return;
@@ -101,7 +106,6 @@ export function AuthPage() {
                     </div>
                     <input
                       type="text"
-                      required={mode === 'register'}
                       value={name}
                       onChange={(e) => setName(e.target.value)}
                       className="block w-full pl-10 pr-3 py-2.5 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-950 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-shadow sm:text-sm"
@@ -120,8 +124,8 @@ export function AuthPage() {
                   <MailIcon className="h-4 w-4 text-slate-400" />
                 </div>
                 <input
-                  type="email"
-                  required
+                  type="text"
+                  autoComplete="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   className="block w-full pl-10 pr-3 py-2.5 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-950 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-shadow sm:text-sm"
@@ -157,7 +161,7 @@ export function AuthPage() {
                       </div>
                       <input
                         type="password"
-                        required={mode !== 'forgot_password'}
+                        autoComplete="current-password"
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
                         className="block w-full pl-10 pr-3 py-2.5 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-950 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-shadow sm:text-sm"
@@ -176,7 +180,7 @@ export function AuthPage() {
                       </div>
                       <input
                         type="password"
-                        required={mode === 'register'}
+                        autoComplete="new-password"
                         value={confirmPassword}
                         onChange={(e) => setConfirmPassword(e.target.value)}
                         className="block w-full pl-10 pr-3 py-2.5 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-950 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-shadow sm:text-sm"
