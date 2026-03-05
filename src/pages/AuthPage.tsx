@@ -21,6 +21,16 @@ export function AuthPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    if (!email || !/\S+@\S+\.\S+/.test(email)) {
+      toast.error('Please enter a valid email address');
+      return;
+    }
+
+    if (mode !== 'forgot_password' && !password) {
+      toast.error('Please enter your password');
+      return;
+    }
+
     if (mode === 'register' && password !== confirmPassword) {
       toast.error('Passwords do not match');
       return;
@@ -74,7 +84,7 @@ export function AuthPage() {
 
       <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md relative z-10">
         <div className="bg-white dark:bg-slate-900 py-8 px-4 shadow-xl shadow-slate-200/50 dark:shadow-none sm:rounded-2xl sm:px-10 border border-slate-100 dark:border-slate-800">
-          <form className="space-y-5" onSubmit={handleSubmit}>
+          <form className="space-y-5" onSubmit={handleSubmit} noValidate>
             <AnimatePresence mode="wait">
               {mode === 'register' &&
               <motion.div

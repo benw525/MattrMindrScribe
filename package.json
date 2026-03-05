@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "npx tsx server/index.ts & npx vite",
+    "dev": "bash start.sh",
     "dev:frontend": "npx vite",
     "dev:backend": "npx tsx server/index.ts",
     "build": "npx vite build",
