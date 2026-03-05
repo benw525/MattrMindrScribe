@@ -1,6 +1,7 @@
-modules = ["nodejs-20", "web", "postgresql-16"]
+modules = ["nodejs-20", "web", "postgresql-16", "python-3.11"]
 [agent]
 expertMode = true
+integrations = ["stripe:1.0.0"]
 
 [nix]
 channel = "stable-25_05"
@@ -38,6 +39,12 @@ localPort = 5000
 externalPort = 80
 
 [deployment]
-deploymentTarget = "static"
+deploymentTarget = "autoscale"
 build = ["npm", "run", "build"]
 publicDir = "dist"
+run = ["npx", "tsx", "server/index.ts"]
+
+[userenv]
+
+[userenv.shared]
+JWT_SECRET = "5a1c1628be1135d87b97be44cdba1d0a92f3833f86a31ccae10dc9c800b6c8f53aed8380a98853cf8d4b3e60ce6a8640968ff2dd8dd7eb659828ebac2f34f4c5"
