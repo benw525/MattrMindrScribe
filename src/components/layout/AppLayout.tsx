@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { MenuIcon } from 'lucide-react';
 import { Sidebar } from './Sidebar';
 import { UploadDropzone } from '../upload/UploadDropzone';
+import { UploadProgress } from '../upload/UploadProgress';
 import { Logo } from '../brand/Logo';
 export function AppLayout() {
   const [isUploadOpen, setIsUploadOpen] = useState(false);
@@ -103,6 +104,8 @@ export function AppLayout() {
       {isUploadOpen &&
       <UploadDropzone onClose={() => setIsUploadOpen(false)} />
       }
+
+      <UploadProgress />
     </div>);
 
 }

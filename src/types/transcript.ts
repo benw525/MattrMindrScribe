@@ -35,3 +35,11 @@ export interface Folder {
   caseNumber: string;
   parentId: string | null;
 }
+
+export interface UploadEntry {
+  id: string;
+  filename: string;
+  progress: number;
+  status: 'uploading' | 'complete' | 'error';
+  errorMessage?: string;
+}

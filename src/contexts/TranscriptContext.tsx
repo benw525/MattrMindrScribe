@@ -1,13 +1,17 @@
-import React, { useCallback, useState, useEffect, createContext, ReactNode } from 'react';
-import { Transcript, Folder } from '../types/transcript';
+import React, { useCallback, useState, useEffect, useRef, createContext, ReactNode } from 'react';
+import { Transcript, Folder, UploadEntry } from '../types/transcript';
 import { api, isAuthenticated } from '../utils/api';
+import { toast } from 'sonner';
 
 interface TranscriptContextType {
   transcripts: Transcript[];
   folders: Folder[];
   loading: boolean;
+  activeUploads: UploadEntry[];
   addTranscript: (transcript: Transcript) => void;
   uploadFile: (file: File, description?: string, folderId?: string, onProgress?: (percent: number) => void) => Promise<void>;
+  startBackgroundUpload: (file: File, description?: string, folderId?: string) => void;
+  dismissUpload: (id: string) => void;
   updateTranscript: (id: string, updates: Partial<Transcript>) => void;
   deleteTranscripts: (ids: string[]) => void;
   addFolder: (name: string, caseNumber: string, parentId?: string | null) => void;
@@ -23,6 +27,8 @@ export function TranscriptProvider({ children }: { children: ReactNode }) {
   const [transcripts, setTranscripts] = useState<Transcript[]>([]);
   const [folders, setFolders] = useState<Folder[]>([]);
   const [loading, setLoading] = useState(true);
+  const [activeUploads, setActiveUploads] = useState<UploadEntry[]>([]);
+  const uploadIdCounter = useRef(0);
 
   const refreshData = useCallback(async () => {
     if (!isAuthenticated()) {
@@ -54,6 +60,44 @@ export function TranscriptProvider({ children }: { children: ReactNode }) {
   const uploadFile = useCallback(async (file: File, description?: string, folderId?: string, onProgress?: (percent: number) => void) => {
     const newTranscript = await api.transcripts.upload(file, description, folderId, onProgress);
     setTranscripts((prev) => [newTranscript, ...prev]);
+  }, []);
+
+  const startBackgroundUpload = useCallback((file: File, description?: string, folderId?: string) => {
+    const uploadId = `upload-${++uploadIdCounter.current}-${Date.now()}`;
+    const entry: UploadEntry = {
+      id: uploadId,
+      filename: file.name,
+      progress: 0,
+      status: 'uploading',
+    };
+    setActiveUploads((prev) => [...prev, entry]);
+
+    api.transcripts.upload(file, description, folderId, (percent) => {
+      setActiveUploads((prev) =>
+        prev.map((u) => u.id === uploadId ? { ...u, progress: percent } : u)
+      );
+    }).then((newTranscript) => {
+      setActiveUploads((prev) =>
+        prev.map((u) => u.id === uploadId ? { ...u, progress: 100, status: 'complete' as const } : u)
+      );
+      setTranscripts((prev) => [newTranscript, ...prev]);
+      setTimeout(() => {
+        setActiveUploads((prev) => prev.filter((u) => u.id !== uploadId));
+      }, 3000);
+    }).catch((err) => {
+      const errorMsg = err.message || 'Upload failed';
+      toast.error(`Upload failed: ${file.name}`);
+      setActiveUploads((prev) =>
+        prev.map((u) => u.id === uploadId ? { ...u, status: 'error' as const, errorMessage: errorMsg } : u)
+      );
+      setTimeout(() => {
+        setActiveUploads((prev) => prev.filter((u) => u.id !== uploadId));
+      }, 5000);
+    });
+  }, []);
+
+  const dismissUpload = useCallback((id: string) => {
+    setActiveUploads((prev) => prev.filter((u) => u.id !== id));
   }, []);
 
   const updateTranscript = useCallback(async (id: string, updates: Partial<Transcript>) => {
@@ -121,8 +165,11 @@ export function TranscriptProvider({ children }: { children: ReactNode }) {
         transcripts,
         folders,
         loading,
+        activeUploads,
         addTranscript,
         uploadFile,
+        startBackgroundUpload,
+        dismissUpload,
         updateTranscript,
         deleteTranscripts,
         addFolder,
