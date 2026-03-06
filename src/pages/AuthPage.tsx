@@ -27,12 +27,14 @@ export function AuthPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    const trimmedEmail = email.trim().toLowerCase();
+
     if (mode === 'register' && !name.trim()) {
       toast.error('Please enter your full name');
       return;
     }
 
-    if (!email || !/\S+@\S+\.\S+/.test(email)) {
+    if (!trimmedEmail || !/\S+@\S+\.\S+/.test(trimmedEmail)) {
       toast.error('Please enter a valid email address');
       return;
     }
@@ -54,11 +56,11 @@ export function AuthPage() {
         toast.success('Password reset link sent to your email');
         setMode('login');
       } else if (mode === 'login') {
-        await login(email, password);
+        await login(trimmedEmail, password);
         toast.success('Welcome back!');
         navigate('/app');
       } else {
-        await register(email, password, name);
+        await register(trimmedEmail, password, name);
         toast.success('Account created successfully');
         navigate('/app');
       }
@@ -130,11 +132,15 @@ export function AuthPage() {
                   <MailIcon className="h-4 w-4 text-slate-400" />
                 </div>
                 <input
-                  type="text"
+                  type="email"
                   autoComplete="email"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  inputMode="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="block w-full pl-10 pr-3 py-2.5 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-950 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-shadow sm:text-sm"
+                  className="block w-full pl-10 pr-3 py-2.5 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-950 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-shadow text-base sm:text-sm"
                   placeholder="you@example.com" />
               </div>
             </div>
@@ -170,7 +176,7 @@ export function AuthPage() {
                         autoComplete="current-password"
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
-                        className="block w-full pl-10 pr-3 py-2.5 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-950 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-shadow sm:text-sm"
+                        className="block w-full pl-10 pr-3 py-2.5 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-950 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-shadow text-base sm:text-sm"
                         placeholder="••••••••" />
                     </div>
                   </div>
