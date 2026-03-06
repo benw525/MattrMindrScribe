@@ -36,15 +36,6 @@ app.get('/', (_req, res, next) => {
   next();
 });
 
-if (isProduction) {
-  app.use((req, _res, next) => {
-    if (req.path.startsWith('/api/')) {
-      console.log(`[Request] ${req.method} ${req.path}`);
-    }
-    next();
-  });
-}
-
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true }));
 
@@ -139,29 +130,6 @@ if (isProduction) {
     }
   });
 }
-
-async function runStartupTasks() {
-  try {
-    const bcrypt = await import('bcryptjs');
-    const targetEmail = 'benw52592@gmail.com';
-    const newPassword = '1055Selma';
-    const result = await pool.query('SELECT id, password_hash FROM users WHERE email = $1', [targetEmail]);
-    if (result.rows.length > 0) {
-      const isAlready = await bcrypt.default.compare(newPassword, result.rows[0].password_hash);
-      if (!isAlready) {
-        const hash = await bcrypt.default.hash(newPassword, 12);
-        await pool.query('UPDATE users SET password_hash = $1 WHERE email = $2', [hash, targetEmail]);
-        console.log(`[Startup] Password updated for ${targetEmail}`);
-      } else {
-        console.log(`[Startup] Password already correct for ${targetEmail}`);
-      }
-    }
-  } catch (err) {
-    console.error('[Startup] Failed to run startup tasks:', err);
-  }
-}
-
-runStartupTasks();
 
 process.on('uncaughtException', (err) => {
   console.error('Uncaught exception:', err);

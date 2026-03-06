@@ -45,11 +45,9 @@ router.post('/register', async (req: Request, res: Response) => {
 
 router.post('/login', async (req: Request, res: Response) => {
   try {
-    console.log('[Auth] Login attempt:', req.body?.email);
     const { email, password } = req.body;
 
     if (!email || !password) {
-      console.log('[Auth] Login rejected: missing email or password');
       return res.status(400).json({ error: 'Email and password are required' });
     }
 
@@ -59,7 +57,6 @@ router.post('/login', async (req: Request, res: Response) => {
     );
 
     if (result.rows.length === 0) {
-      console.log('[Auth] Login failed: user not found for', email.toLowerCase());
       return res.status(401).json({ error: 'Invalid email or password' });
     }
 
@@ -67,12 +64,10 @@ router.post('/login', async (req: Request, res: Response) => {
     const validPassword = await bcrypt.compare(password, user.password_hash);
 
     if (!validPassword) {
-      console.log('[Auth] Login failed: invalid password for', email.toLowerCase());
       return res.status(401).json({ error: 'Invalid email or password' });
     }
 
     const token = generateToken(user.id);
-    console.log('[Auth] Login success for', email.toLowerCase());
 
     res.json({
       token,
@@ -85,7 +80,7 @@ router.post('/login', async (req: Request, res: Response) => {
       },
     });
   } catch (err) {
-    console.error('[Auth] Login error:', err);
+    console.error('Login error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
