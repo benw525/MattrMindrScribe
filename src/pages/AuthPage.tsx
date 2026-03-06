@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { MailIcon, LockIcon, UserIcon, ArrowRightIcon } from 'lucide-react';
@@ -10,13 +10,19 @@ type AuthMode = 'login' | 'register' | 'forgot_password';
 
 export function AuthPage() {
   const navigate = useNavigate();
-  const { login, register } = useAuth();
+  const { login, register, isLoggedIn, loading } = useAuth();
   const [mode, setMode] = useState<AuthMode>('login');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    if (!loading && isLoggedIn) {
+      navigate('/app', { replace: true });
+    }
+  }, [isLoggedIn, loading, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
