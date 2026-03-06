@@ -7,11 +7,15 @@ import { authenticateToken, AuthRequest } from '../middleware/auth.js';
 import { processTranscription } from '../transcription.js';
 import { r2Configured, uploadFileToR2, deleteFromR2, isR2Url, getR2KeyFromUrl } from '../r2.js';
 import fs from 'fs/promises';
+import { mkdirSync } from 'fs';
 
 const router = Router();
 
+const uploadsDir = path.join(process.cwd(), 'uploads');
+mkdirSync(uploadsDir, { recursive: true });
+
 const storage = multer.diskStorage({
-  destination: 'uploads/',
+  destination: uploadsDir,
   filename: (_req, file, cb) => {
     const ext = path.extname(file.originalname);
     cb(null, `${uuidv4()}${ext}`);
