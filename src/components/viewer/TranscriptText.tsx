@@ -36,6 +36,7 @@ function getSpeakerColorFromMap(speaker: string, colorMap: Record<string, string
 interface TranscriptTextProps {
   segments: TranscriptSegment[];
   currentTime: number;
+  isPlaying?: boolean;
   onSeek: (time: number) => void;
   onUpdateSegment: (id: string, newText: string) => void;
   onMergeSegments: (firstId: string, secondId: string) => void;
@@ -48,6 +49,7 @@ interface TranscriptTextProps {
 export function TranscriptText({
   segments,
   currentTime,
+  isPlaying = false,
   onSeek,
   onUpdateSegment,
   onMergeSegments,
@@ -62,9 +64,14 @@ export function TranscriptText({
   const [speakerDropdownId, setSpeakerDropdownId] = useState<string | null>(null);
   const [addingSpeakerInDropdown, setAddingSpeakerInDropdown] = useState(false);
   const [newSpeakerName, setNewSpeakerName] = useState('');
+  const [userScrolled, setUserScrolled] = useState(false);
+  const userScrollTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const newSpeakerInputRef = useRef<HTMLInputElement>(null);
+  const activeSegmentRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const isAutoScrolling = useRef(false);
 
   useEffect(() => {
     if (editingId && textareaRef.current) {
@@ -93,6 +100,43 @@ export function TranscriptText({
       newSpeakerInputRef.current.focus();
     }
   }, [addingSpeakerInDropdown]);
+
+  useEffect(() => {
+    if (!isPlaying || editingId || userScrolled) return;
+    if (activeSegmentRef.current && scrollContainerRef.current) {
+      isAutoScrolling.current = true;
+      activeSegmentRef.current.scrollIntoView({
+        behavior: 'smooth',
+        block: 'center',
+      });
+      setTimeout(() => { isAutoScrolling.current = false; }, 500);
+    }
+  }, [currentTime, isPlaying, editingId, userScrolled]);
+
+  useEffect(() => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
+    const handleScroll = () => {
+      if (isAutoScrolling.current) return;
+      if (!isPlaying) return;
+      setUserScrolled(true);
+      if (userScrollTimeout.current) clearTimeout(userScrollTimeout.current);
+      userScrollTimeout.current = setTimeout(() => {
+        setUserScrolled(false);
+      }, 5000);
+    };
+    container.addEventListener('scroll', handleScroll);
+    return () => {
+      container.removeEventListener('scroll', handleScroll);
+      if (userScrollTimeout.current) clearTimeout(userScrollTimeout.current);
+    };
+  }, [isPlaying]);
+
+  useEffect(() => {
+    if (isPlaying) {
+      setUserScrolled(false);
+    }
+  }, [isPlaying]);
 
   const handleEditStart = (segment: TranscriptSegment) => {
     setEditingId(segment.id);
@@ -161,7 +205,7 @@ export function TranscriptText({
   }
 
   return (
-    <div className="flex-1 overflow-y-auto px-4 sm:px-8 py-4 sm:py-6 space-y-1 scroll-smooth">
+    <div ref={scrollContainerRef} className="flex-1 overflow-y-auto px-4 sm:px-8 py-4 sm:py-6 space-y-1 scroll-smooth">
       {segments.map((segment, index) => {
         const isActive = currentTime >= segment.startTime && currentTime < segment.endTime;
         const isEditing = editingId === segment.id;
@@ -171,6 +215,7 @@ export function TranscriptText({
         return (
           <Fragment key={segment.id}>
             <div
+              ref={isActive ? activeSegmentRef : undefined}
               className={`flex gap-2 sm:gap-4 group transition-colors p-2 -mx-2 rounded-lg ${isActive ? 'bg-indigo-50/50 dark:bg-indigo-950/30' : 'hover:bg-slate-50 dark:hover:bg-slate-900/50'}`}>
 
               <div className="w-12 sm:w-16 flex-shrink-0 pt-1 text-right">

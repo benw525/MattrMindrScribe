@@ -101,6 +101,7 @@ export function TranscriptProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const updateTranscript = useCallback(async (id: string, updates: Partial<Transcript>) => {
+    setTranscripts((prev) => prev.map((t) => (t.id === id ? { ...t, ...updates } : t)));
     try {
       const updated = await api.transcripts.update(id, updates);
       setTranscripts((prev) => prev.map((t) => (t.id === id ? updated : t)));

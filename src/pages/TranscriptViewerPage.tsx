@@ -763,6 +763,7 @@ export function TranscriptViewerPage() {
                 <TranscriptText
                 segments={transcript.segments}
                 currentTime={currentTime}
+                isPlaying={isPlaying}
                 onSeek={seek}
                 onUpdateSegment={handleUpdateSegment}
                 onMergeSegments={handleMergeSegments}
@@ -862,6 +863,7 @@ export function TranscriptViewerPage() {
                   <TranscriptText
                 segments={transcript.segments}
                 currentTime={currentTime}
+                isPlaying={isPlaying}
                 onSeek={seek}
                 onUpdateSegment={handleUpdateSegment}
                 onMergeSegments={handleMergeSegments}
