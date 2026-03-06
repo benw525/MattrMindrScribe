@@ -106,7 +106,7 @@ A full-stack application for managing legal case recordings/transcripts. Feature
 - DB `file_url` column stores `r2://uploads/<uuid>.<ext>` for R2 files, `/uploads/<filename>` for local files
 - `server/r2.ts` exports: `uploadToR2`, `uploadFileToR2`, `getPresignedUploadUrl`, `downloadFromR2`, `streamFromR2`, `deleteFromR2`, `isR2Url`, `getR2KeyFromUrl`, `getR2PublicUrl`
 - R2 bucket has CORS configured to allow browser direct uploads (AllowedOrigins: *, AllowedMethods: GET/PUT/POST/HEAD)
-- Media serving: `/api/media/token` generates short-lived tokens; `/api/media/:filename` proxies/streams from R2 or serves local files
+- Media serving: `/api/media/token` returns presigned R2 download URLs for R2 files (browser loads directly from R2, bypassing proxy size limits) or generates short-lived tokens for local files; `/api/media/:filename` serves local files via proxy
 - Transcription pipeline downloads R2 files to temp dir before processing, cleans up after
 - Falls back to local disk storage when R2 is not configured
 - Bucket name is normalized to lowercase (R2 requirement)

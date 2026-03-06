@@ -16,6 +16,10 @@ async function getMediaUrl(fileUrl: string): Promise<string | null> {
     if (!res.ok) return null;
     const data = await res.json();
 
+    if (data.mediaUrl) {
+      return data.mediaUrl;
+    }
+
     const mediaFilename = data.mediaFilename || fileUrl.split('/').pop();
     return `/api/media/${mediaFilename}?token=${encodeURIComponent(data.token)}`;
   } catch {

@@ -4,7 +4,7 @@ import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
 import { fileURLToPath } from 'url';
-import { isR2Url, getR2KeyFromUrl, getR2PublicUrl } from './r2.js';
+import { isR2Url, getR2KeyFromUrl, getR2PublicUrl, getPresignedDownloadUrl } from './r2.js';
 import authRoutes from './routes/auth.js';
 import transcriptRoutes from './routes/transcripts.js';
 import folderRoutes from './routes/folders.js';
@@ -55,26 +55,26 @@ app.post('/api/media/token', authenticateToken as any, async (req: any, res) => 
     return res.status(403).json({ error: 'Access denied' });
   }
 
-  const token = crypto.randomBytes(32).toString('hex');
-
   if (isR2Url(filename)) {
-    const r2Key = getR2KeyFromUrl(filename);
-    mediaTokens.set(token, {
-      userId: req.userId,
-      filename: r2Key,
-      expires: Date.now() + 60 * 60 * 1000,
-      isR2: true,
-    });
-  } else {
-    mediaTokens.set(token, {
-      userId: req.userId,
-      filename: path.basename(filename),
-      expires: Date.now() + 60 * 60 * 1000,
-      isR2: false,
-    });
+    try {
+      const r2Key = getR2KeyFromUrl(filename);
+      const presignedUrl = await getPresignedDownloadUrl(r2Key);
+      return res.json({ mediaUrl: presignedUrl });
+    } catch (err: any) {
+      console.error('[Media] Presigned download URL error:', err.message);
+      return res.status(500).json({ error: 'Failed to generate media URL' });
+    }
   }
 
-  const mediaFilename = isR2Url(filename) ? encodeURIComponent(getR2KeyFromUrl(filename)) : path.basename(filename);
+  const token = crypto.randomBytes(32).toString('hex');
+  mediaTokens.set(token, {
+    userId: req.userId,
+    filename: path.basename(filename),
+    expires: Date.now() + 60 * 60 * 1000,
+    isR2: false,
+  });
+
+  const mediaFilename = path.basename(filename);
   res.json({ token, mediaFilename });
 });
 

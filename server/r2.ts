@@ -153,6 +153,20 @@ export async function streamFromR2(key: string, res: any): Promise<void> {
   stream.pipe(res);
 }
 
+export async function getPresignedDownloadUrl(key: string): Promise<string> {
+  if (!r2Client || !R2_BUCKET_NAME) {
+    throw new Error('R2 is not configured');
+  }
+
+  const command = new GetObjectCommand({
+    Bucket: R2_BUCKET_NAME,
+    Key: key,
+  });
+
+  const url = await getSignedUrl(r2Client, command, { expiresIn: 3600 });
+  return url;
+}
+
 export async function getPresignedUploadUrl(key: string, contentType: string): Promise<string> {
   if (!r2Client || !R2_BUCKET_NAME) {
     throw new Error('R2 is not configured');
