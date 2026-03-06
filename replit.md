@@ -9,7 +9,7 @@ A full-stack application for managing legal case recordings/transcripts. Feature
 - User authentication (register, login, JWT-based)
 - Transcript listing with status indicators (Completed, Processing, Pending, Error)
 - Case and folder organization
-- Audio/video file upload with AI transcription pipeline (OpenAI gpt-4o-mini-transcribe via Replit AI Integrations)
+- Audio/video file upload with AI transcription pipeline (OpenAI whisper-1 with verbose_json segment timestamps)
 - Synced audio player for recordings
 - Version history for transcripts
 - Present mode for hearings

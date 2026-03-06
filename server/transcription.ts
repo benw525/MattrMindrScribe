@@ -1,5 +1,5 @@
 import { spawn } from 'child_process';
-import { readFile, writeFile, unlink, mkdir } from 'fs/promises';
+import { readFile, unlink, mkdir } from 'fs/promises';
 import { existsSync } from 'fs';
 import path from 'path';
 import { randomUUID } from 'crypto';
@@ -7,9 +7,8 @@ import { tmpdir } from 'os';
 import OpenAI, { toFile } from 'openai';
 import pool from './db.js';
 
-const openai = new OpenAI({
-  apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
-  baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+const whisperClient = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
 });
 
 const MAX_CHUNK_SIZE = 24 * 1024 * 1024;
@@ -102,54 +101,41 @@ async function splitWavIntoChunks(wavPath: string, workDir: string): Promise<{ p
   return chunks;
 }
 
-function splitIntoSentences(text: string): string[] {
-  const raw = text.match(/[^.!?]+[.!?]+[\s]*/g);
-  if (!raw || raw.length === 0) return [text];
-  const sentences = raw.map(s => s.trim()).filter(s => s.length > 0);
-  return sentences.length > 0 ? sentences : [text];
-}
-
 async function transcribeChunk(filePath: string, offsetSec: number = 0): Promise<TranscriptSegment[]> {
   const buffer = await readFile(filePath);
   const file = await toFile(buffer, 'audio.wav');
 
-  const response = await openai.audio.transcriptions.create({
+  const response = await whisperClient.audio.transcriptions.create({
     file,
-    model: 'gpt-4o-mini-transcribe',
-    response_format: 'json',
+    model: 'whisper-1',
+    response_format: 'verbose_json',
+    timestamp_granularities: ['segment'],
   });
 
-  const text = response.text?.trim();
-  if (!text) return [];
+  const segments = ((response as any).segments || []).map((s: any) => ({
+    speaker: 'Speaker 1',
+    text: (s.text || '').trim(),
+    startTime: Math.round((s.start + offsetSec) * 100) / 100,
+    endTime: Math.round((s.end + offsetSec) * 100) / 100,
+  }));
 
-  const chunkDuration = await getAudioDuration(filePath);
-  const sentences = splitIntoSentences(text);
-  const totalChars = sentences.reduce((sum, s) => sum + s.length, 0);
+  return segments.filter((s: TranscriptSegment) => s.text.length > 0);
+}
 
-  const segments: TranscriptSegment[] = [];
-  let currentTime = offsetSec;
-
-  for (const sentence of sentences) {
-    const proportion = sentence.length / totalChars;
-    const segDuration = chunkDuration * proportion;
-    const startTime = Math.round(currentTime * 100) / 100;
-    const endTime = Math.round((currentTime + segDuration) * 100) / 100;
-
-    segments.push({
-      speaker: 'Speaker 1',
-      text: sentence,
-      startTime,
-      endTime,
-    });
-
-    currentTime += segDuration;
-  }
-
-  return segments;
+function textSimilarity(a: string, b: string): number {
+  const wordsA = a.toLowerCase().split(/\s+/);
+  const wordsB = b.toLowerCase().split(/\s+/);
+  if (wordsA.length === 0 || wordsB.length === 0) return 0;
+  const setB = new Set(wordsB);
+  const overlap = wordsA.filter(w => setB.has(w)).length;
+  return overlap / Math.max(wordsA.length, wordsB.length);
 }
 
 function deduplicateSegments(segments: TranscriptSegment[]): TranscriptSegment[] {
   if (segments.length === 0) return [];
+
+  segments.sort((a, b) => a.startTime - b.startTime);
+
   const deduped: TranscriptSegment[] = [segments[0]];
 
   for (let i = 1; i < segments.length; i++) {
@@ -158,6 +144,12 @@ function deduplicateSegments(segments: TranscriptSegment[]): TranscriptSegment[]
 
     if (Math.abs(seg.startTime - prev.startTime) < 1.5 && seg.text === prev.text) continue;
     if (seg.startTime < prev.endTime - 0.5 && seg.text === prev.text) continue;
+    if (Math.abs(seg.startTime - prev.startTime) < 1.5 && textSimilarity(seg.text, prev.text) > 0.7) continue;
+    if (seg.startTime < prev.endTime - 0.5 && textSimilarity(seg.text, prev.text) > 0.7) continue;
+
+    if (seg.startTime < prev.endTime) {
+      seg.startTime = prev.endTime;
+    }
 
     deduped.push(seg);
   }
@@ -188,15 +180,9 @@ function assignSpeakers(segments: TranscriptSegment[]): TranscriptSegment[] {
   return segments;
 }
 
-async function cleanupFiles(files: string[]): Promise<void> {
-  for (const f of files) {
-    await unlink(f).catch(() => {});
-  }
-}
-
 async function cleanupDir(dirPath: string): Promise<void> {
   try {
-    const { readdirSync, rmSync } = await import('fs');
+    const { rmSync } = await import('fs');
     if (existsSync(dirPath)) {
       rmSync(dirPath, { recursive: true, force: true });
     }
@@ -257,11 +243,6 @@ export async function processTranscription(transcriptId: string): Promise<void> 
 
     allSegments = deduplicateSegments(allSegments);
     allSegments = assignSpeakers(allSegments);
-
-    if (allSegments.length > 0) {
-      const lastSeg = allSegments[allSegments.length - 1];
-      lastSeg.endTime = Math.round(duration * 100) / 100;
-    }
 
     await pool.query('DELETE FROM transcript_segments WHERE transcript_id = $1', [transcriptId]);
 
