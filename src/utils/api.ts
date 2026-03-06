@@ -30,10 +30,15 @@ async function request(endpoint: string, options: RequestInit = {}) {
     headers['Content-Type'] = 'application/json';
   }
 
-  const res = await fetch(`${API_BASE}${endpoint}`, {
-    ...options,
-    headers,
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}${endpoint}`, {
+      ...options,
+      headers,
+    });
+  } catch (networkErr) {
+    throw new Error('Unable to connect to the server. Please try again in a moment.');
+  }
 
   if (res.status === 401 || res.status === 403) {
     clearToken();
@@ -41,7 +46,12 @@ async function request(endpoint: string, options: RequestInit = {}) {
     throw new Error('Authentication required');
   }
 
-  const data = await res.json();
+  let data: any;
+  try {
+    data = await res.json();
+  } catch {
+    throw new Error('Server returned an unexpected response. Please try again.');
+  }
 
   if (!res.ok) {
     throw new Error(data.error || 'Request failed');
