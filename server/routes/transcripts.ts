@@ -5,7 +5,7 @@ import { v4 as uuidv4 } from 'uuid';
 import pool from '../db.js';
 import { authenticateToken, AuthRequest } from '../middleware/auth.js';
 import { processTranscription } from '../transcription.js';
-import { r2Configured, uploadFileToR2, deleteFromR2, isR2Url, getR2KeyFromUrl } from '../r2.js';
+import { r2Configured, uploadFileToR2, deleteFromR2, isR2Url, getR2KeyFromUrl, getPresignedUploadUrl } from '../r2.js';
 import fs from 'fs/promises';
 import { mkdirSync } from 'fs';
 
@@ -84,8 +84,118 @@ router.get('/', async (req: AuthRequest, res: Response) => {
   }
 });
 
+const MAX_FILE_SIZE = 2 * 1024 * 1024 * 1024;
+const pendingUploads = new Map<string, { userId: string; r2Key: string; filename: string; contentType: string; fileSize: number; expires: number }>();
+
+router.post('/presigned-upload', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    if (!r2Configured) {
+      return res.status(400).json({ error: 'Direct upload not available. R2 storage is not configured.' });
+    }
+
+    const { filename, contentType, fileSize } = req.body;
+    if (!filename || !contentType) {
+      return res.status(400).json({ error: 'filename and contentType are required' });
+    }
+
+    const ext = path.extname(filename).toLowerCase();
+    if (!ALLOWED_TYPES.includes(contentType) && !ALLOWED_EXTENSIONS.includes(ext)) {
+      return res.status(400).json({ error: 'Invalid file type. Only audio and video files are allowed.' });
+    }
+
+    if (fileSize && fileSize > MAX_FILE_SIZE) {
+      return res.status(400).json({ error: 'File too large. Maximum size is 2GB.' });
+    }
+
+    const r2Key = `uploads/${uuidv4()}${ext}`;
+    const uploadToken = uuidv4();
+
+    pendingUploads.set(uploadToken, {
+      userId: req.userId!,
+      r2Key,
+      filename,
+      contentType,
+      fileSize: fileSize || 0,
+      expires: Date.now() + 3600 * 1000,
+    });
+
+    const presignedUrl = await getPresignedUploadUrl(r2Key, contentType);
+
+    res.json({ presignedUrl, r2Key, contentType, uploadToken });
+  } catch (err: any) {
+    console.error('[Presigned Upload] Error generating URL:', err.message);
+    res.status(500).json({ error: 'Failed to generate upload URL' });
+  }
+});
+
+router.post('/confirm-upload', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const { uploadToken, description, folderId } = req.body;
+    if (!uploadToken) {
+      return res.status(400).json({ error: 'uploadToken is required' });
+    }
+
+    const pending = pendingUploads.get(uploadToken);
+    if (!pending) {
+      return res.status(400).json({ error: 'Invalid or expired upload token' });
+    }
+
+    if (pending.userId !== req.userId) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    if (pending.expires < Date.now()) {
+      pendingUploads.delete(uploadToken);
+      return res.status(400).json({ error: 'Upload token expired' });
+    }
+
+    pendingUploads.delete(uploadToken);
+
+    const fileUrl = `r2://${pending.r2Key}`;
+    const fileType = pending.contentType.startsWith('video/') ? 'video' : 'audio';
+
+    const result = await pool.query(
+      `INSERT INTO transcripts (filename, description, status, type, file_size, file_url, folder_id, user_id)
+       VALUES ($1, $2, 'pending', $3, $4, $5, $6, $7)
+       RETURNING *`,
+      [
+        pending.filename,
+        description || '',
+        fileType,
+        pending.fileSize,
+        fileUrl,
+        folderId || null,
+        req.userId,
+      ]
+    );
+
+    const t = result.rows[0];
+    console.log('[Confirm Upload] Transcript created:', t.id, pending.filename);
+
+    processTranscription(t.id).catch(err => {
+      console.error('Background transcription failed:', err.message);
+    });
+
+    res.status(201).json({
+      id: t.id,
+      filename: t.filename,
+      description: t.description,
+      status: t.status,
+      type: t.type,
+      fileSize: t.file_size,
+      fileUrl: t.file_url,
+      folderId: t.folder_id,
+      createdAt: t.created_at,
+      updatedAt: t.updated_at,
+    });
+  } catch (err: any) {
+    console.error('[Confirm Upload] Error:', err.message);
+    res.status(500).json({ error: 'Failed to create transcript record' });
+  }
+});
+
 router.post('/upload', (req, res: Response, next) => {
-  console.log('[Upload] Request received');
+  console.log('[Upload] Request received (legacy)');
   req.setTimeout(30 * 60 * 1000);
   upload.single('file')(req, res, (err: any) => {
     if (err) {

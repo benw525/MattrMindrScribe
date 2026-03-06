@@ -23,7 +23,7 @@ A full-stack application for managing legal case recordings/transcripts. Feature
 - **Database**: PostgreSQL (Replit built-in)
 - **Cloud Storage**: Cloudflare R2 (S3-compatible, via @aws-sdk/client-s3)
 - **Auth**: JWT (jsonwebtoken + bcryptjs)
-- **File Upload**: Multer (always diskStorage, streams to R2 from disk for large file support)
+- **File Upload**: Presigned URL direct-to-R2 uploads (bypasses proxy size limits); Multer fallback for non-R2 local storage
 - **Animation**: Framer Motion
 - **Icons**: Lucide React
 - **Notifications**: Sonner
@@ -70,7 +70,9 @@ A full-stack application for managing legal case recordings/transcripts. Feature
 - `GET /api/auth/me` - Get current user
 - `PUT /api/auth/change-password` - Change password (authenticated)
 - `GET /api/transcripts` - List user transcripts
-- `POST /api/transcripts/upload` - Upload media file (triggers background AI transcription)
+- `POST /api/transcripts/presigned-upload` - Get presigned R2 URL for direct browser upload
+- `POST /api/transcripts/confirm-upload` - Confirm upload completion, create transcript record, start transcription
+- `POST /api/transcripts/upload` - Legacy upload via server (fallback, limited by proxy body size)
 - `GET /api/transcripts/:id/status` - Poll transcription status
 - `POST /api/transcripts/:id/retranscribe` - Re-run transcription
 - `PATCH /api/transcripts/:id` - Update transcript
@@ -97,7 +99,8 @@ A full-stack application for managing legal case recordings/transcripts. Feature
 
 - Files are uploaded to R2 when configured (env vars: R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET_NAME, R2_PUBLIC_URL)
 - DB `file_url` column stores `r2://uploads/<uuid>.<ext>` for R2 files, `/uploads/<filename>` for local files
-- `server/r2.ts` exports: `uploadToR2`, `downloadFromR2`, `streamFromR2`, `deleteFromR2`, `isR2Url`, `getR2KeyFromUrl`, `getR2PublicUrl`
+- `server/r2.ts` exports: `uploadToR2`, `uploadFileToR2`, `getPresignedUploadUrl`, `downloadFromR2`, `streamFromR2`, `deleteFromR2`, `isR2Url`, `getR2KeyFromUrl`, `getR2PublicUrl`
+- R2 bucket has CORS configured to allow browser direct uploads (AllowedOrigins: *, AllowedMethods: GET/PUT/POST/HEAD)
 - Media serving: `/api/media/token` generates short-lived tokens; `/api/media/:filename` proxies/streams from R2 or serves local files
 - Transcription pipeline downloads R2 files to temp dir before processing, cleans up after
 - Falls back to local disk storage when R2 is not configured

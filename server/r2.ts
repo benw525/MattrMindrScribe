@@ -1,4 +1,5 @@
 import { S3Client, PutObjectCommand, DeleteObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { mkdir, stat } from 'fs/promises';
 import { createReadStream } from 'fs';
 import path from 'path';
@@ -150,6 +151,21 @@ export async function streamFromR2(key: string, res: any): Promise<void> {
 
   const stream = response.Body as Readable;
   stream.pipe(res);
+}
+
+export async function getPresignedUploadUrl(key: string, contentType: string): Promise<string> {
+  if (!r2Client || !R2_BUCKET_NAME) {
+    throw new Error('R2 is not configured');
+  }
+
+  const command = new PutObjectCommand({
+    Bucket: R2_BUCKET_NAME,
+    Key: key,
+    ContentType: contentType,
+  });
+
+  const url = await getSignedUrl(r2Client, command, { expiresIn: 3600 });
+  return url;
 }
 
 export function isR2Url(fileUrl: string): boolean {

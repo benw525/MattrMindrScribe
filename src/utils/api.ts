@@ -72,56 +72,64 @@ export const api = {
   },
   transcripts: {
     list: () => request('/transcripts'),
-    upload: (file: File, description?: string, folderId?: string, onProgress?: (percent: number) => void) => {
-      return new Promise<any>((resolve, reject) => {
-        const formData = new FormData();
-        formData.append('file', file);
-        if (description) formData.append('description', description);
-        if (folderId) formData.append('folderId', folderId);
+    upload: async (file: File, description?: string, folderId?: string, onProgress?: (percent: number) => void) => {
+      const presignedRes = await request('/transcripts/presigned-upload', {
+        method: 'POST',
+        body: JSON.stringify({
+          filename: file.name,
+          contentType: file.type || 'application/octet-stream',
+          fileSize: file.size,
+          description,
+          folderId,
+        }),
+      });
 
+      if (!presignedRes.presignedUrl) {
+        throw new Error(presignedRes.error || 'Failed to get upload URL');
+      }
+
+      await new Promise<void>((resolve, reject) => {
         const xhr = new XMLHttpRequest();
-        xhr.open('POST', `${API_BASE}/transcripts/upload`);
-
-        const token = getToken();
-        if (token) {
-          xhr.setRequestHeader('Authorization', `Bearer ${token}`);
-        }
+        xhr.open('PUT', presignedRes.presignedUrl);
+        xhr.setRequestHeader('Content-Type', presignedRes.contentType || file.type || 'application/octet-stream');
 
         if (onProgress) {
           xhr.upload.onprogress = (e) => {
             if (e.lengthComputable) {
               const percent = Math.round((e.loaded / e.total) * 100);
-              onProgress(Math.min(percent, 99));
+              onProgress(Math.min(percent, 95));
             }
           };
         }
 
         xhr.onload = () => {
-          let data: any;
-          try {
-            data = JSON.parse(xhr.responseText);
-          } catch {
-            return reject(new Error('Server returned an unexpected response.'));
-          }
-          if (xhr.status === 401 || xhr.status === 403) {
-            clearToken();
-            window.location.href = '/login';
-            return reject(new Error('Authentication required'));
-          }
           if (xhr.status >= 200 && xhr.status < 300) {
-            if (onProgress) onProgress(100);
-            resolve(data);
+            resolve();
           } else {
-            reject(new Error(data.error || 'Upload failed'));
+            reject(new Error(`Upload to storage failed (${xhr.status})`));
           }
         };
 
         xhr.onerror = () => {
-          reject(new Error('Unable to connect to the server. Please try again.'));
+          reject(new Error('Failed to upload file to storage. Please try again.'));
         };
 
-        xhr.send(formData);
+        xhr.send(file);
       });
+
+      if (onProgress) onProgress(98);
+
+      const confirmRes = await request('/transcripts/confirm-upload', {
+        method: 'POST',
+        body: JSON.stringify({
+          uploadToken: presignedRes.uploadToken,
+          description,
+          folderId,
+        }),
+      });
+
+      if (onProgress) onProgress(100);
+      return confirmRes;
     },
     update: (id: string, updates: Record<string, any>) =>
       request(`/transcripts/${id}`, { method: 'PATCH', body: JSON.stringify(updates) }),
