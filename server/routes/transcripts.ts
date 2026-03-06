@@ -4,6 +4,7 @@ import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
 import pool from '../db.js';
 import { authenticateToken, AuthRequest } from '../middleware/auth.js';
+import { processTranscription } from '../transcription.js';
 
 const router = Router();
 
@@ -15,13 +16,20 @@ const storage = multer.diskStorage({
   },
 });
 
+const ALLOWED_TYPES = [
+  'audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/wave', 'audio/x-wav',
+  'audio/mp4', 'audio/x-m4a', 'audio/m4a', 'audio/aac',
+  'audio/ogg', 'audio/webm', 'audio/flac', 'audio/x-flac',
+  'video/mp4', 'video/webm', 'video/quicktime', 'video/x-msvideo', 'video/ogg',
+];
+const ALLOWED_EXTENSIONS = ['.mp3', '.wav', '.m4a', '.ogg', '.flac', '.aac', '.webm', '.mp4', '.mov', '.avi'];
+
 const upload = multer({
   storage,
   limits: { fileSize: 500 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
-    const allowedTypes = ['audio/mpeg', 'audio/wav', 'audio/mp4', 'audio/ogg', 'audio/webm',
-      'video/mp4', 'video/webm', 'video/ogg', 'video/quicktime'];
-    if (allowedTypes.includes(file.mimetype)) {
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (ALLOWED_TYPES.includes(file.mimetype) || ALLOWED_EXTENSIONS.includes(ext)) {
       cb(null, true);
     } else {
       cb(new Error('Invalid file type. Only audio and video files are allowed.'));
@@ -57,6 +65,7 @@ router.get('/', async (req: AuthRequest, res: Response) => {
       fileSize: row.file_size,
       fileUrl: row.file_url,
       folderId: row.folder_id,
+      errorMessage: row.error_message,
       segments: row.segments,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
@@ -94,6 +103,11 @@ router.post('/upload', upload.single('file'), async (req: AuthRequest, res: Resp
     );
 
     const t = result.rows[0];
+
+    processTranscription(t.id).catch(err => {
+      console.error('Background transcription failed:', err.message);
+    });
+
     res.status(201).json({
       id: t.id,
       filename: t.filename,
@@ -104,6 +118,7 @@ router.post('/upload', upload.single('file'), async (req: AuthRequest, res: Resp
       fileSize: t.file_size,
       fileUrl: t.file_url,
       folderId: t.folder_id,
+      errorMessage: t.error_message,
       segments: [],
       createdAt: t.created_at,
       updatedAt: t.updated_at,
@@ -189,12 +204,62 @@ router.patch('/:id', async (req: AuthRequest, res: Response) => {
       fileSize: t.file_size,
       fileUrl: t.file_url,
       folderId: t.folder_id,
+      errorMessage: t.error_message,
       segments: t.segments,
       createdAt: t.created_at,
       updatedAt: t.updated_at,
     });
   } catch (err) {
     console.error('Update transcript error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.get('/:id/status', async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const result = await pool.query(
+      'SELECT status, error_message, duration FROM transcripts WHERE id = $1 AND user_id = $2',
+      [id, req.userId]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Transcript not found' });
+    }
+    const row = result.rows[0];
+    res.json({
+      status: row.status,
+      errorMessage: row.error_message,
+      duration: row.duration,
+    });
+  } catch (err) {
+    console.error('Get status error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.post('/:id/retranscribe', async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const existing = await pool.query(
+      'SELECT id, file_url FROM transcripts WHERE id = $1 AND user_id = $2',
+      [id, req.userId]
+    );
+    if (existing.rows.length === 0) {
+      return res.status(404).json({ error: 'Transcript not found' });
+    }
+
+    await pool.query(
+      `UPDATE transcripts SET status = 'pending', error_message = NULL, updated_at = NOW() WHERE id = $1`,
+      [id]
+    );
+
+    processTranscription(id).catch(err => {
+      console.error('Re-transcription failed:', err.message);
+    });
+
+    res.json({ success: true, status: 'pending' });
+  } catch (err) {
+    console.error('Retranscribe error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

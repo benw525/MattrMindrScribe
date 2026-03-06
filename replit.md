@@ -9,7 +9,7 @@ A full-stack application for managing legal case recordings/transcripts. Feature
 - User authentication (register, login, JWT-based)
 - Transcript listing with status indicators (Completed, Processing, Pending, Error)
 - Case and folder organization
-- Audio/video file upload with transcription pipeline (transcription feature pending)
+- Audio/video file upload with AI transcription pipeline (OpenAI gpt-4o-mini-transcribe via Replit AI Integrations)
 - Synced audio player for recordings
 - Version history for transcripts
 - Present mode for hearings
@@ -48,8 +48,10 @@ A full-stack application for managing legal case recordings/transcripts. Feature
 - `server/db.ts` - PostgreSQL connection pool
 - `server/middleware/auth.ts` - JWT authentication middleware
 - `server/routes/auth.ts` - Auth endpoints (register, login, me, change-password)
-- `server/routes/transcripts.ts` - Transcript CRUD + file upload
+- `server/routes/transcripts.ts` - Transcript CRUD + file upload + status/retranscribe endpoints
+- `server/transcription.ts` - AI transcription pipeline (ffmpeg conversion, chunking, Whisper API, speaker diarization)
 - `server/routes/folders.ts` - Folder CRUD + move transcripts
+- `server/replit_integrations/` - OpenAI AI Integrations (audio, chat, image, batch utilities)
 - `server/routes/stripe.ts` - Stripe checkout, subscription, portal
 - `server/stripeClient.ts` - Stripe client (Replit connector)
 - `server/webhookHandlers.ts` - Stripe webhook processing
@@ -70,7 +72,9 @@ A full-stack application for managing legal case recordings/transcripts. Feature
 - `GET /api/auth/me` - Get current user
 - `PUT /api/auth/change-password` - Change password (authenticated)
 - `GET /api/transcripts` - List user transcripts
-- `POST /api/transcripts/upload` - Upload media file
+- `POST /api/transcripts/upload` - Upload media file (triggers background AI transcription)
+- `GET /api/transcripts/:id/status` - Poll transcription status
+- `POST /api/transcripts/:id/retranscribe` - Re-run transcription
 - `PATCH /api/transcripts/:id` - Update transcript
 - `DELETE /api/transcripts` - Batch delete transcripts
 - `POST /api/transcripts/:id/versions` - Create version snapshot
