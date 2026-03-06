@@ -17,7 +17,7 @@ import {
 'lucide-react';
 import { useTranscripts } from '../../hooks/useTranscripts';
 import { useAuth } from '../../contexts/AuthContext';
-import { SettingsPanel } from './SettingsPanel';
+import { SettingsPanel, ChangePasswordModal } from './SettingsPanel';
 import { Logo } from '../brand/Logo';
 import { Folder } from '../../types/transcript';
 interface SidebarProps {
@@ -44,6 +44,7 @@ export function Sidebar({
   const [newFolderName, setNewFolderName] = useState('');
   const [newCaseNumber, setNewCaseNumber] = useState('');
   const [showSettings, setShowSettings] = useState(false);
+  const [showChangePassword, setShowChangePassword] = useState(false);
   const [menuFolderId, setMenuFolderId] = useState<string | null>(null);
   const [renamingFolderId, setRenamingFolderId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
@@ -413,10 +414,18 @@ export function Sidebar({
 
         <AnimatePresence>
           {showSettings &&
-          <SettingsPanel onClose={() => setShowSettings(false)} />
+          <SettingsPanel
+            onClose={() => setShowSettings(false)}
+            onChangePassword={() => setShowChangePassword(true)} />
           }
         </AnimatePresence>
       </div>
+
+      <AnimatePresence>
+        {showChangePassword && (
+          <ChangePasswordModal onClose={() => setShowChangePassword(false)} />
+        )}
+      </AnimatePresence>
     </div>);
 
 }
