@@ -41,6 +41,7 @@ A full-stack application for managing legal case recordings/transcripts. Feature
 - `src/contexts/TranscriptContext.tsx` - Transcript/folder state management
 - `src/contexts/ThemeContext.tsx` - Dark/light theme
 - `src/utils/api.ts` - API client utility
+- `src/hooks/useAudioPlayer.ts` - Real HTML5 audio/video playback hook with secure media token
 - `src/hooks/` - Custom hooks
 
 ### Backend (server/)
@@ -89,6 +90,8 @@ A full-stack application for managing legal case recordings/transcripts. Feature
 - `GET /api/stripe/subscription` - Get user subscription
 - `POST /api/stripe/customer-portal` - Stripe customer portal
 - `POST /api/stripe/webhook` - Stripe webhook (raw body)
+- `POST /api/media/token` - Get short-lived media access token (authenticated)
+- `GET /api/media/:filename?token=` - Serve media file with secure token
 
 ## Database Schema (PostgreSQL)
 

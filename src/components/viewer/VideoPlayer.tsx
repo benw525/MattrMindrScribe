@@ -1,58 +1,116 @@
-import React from 'react';
+import React, { useRef, useEffect, useCallback } from 'react';
 import { PlayIcon, PauseIcon } from 'lucide-react';
 import { formatDuration } from '../../utils/formatters';
+
 interface VideoPlayerProps {
   isPlaying: boolean;
   currentTime: number;
   duration: number;
   onTogglePlay: () => void;
   onSeek: (time: number) => void;
+  mediaUrl?: string | null;
+  audioRef?: React.RefObject<HTMLAudioElement | null>;
 }
+
 export function VideoPlayer({
   isPlaying,
   currentTime,
   duration,
   onTogglePlay,
-  onSeek
+  onSeek,
+  mediaUrl,
+  audioRef,
 }: VideoPlayerProps) {
-  const progressPercent = duration > 0 ? currentTime / duration * 100 : 0;
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const isSeeking = useRef(false);
+  const progressPercent = duration > 0 ? (currentTime / duration) * 100 : 0;
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || !mediaUrl) return;
+
+    if (audioRef?.current) {
+      audioRef.current.pause();
+      audioRef.current.src = '';
+    }
+
+    video.src = mediaUrl;
+  }, [mediaUrl, audioRef]);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || !video.src) return;
+
+    if (isPlaying) {
+      video.play().catch(console.error);
+    } else {
+      video.pause();
+    }
+  }, [isPlaying]);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || isSeeking.current) return;
+    if (Math.abs(video.currentTime - currentTime) > 1) {
+      video.currentTime = currentTime;
+    }
+  }, [currentTime]);
+
+  const handleTimeUpdate = useCallback(() => {
+    const video = videoRef.current;
+    if (!video || isSeeking.current) return;
+    onSeek(video.currentTime);
+  }, [onSeek]);
+
   const handleProgressBarClick = (e: React.MouseEvent<HTMLDivElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const percent = Math.max(0, Math.min(1, x / rect.width));
-    onSeek(percent * duration);
+    const seekTime = percent * duration;
+    isSeeking.current = true;
+    if (videoRef.current) {
+      videoRef.current.currentTime = seekTime;
+    }
+    onSeek(seekTime);
+    setTimeout(() => { isSeeking.current = false; }, 100);
   };
+
   return (
     <div className="bg-slate-900 rounded-xl overflow-hidden shadow-lg flex flex-col">
-      {/* Video Placeholder Area — maintains 16:9 aspect ratio */}
       <div
         className="relative bg-black flex items-center justify-center group cursor-pointer aspect-video"
-        onClick={onTogglePlay}>
+        onClick={onTogglePlay}
+      >
+        <video
+          ref={videoRef}
+          className="w-full h-full object-contain"
+          playsInline
+          preload="auto"
+          onTimeUpdate={handleTimeUpdate}
+          onEnded={() => {
+            if (isPlaying) onTogglePlay();
+          }}
+        />
 
-        <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-
-        {!isPlaying &&
-        <div className="h-16 w-16 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center text-white transition-transform group-hover:scale-110">
-            <PlayIcon className="h-8 w-8 ml-1" />
+        {!isPlaying && (
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="h-16 w-16 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center text-white transition-transform group-hover:scale-110">
+              <PlayIcon className="h-8 w-8 ml-1" />
+            </div>
           </div>
-        }
-
-        <div className="absolute bottom-4 left-4 right-4 text-white text-sm font-medium opacity-50">
-          Simulated Video Playback
-        </div>
+        )}
       </div>
 
-      {/* Minimal Controls */}
       <div className="bg-slate-900 px-4 py-3 flex items-center gap-4">
         <button
           onClick={onTogglePlay}
-          className="text-white hover:text-indigo-400 transition-colors">
-
-          {isPlaying ?
-          <PauseIcon className="h-5 w-5" /> :
-
-          <PlayIcon className="h-5 w-5" />
-          }
+          className="text-white hover:text-indigo-400 transition-colors"
+        >
+          {isPlaying ? (
+            <PauseIcon className="h-5 w-5" />
+          ) : (
+            <PlayIcon className="h-5 w-5" />
+          )}
         </button>
 
         <span className="text-xs font-medium text-slate-400 w-10 text-right">
@@ -61,20 +119,18 @@ export function VideoPlayer({
 
         <div
           className="flex-1 h-1.5 bg-slate-700 rounded-full cursor-pointer relative group"
-          onClick={handleProgressBarClick}>
-
+          onClick={handleProgressBarClick}
+        >
           <div
             className="absolute top-0 left-0 h-full bg-indigo-500 rounded-full"
-            style={{
-              width: `${progressPercent}%`
-            }} />
-
+            style={{ width: `${progressPercent}%` }}
+          />
         </div>
 
         <span className="text-xs font-medium text-slate-400 w-10">
           {formatDuration(duration)}
         </span>
       </div>
-    </div>);
-
+    </div>
+  );
 }

@@ -51,8 +51,10 @@ export function TranscriptViewerPage() {
     togglePlayPause,
     skip,
     seek,
-    setPlaybackRate
-  } = useAudioPlayer(transcript?.duration || 0);
+    setPlaybackRate,
+    audioRef,
+    mediaUrl,
+  } = useAudioPlayer(transcript?.duration || 0, transcript?.fileUrl);
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     isDraggingRef.current = true;
@@ -454,7 +456,9 @@ export function TranscriptViewerPage() {
                   currentTime={currentTime}
                   duration={transcript.duration}
                   onTogglePlay={togglePlayPause}
-                  onSeek={seek} />
+                  onSeek={seek}
+                  mediaUrl={mediaUrl}
+                  audioRef={audioRef} />
 
                     <div className="mt-6 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4 shadow-sm">
                       <h4 className="text-sm font-semibold text-slate-900 dark:text-white mb-2">
@@ -501,7 +505,9 @@ export function TranscriptViewerPage() {
                 currentTime={currentTime}
                 duration={transcript.duration}
                 onTogglePlay={togglePlayPause}
-                onSeek={seek} />
+                onSeek={seek}
+                mediaUrl={mediaUrl}
+                audioRef={audioRef} />
 
                 </div> :
 

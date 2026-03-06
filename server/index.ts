@@ -93,6 +93,41 @@ app.use(express.urlencoded({ extended: true }));
 
 app.use('/uploads', authenticateToken as any, express.static(path.join(__dirname, '..', 'uploads')));
 
+const mediaTokens = new Map<string, { userId: string; filename: string; expires: number }>();
+
+app.post('/api/media/token', authenticateToken as any, (req: any, res) => {
+  const { filename } = req.body;
+  if (!filename) return res.status(400).json({ error: 'Filename required' });
+  const crypto = require('crypto');
+  const token = crypto.randomBytes(32).toString('hex');
+  mediaTokens.set(token, {
+    userId: req.user.id,
+    filename: path.basename(filename),
+    expires: Date.now() + 60 * 60 * 1000,
+  });
+  res.json({ token });
+});
+
+app.get('/api/media/:filename', (req, res) => {
+  const token = req.query.token as string;
+  if (!token) return res.status(401).json({ error: 'Token required' });
+  const entry = mediaTokens.get(token);
+  if (!entry || entry.expires < Date.now()) {
+    mediaTokens.delete(token);
+    return res.status(401).json({ error: 'Invalid or expired token' });
+  }
+  const requestedFile = path.basename(req.params.filename);
+  if (entry.filename !== requestedFile) {
+    return res.status(403).json({ error: 'Access denied' });
+  }
+  const filePath = path.resolve(__dirname, '..', 'uploads', requestedFile);
+  const fs = require('fs');
+  if (!fs.existsSync(filePath)) {
+    return res.status(404).json({ error: 'File not found' });
+  }
+  res.sendFile(filePath);
+});
+
 app.use('/api/auth', authRoutes);
 app.use('/api/transcripts', transcriptRoutes);
 app.use('/api/folders', folderRoutes);
