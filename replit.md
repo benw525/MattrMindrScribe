@@ -14,7 +14,6 @@ A full-stack application for managing legal case recordings/transcripts. Feature
 - Version history for transcripts (persisted to DB, loaded on page open)
 - Per-segment speaker reassignment (click speaker name to change via dropdown)
 - Present mode for hearings
-- Stripe subscription payments (Starter $29/mo, Professional $79/mo, Enterprise $199/mo)
 - Admin user with unlimited access
 
 ## Tech Stack
@@ -23,7 +22,6 @@ A full-stack application for managing legal case recordings/transcripts. Feature
 - **Backend**: Express.js (v5), TypeScript, tsx
 - **Database**: PostgreSQL (Replit built-in)
 - **Cloud Storage**: Cloudflare R2 (S3-compatible, via @aws-sdk/client-s3)
-- **Payments**: Stripe (via Replit integration + stripe-replit-sync)
 - **Auth**: JWT (jsonwebtoken + bcryptjs)
 - **File Upload**: Multer (always diskStorage, streams to R2 from disk for large file support)
 - **Animation**: Framer Motion
@@ -56,10 +54,6 @@ A full-stack application for managing legal case recordings/transcripts. Feature
 - `server/transcription.ts` - AI transcription pipeline (ffmpeg conversion, chunking, Whisper API, speaker diarization, R2 download support)
 - `server/routes/folders.ts` - Folder CRUD + move transcripts
 - `server/replit_integrations/` - OpenAI AI Integrations (audio, chat, image, batch utilities)
-- `server/routes/stripe.ts` - Stripe checkout, subscription, portal
-- `server/stripeClient.ts` - Stripe client (Replit connector)
-- `server/webhookHandlers.ts` - Stripe webhook processing
-- `server/seed-products.ts` - Script to seed Stripe products
 
 ## Routes
 
@@ -88,11 +82,6 @@ A full-stack application for managing legal case recordings/transcripts. Feature
 - `PATCH /api/folders/:id` - Update folder
 - `DELETE /api/folders/:id` - Delete folder
 - `POST /api/folders/move-transcripts` - Move transcripts
-- `GET /api/stripe/products` - List Stripe products
-- `POST /api/stripe/create-checkout-session` - Create Stripe checkout
-- `GET /api/stripe/subscription` - Get user subscription
-- `POST /api/stripe/customer-portal` - Stripe customer portal
-- `POST /api/stripe/webhook` - Stripe webhook (raw body)
 - `POST /api/media/token` - Get short-lived media access token (authenticated)
 - `GET /api/media/:filename?token=` - Serve media file with secure token
 
@@ -103,7 +92,6 @@ A full-stack application for managing legal case recordings/transcripts. Feature
 - `transcripts` - Media files and transcription metadata
 - `transcript_segments` - Individual transcription segments
 - `transcript_versions` - Version snapshots
-- `stripe.*` - Managed by stripe-replit-sync (products, prices, customers, subscriptions)
 
 ## Cloudflare R2 Storage
 
