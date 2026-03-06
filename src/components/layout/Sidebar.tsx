@@ -16,6 +16,7 @@ import {
   ChevronDownIcon } from
 'lucide-react';
 import { useTranscripts } from '../../hooks/useTranscripts';
+import { useAuth } from '../../contexts/AuthContext';
 import { SettingsPanel } from './SettingsPanel';
 import { Logo } from '../brand/Logo';
 import { Folder } from '../../types/transcript';
@@ -35,8 +36,9 @@ export function Sidebar({
 }: SidebarProps) {
   const { folders, transcripts, addFolder, deleteFolder, renameFolder } =
   useTranscripts();
+  const { user } = useAuth();
   const location = useLocation();
-  const isDashboard = location.pathname === '/';
+  const isDashboard = location.pathname.startsWith('/app');
   const [isCreatingFolder, setIsCreatingFolder] = useState(false);
   const [creatingParentId, setCreatingParentId] = useState<string | null>(null);
   const [newFolderName, setNewFolderName] = useState('');
@@ -90,7 +92,7 @@ export function Sidebar({
     if (e.key === 'Escape') setRenamingFolderId(null);
   };
   const handleNavClick = (folderId: string | null) => {
-    if (!isDashboard) window.location.href = '/';
+    if (!isDashboard) window.location.href = '/app';
     onSelectFolder(folderId);
     if (isMobile && onClose) onClose();
   };
@@ -401,11 +403,11 @@ export function Sidebar({
           className="w-full flex items-center gap-3 hover:bg-slate-800 rounded-lg p-1 -m-1 transition-colors">
 
           <div className="h-8 w-8 rounded-full bg-indigo-600 flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
-            JD
+            {user?.fullName ? user.fullName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) : '??'}
           </div>
           <div className="flex flex-col text-left">
-            <span className="text-sm font-medium text-white">Jane Doe</span>
-            <span className="text-xs text-slate-500">Attorney</span>
+            <span className="text-sm font-medium text-white">{user?.fullName || 'User'}</span>
+            <span className="text-xs text-slate-500 capitalize">{user?.role || 'Member'}</span>
           </div>
         </button>
 

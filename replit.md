@@ -47,7 +47,7 @@ A full-stack application for managing legal case recordings/transcripts. Feature
 - `server/index.ts` - Express server entry point (port 3000 dev, 5000 prod)
 - `server/db.ts` - PostgreSQL connection pool
 - `server/middleware/auth.ts` - JWT authentication middleware
-- `server/routes/auth.ts` - Auth endpoints (register, login, me)
+- `server/routes/auth.ts` - Auth endpoints (register, login, me, change-password)
 - `server/routes/transcripts.ts` - Transcript CRUD + file upload
 - `server/routes/folders.ts` - Folder CRUD + move transcripts
 - `server/routes/stripe.ts` - Stripe checkout, subscription, portal
@@ -68,6 +68,7 @@ A full-stack application for managing legal case recordings/transcripts. Feature
 - `POST /api/auth/register` - Register new user
 - `POST /api/auth/login` - Login
 - `GET /api/auth/me` - Get current user
+- `PUT /api/auth/change-password` - Change password (authenticated)
 - `GET /api/transcripts` - List user transcripts
 - `POST /api/transcripts/upload` - Upload media file
 - `PATCH /api/transcripts/:id` - Update transcript

@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { 
   FileAudioIcon, ShieldCheckIcon, ZapIcon, UsersIcon, 
   CheckIcon, ArrowRightIcon, MicIcon, FolderOpenIcon,
-  PlayCircleIcon, StarIcon
+  PlayCircleIcon
 } from 'lucide-react';
 import { Logo } from '../components/brand/Logo';
 
@@ -122,10 +122,6 @@ export function LandingPage() {
           <div className="absolute top-20 -left-40 w-[400px] h-[400px] bg-purple-500/10 dark:bg-purple-500/5 rounded-full blur-3xl" />
         </div>
         <div className="max-w-4xl mx-auto text-center relative z-10">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-50 dark:bg-indigo-950 border border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 text-xs font-medium mb-6">
-            <StarIcon className="w-3 h-3" />
-            Trusted by 500+ legal professionals
-          </div>
           <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-slate-900 dark:text-white leading-tight">
             Legal Transcription,{' '}
             <span className="text-indigo-600 dark:text-indigo-400">Reimagined</span>
