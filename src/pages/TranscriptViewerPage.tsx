@@ -5,7 +5,7 @@ import {
   Link,
   useOutletContext } from
 'react-router-dom';
-import { ChevronLeftIcon, EditIcon, CheckIcon, XIcon, PlusIcon } from 'lucide-react';
+import { ChevronLeftIcon, EditIcon, CheckIcon, XIcon, PlusIcon, Trash2Icon, PaletteIcon, UsersIcon } from 'lucide-react';
 import { AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
 import { useTranscripts } from '../hooks/useTranscripts';
@@ -24,6 +24,36 @@ import { api } from '../utils/api';
 interface UndoEntry {
   segments: TranscriptSegment[];
   description: string;
+}
+
+const SPEAKER_COLOR_OPTIONS = [
+  { name: 'Blue', bg: 'bg-blue-500', border: 'border-blue-500', text: 'text-blue-600 dark:text-blue-400' },
+  { name: 'Purple', bg: 'bg-purple-500', border: 'border-purple-500', text: 'text-purple-600 dark:text-purple-400' },
+  { name: 'Emerald', bg: 'bg-emerald-500', border: 'border-emerald-500', text: 'text-emerald-600 dark:text-emerald-400' },
+  { name: 'Amber', bg: 'bg-amber-500', border: 'border-amber-500', text: 'text-amber-600 dark:text-amber-400' },
+  { name: 'Rose', bg: 'bg-rose-500', border: 'border-rose-500', text: 'text-rose-600 dark:text-rose-400' },
+  { name: 'Cyan', bg: 'bg-cyan-500', border: 'border-cyan-500', text: 'text-cyan-600 dark:text-cyan-400' },
+  { name: 'Orange', bg: 'bg-orange-500', border: 'border-orange-500', text: 'text-orange-600 dark:text-orange-400' },
+  { name: 'Indigo', bg: 'bg-indigo-500', border: 'border-indigo-500', text: 'text-indigo-600 dark:text-indigo-400' },
+  { name: 'Pink', bg: 'bg-pink-500', border: 'border-pink-500', text: 'text-pink-600 dark:text-pink-400' },
+  { name: 'Teal', bg: 'bg-teal-500', border: 'border-teal-500', text: 'text-teal-600 dark:text-teal-400' },
+];
+
+function getDefaultColorIndex(speaker: string): number {
+  let hash = 0;
+  for (let i = 0; i < speaker.length; i++) {
+    hash = speaker.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return Math.abs(hash) % SPEAKER_COLOR_OPTIONS.length;
+}
+
+function getSpeakerColorObj(speaker: string, colorMap: Record<string, string>) {
+  const colorName = colorMap[speaker];
+  if (colorName) {
+    const found = SPEAKER_COLOR_OPTIONS.find(c => c.name === colorName);
+    if (found) return found;
+  }
+  return SPEAKER_COLOR_OPTIONS[getDefaultColorIndex(speaker)];
 }
 export function TranscriptViewerPage() {
   const { id } = useParams<{
@@ -45,9 +75,11 @@ export function TranscriptViewerPage() {
   const [editingSpeaker, setEditingSpeaker] = useState<string | null>(null);
   const [speakerEditValue, setSpeakerEditValue] = useState('');
   const [versions, setVersions] = useState<TranscriptVersion[]>([]);
-  const [isAddingSpeaker, setIsAddingSpeaker] = useState(false);
-  const [newSpeakerValue, setNewSpeakerValue] = useState('');
   const [customSpeakers, setCustomSpeakers] = useState<string[]>([]);
+  const [speakerColors, setSpeakerColors] = useState<Record<string, string>>({});
+  const [showSpeakerManager, setShowSpeakerManager] = useState(false);
+  const [colorPickerSpeaker, setColorPickerSpeaker] = useState<string | null>(null);
+  const speakerManagerRef = useRef<HTMLDivElement>(null);
   const [mobileShowVideo, setMobileShowVideo] = useState(false);
   const [showSummarizeModal, setShowSummarizeModal] = useState(false);
   const [showSummaryPanel, setShowSummaryPanel] = useState(false);
@@ -74,6 +106,21 @@ export function TranscriptViewerPage() {
       setAgents(a || []);
     }).catch(() => {});
   }, []);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (speakerManagerRef.current && !speakerManagerRef.current.contains(e.target as Node)) {
+        setShowSpeakerManager(false);
+        setEditingSpeaker(null);
+        setColorPickerSpeaker(null);
+      }
+    };
+    if (showSpeakerManager) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showSpeakerManager]);
+
   const {
     isPlaying,
     currentTime,
@@ -266,18 +313,28 @@ export function TranscriptViewerPage() {
   );
   const handleAddSpeaker = (name: string) => {
     const trimmed = name.trim();
-    if (!trimmed) {
-      setIsAddingSpeaker(false);
-      return;
-    }
+    if (!trimmed) return;
     if (uniqueSpeakers.includes(trimmed)) {
       toast.error(`Speaker "${trimmed}" already exists`);
       return;
     }
     setCustomSpeakers(prev => [...prev, trimmed]);
-    setIsAddingSpeaker(false);
-    setNewSpeakerValue('');
     toast.success(`Added speaker "${trimmed}"`);
+  };
+
+  const handleRemoveSpeaker = (speaker: string) => {
+    const isUsedInSegments = segmentSpeakers.includes(speaker);
+    if (isUsedInSegments) {
+      toast.error(`Cannot remove "${speaker}" — it is assigned to segments`);
+      return;
+    }
+    setCustomSpeakers(prev => prev.filter(s => s !== speaker));
+    setSpeakerColors(prev => {
+      const next = { ...prev };
+      delete next[speaker];
+      return next;
+    });
+    toast.success(`Removed speaker "${speaker}"`);
   };
 
   const handleRenameSpeaker = (oldName: string, newName: string) => {
@@ -285,53 +342,53 @@ export function TranscriptViewerPage() {
       setEditingSpeaker(null);
       return;
     }
+    const trimmed = newName.trim();
+    if (uniqueSpeakers.includes(trimmed)) {
+      toast.error(`Speaker "${trimmed}" already exists`);
+      return;
+    }
     pushUndo(`Rename speaker "${oldName}"`);
     const newSegments = transcript.segments.map((s) =>
-    s.speaker === oldName ?
-    {
-      ...s,
-      speaker: newName.trim()
-    } :
-    s
+      s.speaker === oldName ? { ...s, speaker: trimmed } : s
     );
-    updateTranscript(transcript.id, {
-      segments: newSegments
+    updateTranscript(transcript.id, { segments: newSegments });
+    setCustomSpeakers(prev => prev.map(s => s === oldName ? trimmed : s));
+    setSpeakerColors(prev => {
+      if (prev[oldName]) {
+        const next = { ...prev, [trimmed]: prev[oldName] };
+        delete next[oldName];
+        return next;
+      }
+      return prev;
     });
     setEditingSpeaker(null);
     autoSave(`Rename speaker "${oldName}"`);
-    toast.success(`Renamed "${oldName}" to "${newName.trim()}"`);
+    toast.success(`Renamed "${oldName}" to "${trimmed}"`);
   };
+
+  const handleChangeSpeakerColor = (speaker: string, colorName: string) => {
+    setSpeakerColors(prev => ({ ...prev, [speaker]: colorName }));
+    setColorPickerSpeaker(null);
+  };
+
   const handleChangeSegmentSpeaker = (segmentId: string, newSpeaker: string) => {
     const segment = transcript.segments.find((s) => s.id === segmentId);
     if (!segment || segment.speaker === newSpeaker) return;
     pushUndo(`Change speaker for segment`);
     const newSegments = transcript.segments.map((s) =>
-    s.id === segmentId ?
-    {
-      ...s,
-      speaker: newSpeaker
-    } :
-    s
+      s.id === segmentId ? { ...s, speaker: newSpeaker } : s
     );
-    updateTranscript(transcript.id, {
-      segments: newSegments
-    });
+    updateTranscript(transcript.id, { segments: newSegments });
     autoSave('Change speaker');
     toast.success(`Changed speaker to "${newSpeaker}"`);
   };
-  const getSpeakerDotColor = (speaker: string) => {
-    const colors = [
-    'bg-blue-500',
-    'bg-purple-500',
-    'bg-emerald-500',
-    'bg-amber-500',
-    'bg-rose-500'];
 
-    let hash = 0;
-    for (let i = 0; i < speaker.length; i++) {
-      hash = speaker.charCodeAt(i) + ((hash << 5) - hash);
-    }
-    return colors[Math.abs(hash) % colors.length];
+  const getSpeakerDotColor = (speaker: string) => {
+    return getSpeakerColorObj(speaker, speakerColors).bg;
+  };
+
+  const getSpeakerBorderColor = (speaker: string) => {
+    return getSpeakerColorObj(speaker, speakerColors).border;
   };
   const handleSelectAgent = async (agentId: string) => {
     if (!transcript) return;
@@ -482,90 +539,173 @@ export function TranscriptViewerPage() {
               Speakers
             </span>
             {uniqueSpeakers.map((speaker) =>
-          <div key={speaker} className="flex items-center">
-                {editingSpeaker === speaker ?
-            <div className="flex items-center gap-1 bg-white dark:bg-slate-800 border border-indigo-300 dark:border-indigo-700 rounded-full px-2 py-0.5 shadow-sm">
-                    <div
-                className={`w-2 h-2 rounded-full ${getSpeakerDotColor(speaker)}`} />
-
-                    <input
-                type="text"
-                value={speakerEditValue}
-                onChange={(e) => setSpeakerEditValue(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter')
-                  handleRenameSpeaker(speaker, speakerEditValue);
-                  if (e.key === 'Escape') setEditingSpeaker(null);
-                }}
-                className="text-xs font-medium text-slate-800 dark:text-slate-200 bg-transparent focus:outline-none w-28 sm:w-32"
-                autoFocus />
-
-                    <button
-                onClick={() =>
-                handleRenameSpeaker(speaker, speakerEditValue)
-                }
-                className="p-0.5 text-emerald-600 hover:text-emerald-700">
-
-                      <CheckIcon className="h-3 w-3" />
-                    </button>
-                    <button
-                onClick={() => setEditingSpeaker(null)}
-                className="p-0.5 text-slate-400 hover:text-slate-600">
-
-                      <XIcon className="h-3 w-3" />
-                    </button>
-                  </div> :
-
-            <button
-              onClick={() => {
-                setEditingSpeaker(speaker);
-                setSpeakerEditValue(speaker);
-              }}
-              className="flex items-center gap-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-full px-2.5 py-1 text-xs font-medium text-slate-700 dark:text-slate-300 hover:border-indigo-300 dark:hover:border-indigo-600 hover:text-indigo-700 dark:hover:text-indigo-400 transition-colors group"
-              title="Click to rename speaker">
-
-                    <div
-                className={`w-2 h-2 rounded-full ${getSpeakerDotColor(speaker)}`} />
-
-                    {speaker}
-                    <EditIcon className="h-3 w-3 text-slate-300 dark:text-slate-600 group-hover:text-indigo-400 transition-colors" />
-                  </button>
-            }
+              <div key={speaker} className="flex items-center">
+                <span
+                  className="flex items-center gap-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-full px-2.5 py-1 text-xs font-medium text-slate-700 dark:text-slate-300">
+                  <div className={`w-2 h-2 rounded-full ${getSpeakerDotColor(speaker)}`} />
+                  {speaker}
+                </span>
               </div>
-          )}
-            {isAddingSpeaker ?
-          <div className="flex items-center gap-1 bg-white dark:bg-slate-800 border border-emerald-300 dark:border-emerald-700 rounded-full px-2 py-0.5 shadow-sm">
-                <div className="w-2 h-2 rounded-full bg-emerald-500" />
-                <input
-              type="text"
-              value={newSpeakerValue}
-              onChange={(e) => setNewSpeakerValue(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') handleAddSpeaker(newSpeakerValue);
-                if (e.key === 'Escape') { setIsAddingSpeaker(false); setNewSpeakerValue(''); }
-              }}
-              placeholder="Speaker name"
-              className="text-xs font-medium text-slate-800 dark:text-slate-200 bg-transparent focus:outline-none w-28 sm:w-32 placeholder:text-slate-400"
-              autoFocus />
-                <button
-              onClick={() => handleAddSpeaker(newSpeakerValue)}
-              className="p-0.5 text-emerald-600 hover:text-emerald-700">
-                  <CheckIcon className="h-3 w-3" />
-                </button>
-                <button
-              onClick={() => { setIsAddingSpeaker(false); setNewSpeakerValue(''); }}
-              className="p-0.5 text-slate-400 hover:text-slate-600">
-                  <XIcon className="h-3 w-3" />
-                </button>
-              </div> :
-          <button
-            onClick={() => setIsAddingSpeaker(true)}
-            className="flex items-center gap-1 bg-white dark:bg-slate-800 border border-dashed border-slate-300 dark:border-slate-600 rounded-full px-2.5 py-1 text-xs font-medium text-slate-500 dark:text-slate-400 hover:border-emerald-400 dark:hover:border-emerald-600 hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors"
-            title="Add new speaker">
-                <PlusIcon className="h-3 w-3" />
-                <span className="hidden sm:inline">Add Speaker</span>
+            )}
+            <div className="relative">
+              <button
+                onClick={() => {
+                  setShowSpeakerManager(!showSpeakerManager);
+                  setEditingSpeaker(null);
+                  setColorPickerSpeaker(null);
+                }}
+                className="flex items-center gap-1 bg-white dark:bg-slate-800 border border-dashed border-slate-300 dark:border-slate-600 rounded-full px-2.5 py-1 text-xs font-medium text-slate-500 dark:text-slate-400 hover:border-indigo-400 dark:hover:border-indigo-600 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
+                title="Manage speakers">
+                <UsersIcon className="h-3 w-3" />
+                <span className="hidden sm:inline">Edit Speakers</span>
               </button>
-          }
+
+              {showSpeakerManager &&
+                <div
+                  ref={speakerManagerRef}
+                  className="absolute left-0 top-full mt-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl z-40 w-72 sm:w-80"
+                >
+                  <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-700">
+                    <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200">Manage Speakers</h3>
+                    <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">Rename, recolor, add or remove speakers</p>
+                  </div>
+                  <div className="max-h-64 overflow-y-auto py-1">
+                    {uniqueSpeakers.map((speaker) => {
+                      const colorObj = getSpeakerColorObj(speaker, speakerColors);
+                      const isEditing = editingSpeaker === speaker;
+                      const isColorPicking = colorPickerSpeaker === speaker;
+                      const canRemove = !segmentSpeakers.includes(speaker);
+                      return (
+                        <div key={speaker} className="px-3 py-2 hover:bg-slate-50 dark:hover:bg-slate-750">
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => setColorPickerSpeaker(isColorPicking ? null : speaker)}
+                              className="flex-shrink-0 p-0.5 rounded-full hover:ring-2 hover:ring-indigo-300 transition-all"
+                              title="Change color"
+                            >
+                              <div className={`w-3.5 h-3.5 rounded-full ${colorObj.bg}`} />
+                            </button>
+                            {isEditing ?
+                              <div className="flex-1 flex items-center gap-1">
+                                <input
+                                  type="text"
+                                  value={speakerEditValue}
+                                  onChange={(e) => setSpeakerEditValue(e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') handleRenameSpeaker(speaker, speakerEditValue);
+                                    if (e.key === 'Escape') setEditingSpeaker(null);
+                                  }}
+                                  className="flex-1 text-sm text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-700 border border-indigo-300 dark:border-indigo-600 rounded px-2 py-0.5 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                                  autoFocus
+                                />
+                                <button
+                                  onClick={() => handleRenameSpeaker(speaker, speakerEditValue)}
+                                  className="p-1 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 rounded"
+                                >
+                                  <CheckIcon className="h-3.5 w-3.5" />
+                                </button>
+                                <button
+                                  onClick={() => setEditingSpeaker(null)}
+                                  className="p-1 text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700 rounded"
+                                >
+                                  <XIcon className="h-3.5 w-3.5" />
+                                </button>
+                              </div> :
+                              <>
+                                <span className="flex-1 text-sm font-medium text-slate-700 dark:text-slate-300">{speaker}</span>
+                                <button
+                                  onClick={() => {
+                                    setEditingSpeaker(speaker);
+                                    setSpeakerEditValue(speaker);
+                                    setColorPickerSpeaker(null);
+                                  }}
+                                  className="p-1 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-950/30 rounded transition-colors"
+                                  title="Rename"
+                                >
+                                  <EditIcon className="h-3.5 w-3.5" />
+                                </button>
+                                <button
+                                  onClick={() => handleRemoveSpeaker(speaker)}
+                                  className={`p-1 rounded transition-colors ${canRemove ? 'text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30' : 'text-slate-200 dark:text-slate-600 cursor-not-allowed'}`}
+                                  title={canRemove ? 'Remove speaker' : 'Cannot remove — assigned to segments'}
+                                  disabled={!canRemove}
+                                >
+                                  <Trash2Icon className="h-3.5 w-3.5" />
+                                </button>
+                              </>
+                            }
+                          </div>
+                          {isColorPicking &&
+                            <div className="flex flex-wrap gap-1.5 mt-2 ml-6">
+                              {SPEAKER_COLOR_OPTIONS.map((c) => (
+                                <button
+                                  key={c.name}
+                                  onClick={() => handleChangeSpeakerColor(speaker, c.name)}
+                                  className={`w-5 h-5 rounded-full ${c.bg} transition-transform hover:scale-125 ${colorObj.name === c.name ? 'ring-2 ring-offset-1 ring-slate-400 dark:ring-offset-slate-800' : ''}`}
+                                  title={c.name}
+                                />
+                              ))}
+                            </div>
+                          }
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div className="px-3 py-2 border-t border-slate-100 dark:border-slate-700">
+                    {editingSpeaker === '__new__' ?
+                      <div className="flex items-center gap-1">
+                        <input
+                          type="text"
+                          value={speakerEditValue}
+                          onChange={(e) => setSpeakerEditValue(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              handleAddSpeaker(speakerEditValue);
+                              setEditingSpeaker(null);
+                              setSpeakerEditValue('');
+                            }
+                            if (e.key === 'Escape') {
+                              setEditingSpeaker(null);
+                              setSpeakerEditValue('');
+                            }
+                          }}
+                          placeholder="New speaker name"
+                          className="flex-1 text-sm text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-700 border border-emerald-300 dark:border-emerald-600 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-emerald-500 placeholder:text-slate-400"
+                          autoFocus
+                        />
+                        <button
+                          onClick={() => {
+                            handleAddSpeaker(speakerEditValue);
+                            setEditingSpeaker(null);
+                            setSpeakerEditValue('');
+                          }}
+                          className="p-1 text-emerald-600 hover:text-emerald-700"
+                        >
+                          <CheckIcon className="h-4 w-4" />
+                        </button>
+                        <button
+                          onClick={() => { setEditingSpeaker(null); setSpeakerEditValue(''); }}
+                          className="p-1 text-slate-400 hover:text-slate-600"
+                        >
+                          <XIcon className="h-4 w-4" />
+                        </button>
+                      </div> :
+                      <button
+                        onClick={() => {
+                          setEditingSpeaker('__new__');
+                          setSpeakerEditValue('');
+                          setColorPickerSpeaker(null);
+                        }}
+                        className="flex items-center gap-1.5 w-full text-sm text-slate-500 dark:text-slate-400 hover:text-emerald-600 dark:hover:text-emerald-400 py-1 transition-colors"
+                      >
+                        <PlusIcon className="h-3.5 w-3.5" />
+                        Add Speaker
+                      </button>
+                    }
+                  </div>
+                </div>
+              }
+            </div>
           </div>
         </div>
       }
@@ -628,7 +768,14 @@ export function TranscriptViewerPage() {
                 onMergeSegments={handleMergeSegments}
                 onSplitSegment={handleSplitSegment}
                 allSpeakers={uniqueSpeakers}
-                onChangeSegmentSpeaker={handleChangeSegmentSpeaker} />
+                onChangeSegmentSpeaker={handleChangeSegmentSpeaker}
+                speakerColors={speakerColors}
+                onAddSpeakerFromDropdown={(segmentId, name) => {
+                  if (!uniqueSpeakers.includes(name)) {
+                    setCustomSpeakers(prev => [...prev, name]);
+                  }
+                  handleChangeSegmentSpeaker(segmentId, name);
+                }} />
 
               </div>
 
@@ -720,7 +867,14 @@ export function TranscriptViewerPage() {
                 onMergeSegments={handleMergeSegments}
                 onSplitSegment={handleSplitSegment}
                 allSpeakers={uniqueSpeakers}
-                onChangeSegmentSpeaker={handleChangeSegmentSpeaker} />
+                onChangeSegmentSpeaker={handleChangeSegmentSpeaker}
+                speakerColors={speakerColors}
+                onAddSpeakerFromDropdown={(segmentId, name) => {
+                  if (!uniqueSpeakers.includes(name)) {
+                    setCustomSpeakers(prev => [...prev, name]);
+                  }
+                  handleChangeSegmentSpeaker(segmentId, name);
+                }} />
 
                 </div>
             }
