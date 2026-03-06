@@ -22,7 +22,14 @@ const app = express();
 const isProduction = process.env.REPLIT_DEPLOYMENT === '1';
 const PORT = isProduction ? 5000 : 3000;
 
+const STRIPE_ENABLED = process.env.STRIPE_ENABLED !== 'false';
+
 async function initStripe() {
+  if (!STRIPE_ENABLED) {
+    console.log('Stripe disabled via STRIPE_ENABLED=false, skipping initialization');
+    return;
+  }
+
   const databaseUrl = process.env.DATABASE_URL;
   if (!databaseUrl) {
     console.warn('DATABASE_URL not set, skipping Stripe initialization');
@@ -68,29 +75,31 @@ app.use(cors({
   credentials: true,
 }));
 
-app.post(
-  '/api/stripe/webhook',
-  express.raw({ type: 'application/json' }),
-  async (req, res) => {
-    const signature = req.headers['stripe-signature'];
-    if (!signature) {
-      return res.status(400).json({ error: 'Missing stripe-signature' });
-    }
-
-    try {
-      const sig = Array.isArray(signature) ? signature[0] : signature;
-      if (!Buffer.isBuffer(req.body)) {
-        console.error('Webhook body is not a Buffer');
-        return res.status(500).json({ error: 'Webhook processing error' });
+if (STRIPE_ENABLED) {
+  app.post(
+    '/api/stripe/webhook',
+    express.raw({ type: 'application/json' }),
+    async (req, res) => {
+      const signature = req.headers['stripe-signature'];
+      if (!signature) {
+        return res.status(400).json({ error: 'Missing stripe-signature' });
       }
-      await WebhookHandlers.processWebhook(req.body as Buffer, sig);
-      res.status(200).json({ received: true });
-    } catch (error: any) {
-      console.error('Webhook error:', error.message);
-      res.status(400).json({ error: 'Webhook processing error' });
+
+      try {
+        const sig = Array.isArray(signature) ? signature[0] : signature;
+        if (!Buffer.isBuffer(req.body)) {
+          console.error('Webhook body is not a Buffer');
+          return res.status(500).json({ error: 'Webhook processing error' });
+        }
+        await WebhookHandlers.processWebhook(req.body as Buffer, sig);
+        res.status(200).json({ received: true });
+      } catch (error: any) {
+        console.error('Webhook error:', error.message);
+        res.status(400).json({ error: 'Webhook processing error' });
+      }
     }
-  }
-);
+  );
+}
 
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true }));
@@ -169,7 +178,9 @@ app.get('/api/media/:filename', async (req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/transcripts', transcriptRoutes);
 app.use('/api/folders', folderRoutes);
-app.use('/api/stripe', stripeRoutes);
+if (STRIPE_ENABLED) {
+  app.use('/api/stripe', stripeRoutes);
+}
 
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
