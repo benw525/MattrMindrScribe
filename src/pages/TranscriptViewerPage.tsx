@@ -17,7 +17,8 @@ import { TranscriptText } from '../components/viewer/TranscriptText';
 import { AudioPlayer } from '../components/viewer/AudioPlayer';
 import { VideoPlayer } from '../components/viewer/VideoPlayer';
 import { VersionHistory } from '../components/viewer/VersionHistory';
-import { TranscriptSegment } from '../types/transcript';
+import { TranscriptSegment, TranscriptVersion } from '../types/transcript';
+import { api } from '../utils/api';
 interface UndoEntry {
   segments: TranscriptSegment[];
   description: string;
@@ -41,9 +42,17 @@ export function TranscriptViewerPage() {
   const containerRef = useRef<HTMLDivElement>(null);
   const [editingSpeaker, setEditingSpeaker] = useState<string | null>(null);
   const [speakerEditValue, setSpeakerEditValue] = useState('');
+  const [versions, setVersions] = useState<TranscriptVersion[]>([]);
   // Mobile: toggle between transcript and video
   const [mobileShowVideo, setMobileShowVideo] = useState(false);
   const transcript = transcripts.find((t) => t.id === id);
+
+  useEffect(() => {
+    if (!id) return;
+    api.transcripts.getVersions(id).then((v: TranscriptVersion[]) => {
+      setVersions(v || []);
+    }).catch(() => {});
+  }, [id]);
   const {
     isPlaying,
     currentTime,
@@ -114,18 +123,16 @@ export function TranscriptViewerPage() {
     setUndoStack((prev) => prev.slice(0, -1));
     toast.success(`Undone: ${last.description}`);
   };
-  const handleSave = () => {
-    const newVersion = {
-      id: `v-${Date.now()}`,
-      createdAt: new Date().toISOString(),
-      segments: [...transcript.segments],
-      changeDescription: 'Manual save'
-    };
-    updateTranscript(transcript.id, {
-      versions: [newVersion, ...(transcript.versions || [])]
-    });
-    setUndoStack([]);
-    toast.success('Transcript saved');
+  const handleSave = async () => {
+    try {
+      const newVersion = await api.transcripts.createVersion(transcript.id, 'Manual save');
+      setVersions((prev) => [newVersion, ...prev]);
+      setUndoStack([]);
+      toast.success('Transcript saved');
+    } catch (err) {
+      console.error('Failed to save version:', err);
+      toast.error('Failed to save version');
+    }
   };
   const handleUpdateSegment = (segmentId: string, newText: string) => {
     const oldSegment = transcript.segments.find((s) => s.id === segmentId);
@@ -218,6 +225,23 @@ export function TranscriptViewerPage() {
     setEditingSpeaker(null);
     toast.success(`Renamed "${oldName}" to "${newName.trim()}"`);
   };
+  const handleChangeSegmentSpeaker = (segmentId: string, newSpeaker: string) => {
+    const segment = transcript.segments.find((s) => s.id === segmentId);
+    if (!segment || segment.speaker === newSpeaker) return;
+    pushUndo(`Change speaker for segment`);
+    const newSegments = transcript.segments.map((s) =>
+    s.id === segmentId ?
+    {
+      ...s,
+      speaker: newSpeaker
+    } :
+    s
+    );
+    updateTranscript(transcript.id, {
+      segments: newSegments
+    });
+    toast.success(`Changed speaker to "${newSpeaker}"`);
+  };
   const getSpeakerDotColor = (speaker: string) => {
     const colors = [
     'bg-blue-500',
@@ -244,7 +268,7 @@ export function TranscriptViewerPage() {
     }, 1500);
   };
   const handleRevertVersion = (versionId: string) => {
-    const version = (transcript.versions || []).find((v) => v.id === versionId);
+    const version = versions.find((v) => v.id === versionId);
     if (version) {
       pushUndo('Revert to version');
       updateTranscript(transcript.id, {
@@ -426,7 +450,9 @@ export function TranscriptViewerPage() {
                 onSeek={seek}
                 onUpdateSegment={handleUpdateSegment}
                 onMergeSegments={handleMergeSegments}
-                onSplitSegment={handleSplitSegment} />
+                onSplitSegment={handleSplitSegment}
+                allSpeakers={uniqueSpeakers}
+                onChangeSegmentSpeaker={handleChangeSegmentSpeaker} />
 
               </div>
 
@@ -516,7 +542,9 @@ export function TranscriptViewerPage() {
                 onSeek={seek}
                 onUpdateSegment={handleUpdateSegment}
                 onMergeSegments={handleMergeSegments}
-                onSplitSegment={handleSplitSegment} />
+                onSplitSegment={handleSplitSegment}
+                allSpeakers={uniqueSpeakers}
+                onChangeSegmentSpeaker={handleChangeSegmentSpeaker} />
 
                 </div>
             }
@@ -527,7 +555,7 @@ export function TranscriptViewerPage() {
         <AnimatePresence>
           {showHistory &&
           <VersionHistory
-            versions={transcript.versions || []}
+            versions={versions}
             onClose={() => setShowHistory(false)}
             onRevert={handleRevertVersion} />
 

@@ -11,7 +11,8 @@ A full-stack application for managing legal case recordings/transcripts. Feature
 - Case and folder organization
 - Audio/video file upload with AI transcription pipeline (OpenAI whisper-1 with verbose_json segment timestamps)
 - Synced audio player for recordings
-- Version history for transcripts
+- Version history for transcripts (persisted to DB, loaded on page open)
+- Per-segment speaker reassignment (click speaker name to change via dropdown)
 - Present mode for hearings
 - Stripe subscription payments (Starter $29/mo, Professional $79/mo, Enterprise $199/mo)
 - Admin user with unlimited access

@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef, Fragment } from 'react';
-import { MergeIcon, SplitIcon } from 'lucide-react';
+import { MergeIcon, SplitIcon, ChevronDownIcon } from 'lucide-react';
 import { TranscriptSegment } from '../../types/transcript';
 import { formatDuration } from '../../utils/formatters';
 interface TranscriptTextProps {
@@ -9,6 +9,8 @@ interface TranscriptTextProps {
   onUpdateSegment: (id: string, newText: string) => void;
   onMergeSegments: (firstId: string, secondId: string) => void;
   onSplitSegment: (id: string, splitPosition: number) => void;
+  allSpeakers?: string[];
+  onChangeSegmentSpeaker?: (segmentId: string, newSpeaker: string) => void;
 }
 export function TranscriptText({
   segments,
@@ -16,11 +18,15 @@ export function TranscriptText({
   onSeek,
   onUpdateSegment,
   onMergeSegments,
-  onSplitSegment
+  onSplitSegment,
+  allSpeakers = [],
+  onChangeSegmentSpeaker
 }: TranscriptTextProps) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState('');
+  const [speakerDropdownId, setSpeakerDropdownId] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (editingId && textareaRef.current) {
       textareaRef.current.style.height = 'auto';
@@ -28,6 +34,17 @@ export function TranscriptText({
       textareaRef.current.focus();
     }
   }, [editingId, editValue]);
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setSpeakerDropdownId(null);
+      }
+    };
+    if (speakerDropdownId) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [speakerDropdownId]);
   const handleEditStart = (segment: TranscriptSegment) => {
     setEditingId(segment.id);
     setEditValue(segment.text);
@@ -79,6 +96,20 @@ export function TranscriptText({
     }
     return colors[Math.abs(hash) % colors.length];
   };
+  const getSpeakerDotColor = (speaker: string) => {
+    const colors = [
+    'bg-blue-500',
+    'bg-purple-500',
+    'bg-emerald-500',
+    'bg-amber-500',
+    'bg-rose-500'];
+
+    let hash = 0;
+    for (let i = 0; i < speaker.length; i++) {
+      hash = speaker.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    return colors[Math.abs(hash) % colors.length];
+  };
   if (segments.length === 0) {
     return (
       <div className="flex-1 flex items-center justify-center p-8 text-slate-500 dark:text-slate-400">
@@ -95,6 +126,7 @@ export function TranscriptText({
         const speakerColor = getSpeakerColor(segment.speaker);
         const nextSegment =
         index < segments.length - 1 ? segments[index + 1] : null;
+        const showDropdown = speakerDropdownId === segment.id;
         return (
           <Fragment key={segment.id}>
             <div
@@ -111,8 +143,34 @@ export function TranscriptText({
 
               <div className={`flex-1 border-l-2 pl-3 sm:pl-4 ${speakerColor}`}>
                 <div className="flex items-center justify-between mb-1">
-                  <div className="font-semibold text-sm text-slate-900 dark:text-white">
-                    {segment.speaker}
+                  <div className="relative">
+                    <button
+                      onClick={() => setSpeakerDropdownId(showDropdown ? null : segment.id)}
+                      className="flex items-center gap-1 font-semibold text-sm text-slate-900 dark:text-white hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors rounded px-1 -mx-1 hover:bg-slate-100 dark:hover:bg-slate-800"
+                      title="Click to change speaker">
+                      {segment.speaker}
+                      <ChevronDownIcon className="h-3 w-3 opacity-0 group-hover:opacity-60 transition-opacity" />
+                    </button>
+                    {showDropdown && allSpeakers.length > 0 && (
+                      <div
+                        ref={dropdownRef}
+                        className="absolute left-0 top-full mt-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg z-30 min-w-[160px] py-1">
+                        {allSpeakers.map((speaker) => (
+                          <button
+                            key={speaker}
+                            onClick={() => {
+                              if (onChangeSegmentSpeaker && speaker !== segment.speaker) {
+                                onChangeSegmentSpeaker(segment.id, speaker);
+                              }
+                              setSpeakerDropdownId(null);
+                            }}
+                            className={`w-full text-left px-3 py-1.5 text-sm flex items-center gap-2 transition-colors ${speaker === segment.speaker ? 'bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 font-medium' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700'}`}>
+                            <span className={`w-2 h-2 rounded-full ${getSpeakerDotColor(speaker)}`} />
+                            {speaker}
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
                   <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                     <button
