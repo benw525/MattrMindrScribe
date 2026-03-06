@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 
 async function getMediaUrl(fileUrl: string): Promise<string | null> {
-  const token = localStorage.getItem('token');
+  const token = localStorage.getItem('auth_token');
   if (!token || !fileUrl) return null;
 
   const filename = fileUrl.split('/').pop();
