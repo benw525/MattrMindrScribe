@@ -28,18 +28,26 @@ export function UploadDropzone({ onClose }: UploadDropzoneProps) {
     onClose();
   };
 
+  const MEDIA_EXTENSIONS = /\.(mp3|wav|m4a|ogg|flac|aac|webm|wma|amr|opus|aiff|aif|au|ra|ram|mp4|mov|avi|mkv|wmv|flv|3gp|3g2|m4v|mpg|mpeg|ts|mts|vob|ogv)$/i;
+
+  const isMediaFile = (file: File) => {
+    if (file.type.includes('audio') || file.type.includes('video')) return true;
+    if (MEDIA_EXTENSIONS.test(file.name)) return true;
+    return false;
+  };
+
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
     const file = e.dataTransfer.files[0];
-    if (file && (file.type.includes('audio') || file.type.includes('video'))) {
+    if (file && isMediaFile(file)) {
       startUpload(file);
     }
   }, []);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file && (file.type.includes('audio') || file.type.includes('video'))) {
+    if (file && isMediaFile(file)) {
       startUpload(file);
     } else if (file) {
       toast.error('Please select an audio or video file');
@@ -84,7 +92,7 @@ export function UploadDropzone({ onClose }: UploadDropzoneProps) {
             </p>
             <label className="cursor-pointer inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
               Select File
-              <input type="file" className="hidden" accept="audio/*,video/*" onChange={handleFileSelect} />
+              <input type="file" className="hidden" accept="audio/*,video/*,.mp3,.wav,.m4a,.ogg,.flac,.aac,.webm,.wma,.amr,.opus,.aiff,.aif,.mp4,.mov,.avi,.mkv,.wmv,.flv,.3gp,.3g2,.m4v,.mpg,.mpeg,.ts,.mts,.vob,.ogv" onChange={handleFileSelect} />
             </label>
           </div>
         </div>

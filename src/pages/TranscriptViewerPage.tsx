@@ -17,6 +17,8 @@ import { TranscriptText } from '../components/viewer/TranscriptText';
 import { AudioPlayer } from '../components/viewer/AudioPlayer';
 import { VideoPlayer } from '../components/viewer/VideoPlayer';
 import { VersionHistory } from '../components/viewer/VersionHistory';
+import { AISummarizeModal } from '../components/viewer/AISummarizeModal';
+import { AISummaryPanel } from '../components/viewer/AISummaryPanel';
 import { TranscriptSegment, TranscriptVersion } from '../types/transcript';
 import { api } from '../utils/api';
 interface UndoEntry {
@@ -43,8 +45,15 @@ export function TranscriptViewerPage() {
   const [editingSpeaker, setEditingSpeaker] = useState<string | null>(null);
   const [speakerEditValue, setSpeakerEditValue] = useState('');
   const [versions, setVersions] = useState<TranscriptVersion[]>([]);
-  // Mobile: toggle between transcript and video
   const [mobileShowVideo, setMobileShowVideo] = useState(false);
+  const [showSummarizeModal, setShowSummarizeModal] = useState(false);
+  const [showSummaryPanel, setShowSummaryPanel] = useState(false);
+  const [agents, setAgents] = useState<{ id: string; name: string; icon: string; description: string }[]>([]);
+  const [summaries, setSummaries] = useState<{ id: string; agentType: string; summary: string; modelUsed: string; createdAt: string }[]>([]);
+  const [loadingAgentId, setLoadingAgentId] = useState<string | null>(null);
+  const [streamingContent, setStreamingContent] = useState('');
+  const [streamingAgentType, setStreamingAgentType] = useState<string | null>(null);
+  const [isStreaming, setIsStreaming] = useState(false);
   const transcript = transcripts.find((t) => t.id === id);
 
   useEffect(() => {
@@ -52,7 +61,16 @@ export function TranscriptViewerPage() {
     api.transcripts.getVersions(id).then((v: TranscriptVersion[]) => {
       setVersions(v || []);
     }).catch(() => {});
+    api.transcripts.getSummaries(id).then((s: any[]) => {
+      setSummaries(s || []);
+    }).catch(() => {});
   }, [id]);
+
+  useEffect(() => {
+    api.transcripts.getAgents().then((a: any[]) => {
+      setAgents(a || []);
+    }).catch(() => {});
+  }, []);
   const {
     isPlaying,
     currentTime,
@@ -293,6 +311,69 @@ export function TranscriptViewerPage() {
     }
     return colors[Math.abs(hash) % colors.length];
   };
+  const handleSelectAgent = async (agentId: string) => {
+    if (!transcript) return;
+    setLoadingAgentId(agentId);
+    setStreamingContent('');
+    setStreamingAgentType(agentId);
+    setIsStreaming(true);
+    setShowSummarizeModal(false);
+    setShowSummaryPanel(true);
+    setShowHistory(false);
+
+    try {
+      const response = await api.transcripts.summarize(transcript.id, agentId);
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.error || 'Summary failed');
+      }
+
+      const reader = response.body?.getReader();
+      if (!reader) throw new Error('No response stream');
+
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(6));
+              if (data.content) {
+                setStreamingContent(prev => prev + data.content);
+              }
+              if (data.done && data.summary) {
+                setSummaries(prev => [data.summary, ...prev]);
+              }
+              if (data.error) {
+                toast.error(data.error);
+              }
+            } catch {}
+          }
+        }
+      }
+
+      toast.success('Summary generated');
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to generate summary');
+    } finally {
+      setLoadingAgentId(null);
+      setIsStreaming(false);
+      setStreamingAgentType(null);
+      setStreamingContent('');
+    }
+  };
+
+  const agentNames: Record<string, string> = {};
+  agents.forEach(a => { agentNames[a.id] = a.name; });
+
   const handleSuggestName = () => {
     setIsSuggestingName(true);
     setTimeout(() => {
@@ -350,7 +431,8 @@ export function TranscriptViewerPage() {
             onUndo={handleUndo}
             canUndo={undoStack.length > 0}
             sidebarHidden={sidebarHidden}
-            onToggleSidebar={() => setSidebarHidden(!sidebarHidden)} />
+            onToggleSidebar={() => setSidebarHidden(!sidebarHidden)}
+            onAISummarize={() => setShowSummarizeModal(true)} />
 
         </div>
         {/* Mobile: compact toolbar */}
@@ -364,7 +446,8 @@ export function TranscriptViewerPage() {
             onUndo={handleUndo}
             canUndo={undoStack.length > 0}
             sidebarHidden={sidebarHidden}
-            onToggleSidebar={() => setSidebarHidden(!sidebarHidden)} />
+            onToggleSidebar={() => setSidebarHidden(!sidebarHidden)}
+            onAISummarize={() => setShowSummarizeModal(true)} />
 
         </div>
       </header>
@@ -599,7 +682,31 @@ export function TranscriptViewerPage() {
 
           }
         </AnimatePresence>
+
+        <AnimatePresence>
+          {showSummaryPanel &&
+          <AISummaryPanel
+            summaries={summaries}
+            streamingContent={streamingContent}
+            streamingAgentType={streamingAgentType}
+            isStreaming={isStreaming}
+            onClose={() => setShowSummaryPanel(false)}
+            agentNames={agentNames} />
+
+          }
+        </AnimatePresence>
       </div>
+
+      <AnimatePresence>
+        {showSummarizeModal &&
+        <AISummarizeModal
+          agents={agents}
+          onSelectAgent={handleSelectAgent}
+          onClose={() => setShowSummarizeModal(false)}
+          loadingAgentId={loadingAgentId} />
+
+        }
+      </AnimatePresence>
 
       {!isProcessing &&
       <AudioPlayer

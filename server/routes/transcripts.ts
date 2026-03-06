@@ -6,6 +6,8 @@ import pool from '../db.js';
 import { authenticateToken, AuthRequest } from '../middleware/auth.js';
 import { processTranscription } from '../transcription.js';
 import { r2Configured, uploadFileToR2, deleteFromR2, isR2Url, getR2KeyFromUrl, getPresignedUploadUrl } from '../r2.js';
+import { LEGAL_AGENTS, getAgentById } from '../legalAgents.js';
+import OpenAI from 'openai';
 import fs from 'fs/promises';
 import { mkdirSync } from 'fs';
 
@@ -24,11 +26,19 @@ const storage = multer.diskStorage({
 
 const ALLOWED_TYPES = [
   'audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/wave', 'audio/x-wav',
-  'audio/mp4', 'audio/x-m4a', 'audio/m4a', 'audio/aac',
+  'audio/mp4', 'audio/x-m4a', 'audio/m4a', 'audio/aac', 'audio/x-aac',
   'audio/ogg', 'audio/webm', 'audio/flac', 'audio/x-flac',
+  'audio/amr', 'audio/3gpp', 'audio/3gpp2',
+  'audio/x-ms-wma', 'audio/vnd.wave', 'audio/opus',
+  'audio/aiff', 'audio/x-aiff', 'audio/basic',
   'video/mp4', 'video/webm', 'video/quicktime', 'video/x-msvideo', 'video/ogg',
+  'video/x-matroska', 'video/x-ms-wmv', 'video/x-flv', 'video/3gpp', 'video/3gpp2',
+  'video/mp2t', 'video/x-m4v', 'video/mpeg', 'video/x-mpeg',
 ];
-const ALLOWED_EXTENSIONS = ['.mp3', '.wav', '.m4a', '.ogg', '.flac', '.aac', '.webm', '.mp4', '.mov', '.avi'];
+const ALLOWED_EXTENSIONS = [
+  '.mp3', '.wav', '.m4a', '.ogg', '.flac', '.aac', '.webm', '.wma', '.amr', '.opus', '.aiff', '.aif', '.au', '.ra', '.ram',
+  '.mp4', '.mov', '.avi', '.mkv', '.wmv', '.flv', '.3gp', '.3g2', '.m4v', '.mpg', '.mpeg', '.ts', '.mts', '.vob', '.ogv',
+];
 
 const upload = multer({
   storage,
@@ -513,6 +523,153 @@ router.get('/:id/versions', async (req: AuthRequest, res: Response) => {
     res.json(versions);
   } catch (err) {
     console.error('Get versions error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+const aiClient = new OpenAI({
+  apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY,
+  baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+});
+
+router.get('/agents', (_req: AuthRequest, res: Response) => {
+  const agents = LEGAL_AGENTS.map(({ id, name, icon, description }) => ({ id, name, icon, description }));
+  res.json(agents);
+});
+
+router.post('/:id/summarize', async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { agentType } = req.body;
+
+    if (!agentType) {
+      return res.status(400).json({ error: 'agentType is required' });
+    }
+
+    const agent = getAgentById(agentType);
+    if (!agent) {
+      return res.status(400).json({ error: 'Invalid agent type' });
+    }
+
+    const existing = await pool.query(
+      'SELECT id FROM transcripts WHERE id = $1 AND user_id = $2',
+      [id, req.userId]
+    );
+    if (existing.rows.length === 0) {
+      return res.status(404).json({ error: 'Transcript not found' });
+    }
+
+    const segmentsResult = await pool.query(
+      `SELECT speaker, text, start_time, end_time
+       FROM transcript_segments WHERE transcript_id = $1 ORDER BY segment_order`,
+      [id]
+    );
+
+    if (segmentsResult.rows.length === 0) {
+      return res.status(400).json({ error: 'Transcript has no segments to summarize' });
+    }
+
+    const transcriptText = segmentsResult.rows.map(seg => {
+      const startMin = Math.floor(seg.start_time / 60);
+      const startSec = Math.floor(seg.start_time % 60);
+      const timestamp = `[${startMin}:${startSec.toString().padStart(2, '0')}]`;
+      return `${timestamp} ${seg.speaker}: ${seg.text}`;
+    }).join('\n');
+
+    const MAX_CHARS = 120000;
+    if (transcriptText.length > MAX_CHARS) {
+      return res.status(400).json({ error: `Transcript is too long for summarization (${Math.round(transcriptText.length / 1000)}k chars). Maximum is ${MAX_CHARS / 1000}k characters.` });
+    }
+
+    const model = 'gpt-4o-mini';
+
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+
+    const abortController = new AbortController();
+    let clientDisconnected = false;
+
+    req.on('close', () => {
+      clientDisconnected = true;
+      abortController.abort();
+    });
+
+    const stream = await aiClient.chat.completions.create({
+      model,
+      messages: [
+        { role: 'system', content: agent.systemPrompt },
+        { role: 'user', content: `Please analyze and summarize the following legal transcript:\n\n${transcriptText}` },
+      ],
+      stream: true,
+      max_tokens: 4096,
+    });
+
+    let fullResponse = '';
+
+    for await (const chunk of stream) {
+      if (clientDisconnected) break;
+      const content = chunk.choices[0]?.delta?.content || '';
+      if (content) {
+        fullResponse += content;
+        try {
+          res.write(`data: ${JSON.stringify({ content })}\n\n`);
+        } catch { break; }
+      }
+    }
+
+    if (!clientDisconnected && fullResponse) {
+      const summaryResult = await pool.query(
+        `INSERT INTO transcript_summaries (transcript_id, user_id, agent_type, summary, model_used)
+         VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+        [id, req.userId, agentType, fullResponse, model]
+      );
+
+      const s = summaryResult.rows[0];
+      try {
+        res.write(`data: ${JSON.stringify({ done: true, summary: { id: s.id, agentType: s.agent_type, summary: s.summary, modelUsed: s.model_used, createdAt: s.created_at } })}\n\n`);
+      } catch {}
+    }
+    res.end();
+  } catch (err: any) {
+    console.error('Summarize error:', err);
+    if (res.headersSent) {
+      res.write(`data: ${JSON.stringify({ error: err.message || 'Summary generation failed' })}\n\n`);
+      res.end();
+    } else {
+      res.status(500).json({ error: 'Failed to generate summary' });
+    }
+  }
+});
+
+router.get('/:id/summaries', async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+
+    const existing = await pool.query(
+      'SELECT id FROM transcripts WHERE id = $1 AND user_id = $2',
+      [id, req.userId]
+    );
+    if (existing.rows.length === 0) {
+      return res.status(404).json({ error: 'Transcript not found' });
+    }
+
+    const result = await pool.query(
+      'SELECT * FROM transcript_summaries WHERE transcript_id = $1 ORDER BY created_at DESC',
+      [id]
+    );
+
+    const summaries = result.rows.map(s => ({
+      id: s.id,
+      agentType: s.agent_type,
+      summary: s.summary,
+      modelUsed: s.model_used,
+      createdAt: s.created_at,
+    }));
+
+    res.json(summaries);
+  } catch (err) {
+    console.error('Get summaries error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

@@ -9,7 +9,8 @@ A full-stack application for managing legal case recordings/transcripts. Feature
 - User authentication (register, login, JWT-based)
 - Transcript listing with status indicators (Completed, Processing, Pending, Error)
 - Case and folder organization
-- Audio/video file upload with background upload (non-blocking progress indicator) and AI transcription pipeline (OpenAI whisper-1 with verbose_json segment timestamps)
+- Audio/video file upload with background upload (non-blocking progress indicator) and AI transcription pipeline (OpenAI whisper-1 with verbose_json segment timestamps); supports extensive audio/video formats (mp3, wav, m4a, ogg, flac, aac, wma, amr, opus, aiff, mp4, mov, avi, mkv, wmv, flv, 3gp, mpg, etc.)
+- AI Summarize: practice-area-specific transcript analysis via 10 legal agent bots (Personal Injury, Family Law, Criminal Defense, Workers' Comp, Insurance Defense, Employment Law, Medical Malpractice, Real Estate, Immigration, General Litigation); streams response in real-time via SSE
 - Synced audio player for recordings
 - Version history for transcripts (persisted to DB, loaded on page open)
 - Per-segment speaker reassignment (click speaker name to change via dropdown)
@@ -79,6 +80,9 @@ A full-stack application for managing legal case recordings/transcripts. Feature
 - `DELETE /api/transcripts` - Batch delete transcripts
 - `POST /api/transcripts/:id/versions` - Create version snapshot
 - `GET /api/transcripts/:id/versions` - List versions
+- `GET /api/transcripts/agents` - List available AI legal summary agents
+- `POST /api/transcripts/:id/summarize` - Generate AI summary (SSE streaming, body: {agentType})
+- `GET /api/transcripts/:id/summaries` - List past summaries for a transcript
 - `GET /api/folders` - List folders
 - `POST /api/folders` - Create folder
 - `PATCH /api/folders/:id` - Update folder
@@ -94,6 +98,7 @@ A full-stack application for managing legal case recordings/transcripts. Feature
 - `transcripts` - Media files and transcription metadata
 - `transcript_segments` - Individual transcription segments
 - `transcript_versions` - Version snapshots
+- `transcript_summaries` - AI-generated legal summaries (per-agent, per-transcript)
 
 ## Cloudflare R2 Storage
 

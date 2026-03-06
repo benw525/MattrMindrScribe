@@ -8,7 +8,8 @@ import {
   SaveIcon,
   Undo2Icon,
   PanelLeftCloseIcon,
-  PanelLeftOpenIcon } from
+  PanelLeftOpenIcon,
+  BrainCircuitIcon } from
 'lucide-react';
 import { toast } from 'sonner';
 interface TranscriptToolbarProps {
@@ -21,6 +22,7 @@ interface TranscriptToolbarProps {
   canUndo: boolean;
   sidebarHidden: boolean;
   onToggleSidebar: () => void;
+  onAISummarize: () => void;
 }
 export function TranscriptToolbar({
   transcriptId,
@@ -31,7 +33,8 @@ export function TranscriptToolbar({
   onUndo,
   canUndo,
   sidebarHidden,
-  onToggleSidebar
+  onToggleSidebar,
+  onAISummarize
 }: TranscriptToolbarProps) {
   const navigate = useNavigate();
   const handleExport = () => {
@@ -70,6 +73,14 @@ export function TranscriptToolbar({
       </button>
 
       <div className="hidden sm:block h-5 w-px bg-slate-200 dark:bg-slate-700 mx-0.5" />
+
+      <button
+        onClick={onAISummarize}
+        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-sm font-medium text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-900/30 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 rounded-md transition-colors">
+
+        <BrainCircuitIcon className="h-4 w-4" />
+        <span className="hidden sm:inline">AI Summarize</span>
+      </button>
 
       <button
         onClick={onSuggestName}

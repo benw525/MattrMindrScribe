@@ -138,6 +138,19 @@ export const api = {
     createVersion: (id: string, changeDescription: string) =>
       request(`/transcripts/${id}/versions`, { method: 'POST', body: JSON.stringify({ changeDescription }) }),
     getVersions: (id: string) => request(`/transcripts/${id}/versions`),
+    getAgents: () => request('/transcripts/agents'),
+    summarize: (id: string, agentType: string) => {
+      const token = getToken();
+      return fetch(`${API_BASE}/transcripts/${id}/summarize`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ agentType }),
+      });
+    },
+    getSummaries: (id: string) => request(`/transcripts/${id}/summaries`),
   },
   folders: {
     list: () => request('/folders'),

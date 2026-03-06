@@ -139,6 +139,19 @@ process.on('unhandledRejection', (err) => {
   console.error('Unhandled rejection:', err);
 });
 
+pool.query(`
+  CREATE TABLE IF NOT EXISTS transcript_summaries (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    transcript_id UUID NOT NULL REFERENCES transcripts(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    agent_type VARCHAR(100) NOT NULL,
+    summary TEXT NOT NULL,
+    model_used VARCHAR(100) DEFAULT 'gpt-4o-mini',
+    created_at TIMESTAMP DEFAULT NOW()
+  );
+  CREATE INDEX IF NOT EXISTS idx_summaries_transcript ON transcript_summaries(transcript_id);
+`).catch((err: any) => console.error('Migration error:', err.message));
+
 const server = app.listen(PORT, '0.0.0.0', () => {
   console.log(`Backend server running on http://0.0.0.0:${PORT}`);
 });
