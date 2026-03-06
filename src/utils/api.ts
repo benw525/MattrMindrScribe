@@ -141,12 +141,4 @@ export const api = {
     moveTranscripts: (transcriptIds: string[], folderId: string | null) =>
       request('/folders/move-transcripts', { method: 'POST', body: JSON.stringify({ transcriptIds, folderId }) }),
   },
-  stripe: {
-    getProducts: () => request('/stripe/products'),
-    createCheckoutSession: (priceId: string) =>
-      request('/stripe/create-checkout-session', { method: 'POST', body: JSON.stringify({ priceId }) }),
-    getSubscription: () => request('/stripe/subscription'),
-    createPortalSession: () =>
-      request('/stripe/customer-portal', { method: 'POST' }),
-  },
 };

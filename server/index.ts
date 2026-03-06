@@ -5,13 +5,9 @@ import fs from 'fs';
 import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import { isR2Url, getR2KeyFromUrl, getR2PublicUrl } from './r2.js';
-import { runMigrations } from 'stripe-replit-sync';
-import { getStripeSync } from './stripeClient.js';
-import { WebhookHandlers } from './webhookHandlers.js';
 import authRoutes from './routes/auth.js';
 import transcriptRoutes from './routes/transcripts.js';
 import folderRoutes from './routes/folders.js';
-import stripeRoutes from './routes/stripe.js';
 import { authenticateToken } from './middleware/auth.js';
 import pool from './db.js';
 
@@ -22,51 +18,6 @@ const app = express();
 const isProduction = process.env.REPLIT_DEPLOYMENT === '1';
 const PORT = isProduction ? 5000 : 3000;
 
-const STRIPE_ENABLED = process.env.STRIPE_ENABLED !== 'false';
-
-async function initStripe() {
-  if (!STRIPE_ENABLED) {
-    console.log('Stripe disabled via STRIPE_ENABLED=false, skipping initialization');
-    return;
-  }
-
-  const databaseUrl = process.env.DATABASE_URL;
-  if (!databaseUrl) {
-    console.warn('DATABASE_URL not set, skipping Stripe initialization');
-    return;
-  }
-
-  try {
-    console.log('Initializing Stripe schema...');
-    await runMigrations({ databaseUrl });
-    console.log('Stripe schema ready');
-
-    const stripeSync = await getStripeSync();
-
-    const replitDomains = process.env.REPLIT_DOMAINS;
-    if (replitDomains) {
-      const webhookBaseUrl = `https://${replitDomains.split(',')[0]}`;
-      try {
-        const { webhook } = await stripeSync.findOrCreateManagedWebhook(
-          `${webhookBaseUrl}/api/stripe/webhook`
-        );
-        console.log(`Webhook configured: ${webhook?.url || webhookBaseUrl}`);
-      } catch (webhookErr) {
-        console.warn('Webhook setup skipped (may not be available in dev):', (webhookErr as any).message);
-      }
-    } else {
-      console.log('REPLIT_DOMAINS not set, skipping webhook setup');
-    }
-
-    stripeSync.syncBackfill()
-      .then(() => console.log('Stripe data synced'))
-      .catch((err: any) => console.error('Error syncing Stripe data:', err));
-  } catch (error) {
-    console.error('Failed to initialize Stripe:', error);
-  }
-}
-
-await initStripe();
 
 app.use(cors({
   origin: isProduction 
@@ -75,31 +26,6 @@ app.use(cors({
   credentials: true,
 }));
 
-if (STRIPE_ENABLED) {
-  app.post(
-    '/api/stripe/webhook',
-    express.raw({ type: 'application/json' }),
-    async (req, res) => {
-      const signature = req.headers['stripe-signature'];
-      if (!signature) {
-        return res.status(400).json({ error: 'Missing stripe-signature' });
-      }
-
-      try {
-        const sig = Array.isArray(signature) ? signature[0] : signature;
-        if (!Buffer.isBuffer(req.body)) {
-          console.error('Webhook body is not a Buffer');
-          return res.status(500).json({ error: 'Webhook processing error' });
-        }
-        await WebhookHandlers.processWebhook(req.body as Buffer, sig);
-        res.status(200).json({ received: true });
-      } catch (error: any) {
-        console.error('Webhook error:', error.message);
-        res.status(400).json({ error: 'Webhook processing error' });
-      }
-    }
-  );
-}
 
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true }));
@@ -178,9 +104,6 @@ app.get('/api/media/:filename', async (req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/transcripts', transcriptRoutes);
 app.use('/api/folders', folderRoutes);
-if (STRIPE_ENABLED) {
-  app.use('/api/stripe', stripeRoutes);
-}
 
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });

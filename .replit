@@ -56,4 +56,3 @@ run = ["npx", "tsx", "server/index.ts"]
 
 [userenv.shared]
 JWT_SECRET = "5a1c1628be1135d87b97be44cdba1d0a92f3833f86a31ccae10dc9c800b6c8f53aed8380a98853cf8d4b3e60ce6a8640968ff2dd8dd7eb659828ebac2f34f4c5"
-STRIPE_ENABLED = "false"
