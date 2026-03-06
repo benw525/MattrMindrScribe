@@ -5,7 +5,7 @@ import {
   Link,
   useOutletContext } from
 'react-router-dom';
-import { ChevronLeftIcon, EditIcon, CheckIcon, XIcon } from 'lucide-react';
+import { ChevronLeftIcon, EditIcon, CheckIcon, XIcon, PlusIcon } from 'lucide-react';
 import { AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
 import { useTranscripts } from '../hooks/useTranscripts';
@@ -45,6 +45,9 @@ export function TranscriptViewerPage() {
   const [editingSpeaker, setEditingSpeaker] = useState<string | null>(null);
   const [speakerEditValue, setSpeakerEditValue] = useState('');
   const [versions, setVersions] = useState<TranscriptVersion[]>([]);
+  const [isAddingSpeaker, setIsAddingSpeaker] = useState(false);
+  const [newSpeakerValue, setNewSpeakerValue] = useState('');
+  const [customSpeakers, setCustomSpeakers] = useState<string[]>([]);
   const [mobileShowVideo, setMobileShowVideo] = useState(false);
   const [showSummarizeModal, setShowSummarizeModal] = useState(false);
   const [showSummaryPanel, setShowSummaryPanel] = useState(false);
@@ -255,9 +258,28 @@ export function TranscriptViewerPage() {
     autoSave('Split section');
     toast.success('Section split');
   };
-  const uniqueSpeakers = Array.from(
+  const segmentSpeakers = Array.from(
     new Set(transcript.segments.map((s) => s.speaker))
   );
+  const uniqueSpeakers = Array.from(
+    new Set([...segmentSpeakers, ...customSpeakers])
+  );
+  const handleAddSpeaker = (name: string) => {
+    const trimmed = name.trim();
+    if (!trimmed) {
+      setIsAddingSpeaker(false);
+      return;
+    }
+    if (uniqueSpeakers.includes(trimmed)) {
+      toast.error(`Speaker "${trimmed}" already exists`);
+      return;
+    }
+    setCustomSpeakers(prev => [...prev, trimmed]);
+    setIsAddingSpeaker(false);
+    setNewSpeakerValue('');
+    toast.success(`Added speaker "${trimmed}"`);
+  };
+
   const handleRenameSpeaker = (oldName: string, newName: string) => {
     if (!newName.trim() || newName.trim() === oldName) {
       setEditingSpeaker(null);
@@ -511,6 +533,39 @@ export function TranscriptViewerPage() {
             }
               </div>
           )}
+            {isAddingSpeaker ?
+          <div className="flex items-center gap-1 bg-white dark:bg-slate-800 border border-emerald-300 dark:border-emerald-700 rounded-full px-2 py-0.5 shadow-sm">
+                <div className="w-2 h-2 rounded-full bg-emerald-500" />
+                <input
+              type="text"
+              value={newSpeakerValue}
+              onChange={(e) => setNewSpeakerValue(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleAddSpeaker(newSpeakerValue);
+                if (e.key === 'Escape') { setIsAddingSpeaker(false); setNewSpeakerValue(''); }
+              }}
+              placeholder="Speaker name"
+              className="text-xs font-medium text-slate-800 dark:text-slate-200 bg-transparent focus:outline-none w-28 sm:w-32 placeholder:text-slate-400"
+              autoFocus />
+                <button
+              onClick={() => handleAddSpeaker(newSpeakerValue)}
+              className="p-0.5 text-emerald-600 hover:text-emerald-700">
+                  <CheckIcon className="h-3 w-3" />
+                </button>
+                <button
+              onClick={() => { setIsAddingSpeaker(false); setNewSpeakerValue(''); }}
+              className="p-0.5 text-slate-400 hover:text-slate-600">
+                  <XIcon className="h-3 w-3" />
+                </button>
+              </div> :
+          <button
+            onClick={() => setIsAddingSpeaker(true)}
+            className="flex items-center gap-1 bg-white dark:bg-slate-800 border border-dashed border-slate-300 dark:border-slate-600 rounded-full px-2.5 py-1 text-xs font-medium text-slate-500 dark:text-slate-400 hover:border-emerald-400 dark:hover:border-emerald-600 hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors"
+            title="Add new speaker">
+                <PlusIcon className="h-3 w-3" />
+                <span className="hidden sm:inline">Add Speaker</span>
+              </button>
+          }
           </div>
         </div>
       }
