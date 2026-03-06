@@ -5,16 +5,19 @@ import { v4 as uuidv4 } from 'uuid';
 import pool from '../db.js';
 import { authenticateToken, AuthRequest } from '../middleware/auth.js';
 import { processTranscription } from '../transcription.js';
+import { r2Configured, uploadToR2, deleteFromR2, isR2Url, getR2KeyFromUrl } from '../r2.js';
 
 const router = Router();
 
-const storage = multer.diskStorage({
-  destination: 'uploads/',
-  filename: (_req, file, cb) => {
-    const ext = path.extname(file.originalname);
-    cb(null, `${uuidv4()}${ext}`);
-  },
-});
+const storage = r2Configured
+  ? multer.memoryStorage()
+  : multer.diskStorage({
+      destination: 'uploads/',
+      filename: (_req, file, cb) => {
+        const ext = path.extname(file.originalname);
+        cb(null, `${uuidv4()}${ext}`);
+      },
+    });
 
 const ALLOWED_TYPES = [
   'audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/wave', 'audio/x-wav',
@@ -26,7 +29,7 @@ const ALLOWED_EXTENSIONS = ['.mp3', '.wav', '.m4a', '.ogg', '.flac', '.aac', '.w
 
 const upload = multer({
   storage,
-  limits: { fileSize: 500 * 1024 * 1024 },
+  limits: { fileSize: r2Configured ? 2 * 1024 * 1024 * 1024 : 500 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
     const ext = path.extname(file.originalname).toLowerCase();
     if (ALLOWED_TYPES.includes(file.mimetype) || ALLOWED_EXTENSIONS.includes(ext)) {
@@ -87,6 +90,16 @@ router.post('/upload', upload.single('file'), async (req: AuthRequest, res: Resp
     const { description, folderId } = req.body;
     const fileType = req.file.mimetype.startsWith('video/') ? 'video' : 'audio';
 
+    let fileUrl: string;
+
+    if (r2Configured && req.file.buffer) {
+      const ext = path.extname(req.file.originalname);
+      const r2Key = `uploads/${uuidv4()}${ext}`;
+      fileUrl = await uploadToR2(req.file.buffer, r2Key, req.file.mimetype);
+    } else {
+      fileUrl = `/uploads/${req.file.filename}`;
+    }
+
     const result = await pool.query(
       `INSERT INTO transcripts (filename, description, status, type, file_size, file_url, folder_id, user_id)
        VALUES ($1, $2, 'pending', $3, $4, $5, $6, $7)
@@ -96,7 +109,7 @@ router.post('/upload', upload.single('file'), async (req: AuthRequest, res: Resp
         description || '',
         fileType,
         req.file.size,
-        `/uploads/${req.file.filename}`,
+        fileUrl,
         folderId || null,
         req.userId,
       ]
@@ -272,10 +285,28 @@ router.delete('/', async (req: AuthRequest, res: Response) => {
     }
 
     const placeholders = ids.map((_: string, i: number) => `$${i + 1}`).join(', ');
+
+    const fileResults = await pool.query(
+      `SELECT file_url FROM transcripts WHERE id IN (${placeholders}) AND user_id = $${ids.length + 1}`,
+      [...ids, req.userId]
+    );
+
     await pool.query(
       `DELETE FROM transcripts WHERE id IN (${placeholders}) AND user_id = $${ids.length + 1}`,
       [...ids, req.userId]
     );
+
+    for (const row of fileResults.rows) {
+      if (row.file_url && isR2Url(row.file_url)) {
+        deleteFromR2(getR2KeyFromUrl(row.file_url)).catch(() => {});
+      } else if (row.file_url) {
+        try {
+          const localPath = path.join(process.cwd(), row.file_url.startsWith('/') ? row.file_url.slice(1) : row.file_url);
+          const fsModule = await import('fs');
+          if (fsModule.existsSync(localPath)) fsModule.unlinkSync(localPath);
+        } catch {}
+      }
+    }
 
     res.json({ success: true });
   } catch (err) {

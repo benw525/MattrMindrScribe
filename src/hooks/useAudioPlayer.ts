@@ -4,9 +4,6 @@ async function getMediaUrl(fileUrl: string): Promise<string | null> {
   const token = localStorage.getItem('auth_token');
   if (!token || !fileUrl) return null;
 
-  const filename = fileUrl.split('/').pop();
-  if (!filename) return null;
-
   try {
     const res = await fetch('/api/media/token', {
       method: 'POST',
@@ -14,11 +11,13 @@ async function getMediaUrl(fileUrl: string): Promise<string | null> {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${token}`,
       },
-      body: JSON.stringify({ filename }),
+      body: JSON.stringify({ filename: fileUrl }),
     });
     if (!res.ok) return null;
     const data = await res.json();
-    return `/api/media/${filename}?token=${encodeURIComponent(data.token)}`;
+
+    const mediaFilename = data.mediaFilename || fileUrl.split('/').pop();
+    return `/api/media/${mediaFilename}?token=${encodeURIComponent(data.token)}`;
   } catch {
     return null;
   }

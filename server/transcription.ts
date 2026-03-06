@@ -6,6 +6,7 @@ import { randomUUID } from 'crypto';
 import { tmpdir } from 'os';
 import OpenAI, { toFile } from 'openai';
 import pool from './db.js';
+import { isR2Url, getR2KeyFromUrl, downloadFromR2 } from './r2.js';
 
 const whisperClient = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -191,6 +192,7 @@ async function cleanupDir(dirPath: string): Promise<void> {
 
 export async function processTranscription(transcriptId: string): Promise<void> {
   const workDir = path.join(tmpdir(), `transcription_${randomUUID()}`);
+  let r2TempPath: string | null = null;
 
   try {
     await pool.query(
@@ -206,7 +208,16 @@ export async function processTranscription(transcriptId: string): Promise<void> 
     if (rows.length === 0) throw new Error('Transcript not found');
 
     const { file_url, filename } = rows[0];
-    const sourcePath = path.join(process.cwd(), file_url.startsWith('/') ? file_url.slice(1) : file_url);
+    let sourcePath: string;
+
+    if (isR2Url(file_url)) {
+      const r2Key = getR2KeyFromUrl(file_url);
+      console.log(`[Transcription] Downloading from R2: ${r2Key}`);
+      sourcePath = await downloadFromR2(r2Key);
+      r2TempPath = sourcePath;
+    } else {
+      sourcePath = path.join(process.cwd(), file_url.startsWith('/') ? file_url.slice(1) : file_url);
+    }
 
     if (!existsSync(sourcePath)) {
       throw new Error(`Source file not found: ${sourcePath}`);
@@ -270,5 +281,11 @@ export async function processTranscription(transcriptId: string): Promise<void> 
     );
   } finally {
     await cleanupDir(workDir);
+    if (r2TempPath) {
+      try {
+        const tempDir = path.dirname(r2TempPath);
+        await cleanupDir(tempDir);
+      } catch {}
+    }
   }
 }

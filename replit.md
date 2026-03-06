@@ -21,9 +21,10 @@ A full-stack application for managing legal case recordings/transcripts. Feature
 - **Frontend**: React 18, TypeScript, Vite 5, Tailwind CSS
 - **Backend**: Express.js (v5), TypeScript, tsx
 - **Database**: PostgreSQL (Replit built-in)
+- **Cloud Storage**: Cloudflare R2 (S3-compatible, via @aws-sdk/client-s3)
 - **Payments**: Stripe (via Replit integration + stripe-replit-sync)
 - **Auth**: JWT (jsonwebtoken + bcryptjs)
-- **File Upload**: Multer
+- **File Upload**: Multer (memoryStorage when R2 configured, diskStorage fallback)
 - **Animation**: Framer Motion
 - **Icons**: Lucide React
 - **Notifications**: Sonner
@@ -45,12 +46,13 @@ A full-stack application for managing legal case recordings/transcripts. Feature
 - `src/hooks/` - Custom hooks
 
 ### Backend (server/)
-- `server/index.ts` - Express server entry point (port 3000 dev, 5000 prod)
+- `server/index.ts` - Express server entry point (port 3000 dev, 5000 prod), media token/streaming endpoints
 - `server/db.ts` - PostgreSQL connection pool
+- `server/r2.ts` - Cloudflare R2 storage module (upload, download, stream, delete helpers)
 - `server/middleware/auth.ts` - JWT authentication middleware
 - `server/routes/auth.ts` - Auth endpoints (register, login, me, change-password)
-- `server/routes/transcripts.ts` - Transcript CRUD + file upload + status/retranscribe endpoints
-- `server/transcription.ts` - AI transcription pipeline (ffmpeg conversion, chunking, Whisper API, speaker diarization)
+- `server/routes/transcripts.ts` - Transcript CRUD + file upload (R2 or local) + status/retranscribe endpoints
+- `server/transcription.ts` - AI transcription pipeline (ffmpeg conversion, chunking, Whisper API, speaker diarization, R2 download support)
 - `server/routes/folders.ts` - Folder CRUD + move transcripts
 - `server/replit_integrations/` - OpenAI AI Integrations (audio, chat, image, batch utilities)
 - `server/routes/stripe.ts` - Stripe checkout, subscription, portal
@@ -101,6 +103,16 @@ A full-stack application for managing legal case recordings/transcripts. Feature
 - `transcript_segments` - Individual transcription segments
 - `transcript_versions` - Version snapshots
 - `stripe.*` - Managed by stripe-replit-sync (products, prices, customers, subscriptions)
+
+## Cloudflare R2 Storage
+
+- Files are uploaded to R2 when configured (env vars: R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET_NAME, R2_PUBLIC_URL)
+- DB `file_url` column stores `r2://uploads/<uuid>.<ext>` for R2 files, `/uploads/<filename>` for local files
+- `server/r2.ts` exports: `uploadToR2`, `downloadFromR2`, `streamFromR2`, `deleteFromR2`, `isR2Url`, `getR2KeyFromUrl`, `getR2PublicUrl`
+- Media serving: `/api/media/token` generates short-lived tokens; `/api/media/:filename` proxies/streams from R2 or serves local files
+- Transcription pipeline downloads R2 files to temp dir before processing, cleans up after
+- Falls back to local disk storage when R2 is not configured
+- Bucket name is normalized to lowercase (R2 requirement)
 
 ## Development
 
