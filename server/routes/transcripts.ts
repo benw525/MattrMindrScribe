@@ -84,11 +84,26 @@ router.get('/', async (req: AuthRequest, res: Response) => {
   }
 });
 
-router.post('/upload', (req, _res, next) => { req.setTimeout(30 * 60 * 1000); next(); }, upload.single('file'), async (req: AuthRequest, res: Response) => {
+router.post('/upload', (req, res: Response, next) => {
+  console.log('[Upload] Request received');
+  req.setTimeout(30 * 60 * 1000);
+  upload.single('file')(req, res, (err: any) => {
+    if (err) {
+      console.error('[Upload] Multer error:', err.message, err.code);
+      if (err.code === 'LIMIT_FILE_SIZE') {
+        return res.status(413).json({ error: 'File too large' });
+      }
+      return res.status(400).json({ error: err.message || 'Upload failed' });
+    }
+    next();
+  });
+}, async (req: AuthRequest, res: Response) => {
   try {
     if (!req.file) {
+      console.log('[Upload] No file in request');
       return res.status(400).json({ error: 'No file uploaded' });
     }
+    console.log('[Upload] File received:', req.file.originalname, req.file.size, 'bytes');
 
     const { description, folderId } = req.body;
     const fileType = req.file.mimetype.startsWith('video/') ? 'video' : 'audio';
