@@ -25,6 +25,26 @@ app.use(cors({
 }));
 
 
+app.get('/', (_req, res, next) => {
+  if (isProduction) {
+    const indexPath = path.join(__dirname, '..', 'dist', 'index.html');
+    if (fs.existsSync(indexPath)) {
+      return res.sendFile(indexPath);
+    }
+    return res.json({ status: 'ok' });
+  }
+  next();
+});
+
+if (isProduction) {
+  app.use((req, _res, next) => {
+    if (req.path.startsWith('/api/')) {
+      console.log(`[Request] ${req.method} ${req.path}`);
+    }
+    next();
+  });
+}
+
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true }));
 
