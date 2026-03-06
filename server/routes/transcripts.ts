@@ -81,7 +81,7 @@ router.get('/', async (req: AuthRequest, res: Response) => {
   }
 });
 
-router.post('/upload', upload.single('file'), async (req: AuthRequest, res: Response) => {
+router.post('/upload', (req, _res, next) => { req.setTimeout(30 * 60 * 1000); next(); }, upload.single('file'), async (req: AuthRequest, res: Response) => {
   try {
     if (!req.file) {
       return res.status(400).json({ error: 'No file uploaded' });

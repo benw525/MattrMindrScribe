@@ -191,6 +191,8 @@ process.on('unhandledRejection', (err) => {
   console.error('Unhandled rejection:', err);
 });
 
-app.listen(PORT, '0.0.0.0', () => {
+const server = app.listen(PORT, '0.0.0.0', () => {
   console.log(`Backend server running on http://0.0.0.0:${PORT}`);
 });
+server.timeout = 30 * 60 * 1000;
+server.requestTimeout = 30 * 60 * 1000;
