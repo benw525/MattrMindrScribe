@@ -20,9 +20,7 @@ const PORT = isProduction ? 5000 : 3000;
 
 
 app.use(cors({
-  origin: isProduction 
-    ? (process.env.REPLIT_DOMAINS?.split(',').map(d => `https://${d}`) || [])
-    : true,
+  origin: true,
   credentials: true,
 }));
 
@@ -111,9 +109,14 @@ app.get('/api/health', (_req, res) => {
 
 if (isProduction) {
   const distPath = path.join(__dirname, '..', 'dist');
+  const indexPath = path.join(distPath, 'index.html');
   app.use(express.static(distPath));
   app.get('/{*splat}', (_req, res) => {
-    res.sendFile(path.join(distPath, 'index.html'));
+    if (fs.existsSync(indexPath)) {
+      res.sendFile(indexPath);
+    } else {
+      res.status(503).send('Application is starting up...');
+    }
   });
 }
 
