@@ -5,19 +5,18 @@ import { v4 as uuidv4 } from 'uuid';
 import pool from '../db.js';
 import { authenticateToken, AuthRequest } from '../middleware/auth.js';
 import { processTranscription } from '../transcription.js';
-import { r2Configured, uploadToR2, deleteFromR2, isR2Url, getR2KeyFromUrl } from '../r2.js';
+import { r2Configured, uploadFileToR2, deleteFromR2, isR2Url, getR2KeyFromUrl } from '../r2.js';
+import fs from 'fs/promises';
 
 const router = Router();
 
-const storage = r2Configured
-  ? multer.memoryStorage()
-  : multer.diskStorage({
-      destination: 'uploads/',
-      filename: (_req, file, cb) => {
-        const ext = path.extname(file.originalname);
-        cb(null, `${uuidv4()}${ext}`);
-      },
-    });
+const storage = multer.diskStorage({
+  destination: 'uploads/',
+  filename: (_req, file, cb) => {
+    const ext = path.extname(file.originalname);
+    cb(null, `${uuidv4()}${ext}`);
+  },
+});
 
 const ALLOWED_TYPES = [
   'audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/wave', 'audio/x-wav',
@@ -91,11 +90,16 @@ router.post('/upload', (req, _res, next) => { req.setTimeout(30 * 60 * 1000); ne
     const fileType = req.file.mimetype.startsWith('video/') ? 'video' : 'audio';
 
     let fileUrl: string;
+    const diskPath = req.file.path;
 
-    if (r2Configured && req.file.buffer) {
+    if (r2Configured) {
       const ext = path.extname(req.file.originalname);
       const r2Key = `uploads/${uuidv4()}${ext}`;
-      fileUrl = await uploadToR2(req.file.buffer, r2Key, req.file.mimetype);
+      try {
+        fileUrl = await uploadFileToR2(diskPath, r2Key, req.file.mimetype);
+      } finally {
+        await fs.unlink(diskPath).catch(() => {});
+      }
     } else {
       fileUrl = `/uploads/${req.file.filename}`;
     }

@@ -1,5 +1,6 @@
 import { S3Client, PutObjectCommand, DeleteObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
-import { mkdir } from 'fs/promises';
+import { mkdir, stat } from 'fs/promises';
+import { createReadStream } from 'fs';
 import path from 'path';
 import { randomUUID } from 'crypto';
 import { tmpdir } from 'os';
@@ -39,6 +40,31 @@ export async function uploadToR2(
       Key: key,
       Body: fileBuffer,
       ContentType: contentType,
+    })
+  );
+
+  return `r2://${key}`;
+}
+
+export async function uploadFileToR2(
+  filePath: string,
+  key: string,
+  contentType: string
+): Promise<string> {
+  if (!r2Client || !R2_BUCKET_NAME) {
+    throw new Error('R2 is not configured');
+  }
+
+  const fileStats = await stat(filePath);
+  const fileStream = createReadStream(filePath);
+
+  await r2Client.send(
+    new PutObjectCommand({
+      Bucket: R2_BUCKET_NAME,
+      Key: key,
+      Body: fileStream,
+      ContentType: contentType,
+      ContentLength: fileStats.size,
     })
   );
 

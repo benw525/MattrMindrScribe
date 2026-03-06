@@ -25,7 +25,7 @@ A full-stack application for managing legal case recordings/transcripts. Feature
 - **Cloud Storage**: Cloudflare R2 (S3-compatible, via @aws-sdk/client-s3)
 - **Payments**: Stripe (via Replit integration + stripe-replit-sync)
 - **Auth**: JWT (jsonwebtoken + bcryptjs)
-- **File Upload**: Multer (memoryStorage when R2 configured, diskStorage fallback)
+- **File Upload**: Multer (always diskStorage, streams to R2 from disk for large file support)
 - **Animation**: Framer Motion
 - **Icons**: Lucide React
 - **Notifications**: Sonner
