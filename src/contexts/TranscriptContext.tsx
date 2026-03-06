@@ -7,7 +7,7 @@ interface TranscriptContextType {
   folders: Folder[];
   loading: boolean;
   addTranscript: (transcript: Transcript) => void;
-  uploadFile: (file: File, description?: string, folderId?: string) => Promise<void>;
+  uploadFile: (file: File, description?: string, folderId?: string, onProgress?: (percent: number) => void) => Promise<void>;
   updateTranscript: (id: string, updates: Partial<Transcript>) => void;
   deleteTranscripts: (ids: string[]) => void;
   addFolder: (name: string, caseNumber: string, parentId?: string | null) => void;
@@ -51,8 +51,8 @@ export function TranscriptProvider({ children }: { children: ReactNode }) {
     setTranscripts((prev) => [transcript, ...prev]);
   }, []);
 
-  const uploadFile = useCallback(async (file: File, description?: string, folderId?: string) => {
-    const newTranscript = await api.transcripts.upload(file, description, folderId);
+  const uploadFile = useCallback(async (file: File, description?: string, folderId?: string, onProgress?: (percent: number) => void) => {
+    const newTranscript = await api.transcripts.upload(file, description, folderId, onProgress);
     setTranscripts((prev) => [newTranscript, ...prev]);
   }, []);
 

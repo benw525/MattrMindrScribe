@@ -72,12 +72,56 @@ export const api = {
   },
   transcripts: {
     list: () => request('/transcripts'),
-    upload: (file: File, description?: string, folderId?: string) => {
-      const formData = new FormData();
-      formData.append('file', file);
-      if (description) formData.append('description', description);
-      if (folderId) formData.append('folderId', folderId);
-      return request('/transcripts/upload', { method: 'POST', body: formData });
+    upload: (file: File, description?: string, folderId?: string, onProgress?: (percent: number) => void) => {
+      return new Promise<any>((resolve, reject) => {
+        const formData = new FormData();
+        formData.append('file', file);
+        if (description) formData.append('description', description);
+        if (folderId) formData.append('folderId', folderId);
+
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', `${API_BASE}/transcripts/upload`);
+
+        const token = getToken();
+        if (token) {
+          xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+        }
+
+        if (onProgress) {
+          xhr.upload.onprogress = (e) => {
+            if (e.lengthComputable) {
+              const percent = Math.round((e.loaded / e.total) * 100);
+              onProgress(Math.min(percent, 99));
+            }
+          };
+        }
+
+        xhr.onload = () => {
+          let data: any;
+          try {
+            data = JSON.parse(xhr.responseText);
+          } catch {
+            return reject(new Error('Server returned an unexpected response.'));
+          }
+          if (xhr.status === 401 || xhr.status === 403) {
+            clearToken();
+            window.location.href = '/login';
+            return reject(new Error('Authentication required'));
+          }
+          if (xhr.status >= 200 && xhr.status < 300) {
+            if (onProgress) onProgress(100);
+            resolve(data);
+          } else {
+            reject(new Error(data.error || 'Upload failed'));
+          }
+        };
+
+        xhr.onerror = () => {
+          reject(new Error('Unable to connect to the server. Please try again.'));
+        };
+
+        xhr.send(formData);
+      });
     },
     update: (id: string, updates: Record<string, any>) =>
       request(`/transcripts/${id}`, { method: 'PATCH', body: JSON.stringify(updates) }),

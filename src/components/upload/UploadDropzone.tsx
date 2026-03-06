@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useState, useRef, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { UploadIcon, XIcon, FileAudioIcon, CheckIcon } from 'lucide-react';
 import { useTranscripts } from '../../hooks/useTranscripts';
@@ -13,6 +13,11 @@ export function UploadDropzone({ onClose }: UploadDropzoneProps) {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [isUploading, setIsUploading] = useState(false);
   const { uploadFile } = useTranscripts();
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    return () => { mountedRef.current = false; };
+  }, []);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -26,23 +31,22 @@ export function UploadDropzone({ onClose }: UploadDropzoneProps) {
 
   const doUpload = async (file: File) => {
     setIsUploading(true);
-    let progress = 0;
-    const interval = setInterval(() => {
-      progress += 10;
-      if (progress > 90) progress = 90;
-      setUploadProgress(progress);
-    }, 200);
+    setUploadProgress(0);
 
     try {
-      await uploadFile(file);
-      clearInterval(interval);
+      await uploadFile(file, undefined, undefined, (percent) => {
+        if (mountedRef.current) setUploadProgress(percent);
+      });
+      if (!mountedRef.current) return;
       setUploadProgress(100);
       setTimeout(() => {
+        if (!mountedRef.current) return;
+        setIsUploading(false);
         toast.success('File uploaded successfully');
         onClose();
       }, 500);
     } catch (err: any) {
-      clearInterval(interval);
+      if (!mountedRef.current) return;
       setIsUploading(false);
       setUploadProgress(0);
       toast.error(err.message || 'Upload failed');
