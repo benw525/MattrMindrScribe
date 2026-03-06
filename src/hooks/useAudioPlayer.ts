@@ -24,13 +24,14 @@ async function getMediaUrl(fileUrl: string): Promise<string | null> {
   }
 }
 
-export function useAudioPlayer(totalDuration: number, fileUrl?: string) {
+export function useAudioPlayer(totalDuration: number, fileUrl?: string, mediaType?: string) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [playbackRate, setPlaybackRateState] = useState(1);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const hasRealAudio = useRef(false);
   const [mediaUrl, setMediaUrl] = useState<string | null>(null);
+  const isVideo = mediaType === 'video';
 
   useEffect(() => {
     if (!fileUrl) return;
@@ -42,7 +43,7 @@ export function useAudioPlayer(totalDuration: number, fileUrl?: string) {
   }, [fileUrl]);
 
   useEffect(() => {
-    if (!mediaUrl) return;
+    if (!mediaUrl || isVideo) return;
 
     const audio = new Audio();
     audio.preload = 'auto';
@@ -68,7 +69,7 @@ export function useAudioPlayer(totalDuration: number, fileUrl?: string) {
       audioRef.current = null;
       hasRealAudio.current = false;
     };
-  }, [mediaUrl]);
+  }, [mediaUrl, isVideo]);
 
   useEffect(() => {
     if (audioRef.current) {

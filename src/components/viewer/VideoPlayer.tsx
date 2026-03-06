@@ -9,7 +9,6 @@ interface VideoPlayerProps {
   onTogglePlay: () => void;
   onSeek: (time: number) => void;
   mediaUrl?: string | null;
-  audioRef?: React.RefObject<HTMLAudioElement | null>;
 }
 
 export function VideoPlayer({
@@ -19,7 +18,6 @@ export function VideoPlayer({
   onTogglePlay,
   onSeek,
   mediaUrl,
-  audioRef,
 }: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const isSeeking = useRef(false);
@@ -28,14 +26,8 @@ export function VideoPlayer({
   useEffect(() => {
     const video = videoRef.current;
     if (!video || !mediaUrl) return;
-
-    if (audioRef?.current) {
-      audioRef.current.pause();
-      audioRef.current.src = '';
-    }
-
     video.src = mediaUrl;
-  }, [mediaUrl, audioRef]);
+  }, [mediaUrl]);
 
   useEffect(() => {
     const video = videoRef.current;
