@@ -105,6 +105,33 @@ export function TranscriptViewerPage() {
       </div>);
 
   }
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingDescriptionRef = useRef<string | null>(null);
+
+  const autoSave = useCallback((description: string) => {
+    if (!transcript) return;
+    pendingDescriptionRef.current = description;
+    if (saveTimerRef.current) {
+      clearTimeout(saveTimerRef.current);
+    }
+    saveTimerRef.current = setTimeout(async () => {
+      try {
+        const desc = pendingDescriptionRef.current || description;
+        const newVersion = await api.transcripts.createVersion(transcript.id, desc);
+        setVersions((prev) => [newVersion, ...prev]);
+        pendingDescriptionRef.current = null;
+      } catch (err) {
+        console.error('Autosave failed:', err);
+      }
+    }, 1500);
+  }, [transcript?.id]);
+
+  useEffect(() => {
+    return () => {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    };
+  }, []);
+
   const pushUndo = (description: string) => {
     setUndoStack((prev) => [
     ...prev,
@@ -121,9 +148,14 @@ export function TranscriptViewerPage() {
       segments: last.segments
     });
     setUndoStack((prev) => prev.slice(0, -1));
+    autoSave(`Undo: ${last.description}`);
     toast.success(`Undone: ${last.description}`);
   };
   const handleSave = async () => {
+    if (saveTimerRef.current) {
+      clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = null;
+    }
     try {
       const newVersion = await api.transcripts.createVersion(transcript.id, 'Manual save');
       setVersions((prev) => [newVersion, ...prev]);
@@ -149,6 +181,7 @@ export function TranscriptViewerPage() {
     updateTranscript(transcript.id, {
       segments: newSegments
     });
+    autoSave('Edit segment text');
   };
   const handleMergeSegments = (firstId: string, secondId: string) => {
     const firstIdx = transcript.segments.findIndex((s) => s.id === firstId);
@@ -169,6 +202,7 @@ export function TranscriptViewerPage() {
     updateTranscript(transcript.id, {
       segments: newSegments
     });
+    autoSave('Merge sections');
     toast.success('Sections merged');
   };
   const handleSplitSegment = (segmentId: string, splitPosition: number) => {
@@ -200,6 +234,7 @@ export function TranscriptViewerPage() {
     updateTranscript(transcript.id, {
       segments: newSegments
     });
+    autoSave('Split section');
     toast.success('Section split');
   };
   const uniqueSpeakers = Array.from(
@@ -223,6 +258,7 @@ export function TranscriptViewerPage() {
       segments: newSegments
     });
     setEditingSpeaker(null);
+    autoSave(`Rename speaker "${oldName}"`);
     toast.success(`Renamed "${oldName}" to "${newName.trim()}"`);
   };
   const handleChangeSegmentSpeaker = (segmentId: string, newSpeaker: string) => {
@@ -240,6 +276,7 @@ export function TranscriptViewerPage() {
     updateTranscript(transcript.id, {
       segments: newSegments
     });
+    autoSave('Change speaker');
     toast.success(`Changed speaker to "${newSpeaker}"`);
   };
   const getSpeakerDotColor = (speaker: string) => {
@@ -274,6 +311,7 @@ export function TranscriptViewerPage() {
       updateTranscript(transcript.id, {
         segments: version.segments
       });
+      autoSave('Revert to version');
       toast.success('Reverted to previous version');
       setShowHistory(false);
     }
