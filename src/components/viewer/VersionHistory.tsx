@@ -44,7 +44,7 @@ export function VersionHistory({
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {versions.length === 0 ?
+        {(!versions || versions.length === 0) ?
         <p className="text-sm text-slate-500 dark:text-slate-400 text-center mt-8">
             No previous versions available.
           </p> :

@@ -120,7 +120,7 @@ export function TranscriptViewerPage() {
       changeDescription: 'Manual save'
     };
     updateTranscript(transcript.id, {
-      versions: [newVersion, ...transcript.versions]
+      versions: [newVersion, ...(transcript.versions || [])]
     });
     setUndoStack([]);
     toast.success('Transcript saved');
@@ -242,7 +242,7 @@ export function TranscriptViewerPage() {
     }, 1500);
   };
   const handleRevertVersion = (versionId: string) => {
-    const version = transcript.versions.find((v) => v.id === versionId);
+    const version = (transcript.versions || []).find((v) => v.id === versionId);
     if (version) {
       pushUndo('Revert to version');
       updateTranscript(transcript.id, {
@@ -523,7 +523,7 @@ export function TranscriptViewerPage() {
         <AnimatePresence>
           {showHistory &&
           <VersionHistory
-            versions={transcript.versions}
+            versions={transcript.versions || []}
             onClose={() => setShowHistory(false)}
             onRevert={handleRevertVersion} />
 
