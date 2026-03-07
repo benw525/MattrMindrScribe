@@ -28,7 +28,7 @@ export async function diarizeWithAssemblyAI(
   const config: any = {
     audio_url: uploadUrl,
     speaker_labels: true,
-    speech_model: 'universal-3-pro',
+    speech_models: ['universal-3-pro'],
   };
 
   if (expectedSpeakers && expectedSpeakers >= 2) {
