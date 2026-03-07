@@ -12,7 +12,7 @@ export function AppLayout() {
   const [sidebarHidden, setSidebarHidden] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   return (
-    <div className="flex h-screen w-full bg-slate-50 dark:bg-slate-950 overflow-hidden">
+    <div className="flex h-dvh w-full bg-slate-50 dark:bg-slate-950 overflow-hidden">
       {/* Desktop Sidebar */}
       {!sidebarHidden &&
       <div className="hidden md:flex">

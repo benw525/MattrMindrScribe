@@ -39,7 +39,7 @@ export function PresentModePage() {
   }, [currentTime, isPlaying]);
   if (!transcript) return null;
   return (
-    <div className="fixed inset-0 bg-slate-950 text-slate-200 z-50 flex flex-col h-screen overflow-hidden font-sans">
+    <div className="fixed inset-0 bg-slate-950 text-slate-200 z-50 flex flex-col h-dvh overflow-hidden font-sans">
       {/* Top Bar */}
       <div className="flex items-center justify-between p-6 bg-slate-950/80 backdrop-blur-sm absolute top-0 left-0 right-0 z-10">
         <div className="flex items-center gap-4">

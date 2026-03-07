@@ -61,7 +61,7 @@ export function AudioPlayer({
   const displayPercent = isDragging ? dragPercent : progressPercent;
 
   return (
-    <div className="bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 px-3 sm:px-6 py-2 sm:py-3 flex flex-col gap-1.5 sm:gap-2 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] dark:shadow-none z-10">
+    <div className="bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 px-3 sm:px-6 py-2 sm:py-3 pb-[max(0.5rem,env(safe-area-inset-bottom))] sm:pb-3 flex flex-col gap-1.5 sm:gap-2 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] dark:shadow-none z-10 flex-shrink-0">
       <div className="flex items-center gap-2 sm:gap-4">
         <span className="text-[11px] sm:text-xs font-medium text-slate-500 dark:text-slate-400 w-[46px] sm:w-10 text-right tabular-nums flex-shrink-0">
           {formatDuration(isDragging ? (dragPercent / 100) * duration : currentTime)}
