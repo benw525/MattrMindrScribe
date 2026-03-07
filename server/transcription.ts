@@ -49,6 +49,7 @@ async function convertToWav(inputPath: string, outputPath: string): Promise<void
     const proc = spawn('ffmpeg', [
       '-y', '-i', inputPath,
       '-vn', '-ar', '16000', '-ac', '1',
+      '-threads', '0',
       '-acodec', 'pcm_s16le', '-f', 'wav',
       outputPath,
     ]);
@@ -85,7 +86,7 @@ async function splitWavIntoChunks(wavPath: string, workDir: string): Promise<{ p
         '-y', '-i', wavPath,
         '-ss', overlapStart.toString(),
         '-t', (chunkDurationSec + (start > 0 ? 1 : 0)).toString(),
-        '-ar', '16000', '-ac', '1', '-acodec', 'pcm_s16le', '-f', 'wav',
+        '-ar', '16000', '-ac', '1', '-threads', '0', '-acodec', 'pcm_s16le', '-f', 'wav',
         chunkPath,
       ]);
       proc.stderr.on('data', () => {});
@@ -341,22 +342,38 @@ export async function processTranscription(transcriptId: string): Promise<void> 
     const duration = await getAudioDuration(sourcePath);
     console.log(`[Transcription] Duration: ${duration.toFixed(1)}s`);
 
-    const wavPath = path.join(workDir, 'converted.wav');
-    console.log(`[Transcription] Converting to WAV...`);
-    await convertToWav(sourcePath, wavPath);
-
-    const chunks = await splitWavIntoChunks(wavPath, workDir);
-    console.log(`[Transcription] Processing ${chunks.length} chunk(s)...`);
-
     await checkCancelled();
 
-    console.log(`[Transcription] Step 1: Whisper transcription + Step 2: AssemblyAI diarization (parallel)...`);
-
-    let whisperError: string | null = null;
     let diarizationError: string | null = null;
     let refinementError: string | null = null;
 
+    console.log(`[Transcription] Starting AssemblyAI diarization with original file + WAV conversion in parallel...`);
+
+    const diarizationPromise = (async () => {
+      try {
+        if (!process.env.ASSEMBLYAI_API_KEY) {
+          console.log('[Transcription] AssemblyAI not configured, skipping diarization');
+          pipelineLog.diarization = { status: 'skipped', reason: 'API key not configured' };
+          return null;
+        }
+        return await diarizeWithAssemblyAI(sourcePath, expectedSpeakers);
+      } catch (err: any) {
+        console.error(`[Transcription] AssemblyAI diarization failed (non-fatal):`, err.message);
+        diarizationError = err.message;
+        return null;
+      }
+    })();
+
     const whisperPromise = (async () => {
+      const wavPath = path.join(workDir, 'converted.wav');
+      console.log(`[Transcription] Converting to WAV...`);
+      await convertToWav(sourcePath, wavPath);
+
+      const chunks = await splitWavIntoChunks(wavPath, workDir);
+      console.log(`[Transcription] Processing ${chunks.length} chunk(s)...`);
+
+      await checkCancelled();
+
       let allSegments: TranscriptSegment[] = [];
       for (let i = 0; i < chunks.length; i++) {
         const chunk = chunks[i];
@@ -370,36 +387,22 @@ export async function processTranscription(transcriptId: string): Promise<void> 
           throw new Error(`Transcription failed on chunk ${i + 1}: ${err.message}`);
         }
       }
-      return deduplicateSegments(allSegments);
-    })();
-
-    const diarizationPromise = (async () => {
-      try {
-        if (!process.env.ASSEMBLYAI_API_KEY) {
-          console.log('[Transcription] AssemblyAI not configured, skipping diarization');
-          pipelineLog.diarization = { status: 'skipped', reason: 'API key not configured' };
-          return null;
-        }
-        return await diarizeWithAssemblyAI(wavPath, expectedSpeakers);
-      } catch (err: any) {
-        console.error(`[Transcription] AssemblyAI diarization failed (non-fatal):`, err.message);
-        diarizationError = err.message;
-        return null;
-      }
+      return { segments: deduplicateSegments(allSegments), chunks: chunks.length };
     })();
 
     let whisperSegments: TranscriptSegment[];
     let diarizationLabels: any;
 
     try {
-      [whisperSegments, diarizationLabels] = await Promise.all([whisperPromise, diarizationPromise]);
+      const [whisperResult, diarizationResult] = await Promise.all([whisperPromise, diarizationPromise]);
+      whisperSegments = whisperResult.segments;
+      diarizationLabels = diarizationResult;
       pipelineLog.whisper = {
         status: 'success',
         segments: whisperSegments.length,
-        chunks: chunks.length,
+        chunks: whisperResult.chunks,
       };
     } catch (err: any) {
-      whisperError = err.message;
       pipelineLog.whisper = { status: 'error', error: err.message };
       await savePipelineLog();
       throw err;
