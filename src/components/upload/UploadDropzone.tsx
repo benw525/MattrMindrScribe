@@ -1,6 +1,6 @@
 import React, { useCallback, useState } from 'react';
 import { motion } from 'framer-motion';
-import { UploadIcon, XIcon } from 'lucide-react';
+import { UploadIcon, XIcon, UsersIcon } from 'lucide-react';
 import { useTranscripts } from '../../hooks/useTranscripts';
 import { toast } from 'sonner';
 
@@ -8,8 +8,18 @@ interface UploadDropzoneProps {
   onClose: () => void;
 }
 
+const SPEAKER_OPTIONS = [
+  { value: null, label: 'Auto-detect' },
+  { value: 2, label: '2 speakers' },
+  { value: 3, label: '3 speakers' },
+  { value: 4, label: '4 speakers' },
+  { value: 5, label: '5 speakers' },
+  { value: 6, label: '6+ speakers' },
+];
+
 export function UploadDropzone({ onClose }: UploadDropzoneProps) {
   const [isDragging, setIsDragging] = useState(false);
+  const [expectedSpeakers, setExpectedSpeakers] = useState<number | null>(null);
   const { startBackgroundUpload } = useTranscripts();
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
@@ -23,7 +33,7 @@ export function UploadDropzone({ onClose }: UploadDropzoneProps) {
   }, []);
 
   const startUpload = (file: File) => {
-    startBackgroundUpload(file);
+    startBackgroundUpload(file, undefined, undefined, expectedSpeakers);
     toast.success(`Upload started: ${file.name}`);
     onClose();
   };
@@ -43,7 +53,7 @@ export function UploadDropzone({ onClose }: UploadDropzoneProps) {
     if (file && isMediaFile(file)) {
       startUpload(file);
     }
-  }, []);
+  }, [expectedSpeakers]);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -72,6 +82,29 @@ export function UploadDropzone({ onClose }: UploadDropzoneProps) {
           </button>
         </div>
         <div className="p-4 sm:p-6">
+          <div className="mb-4">
+            <label className="flex items-center gap-2 text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+              <UsersIcon className="h-4 w-4" />
+              Number of Speakers
+            </label>
+            <div className="flex flex-wrap gap-2">
+              {SPEAKER_OPTIONS.map((opt) => (
+                <button
+                  key={opt.label}
+                  onClick={() => setExpectedSpeakers(opt.value)}
+                  className={`px-3 py-1.5 text-sm rounded-lg border transition-colors touch-action-manipulation ${
+                    expectedSpeakers === opt.value
+                      ? 'bg-indigo-600 text-white border-indigo-600'
+                      : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-600 hover:border-indigo-400 dark:hover:border-indigo-500'
+                  }`}>
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+            <p className="mt-1.5 text-xs text-slate-400 dark:text-slate-500">
+              Specifying speakers improves diarization accuracy
+            </p>
+          </div>
           <div
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}

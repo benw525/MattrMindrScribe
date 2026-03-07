@@ -140,7 +140,7 @@ router.post('/presigned-upload', authenticateToken, async (req: AuthRequest, res
 
 router.post('/confirm-upload', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
-    const { uploadToken, description, folderId } = req.body;
+    const { uploadToken, description, folderId, expectedSpeakers } = req.body;
     if (!uploadToken) {
       return res.status(400).json({ error: 'uploadToken is required' });
     }
@@ -165,8 +165,8 @@ router.post('/confirm-upload', authenticateToken, async (req: AuthRequest, res: 
     const fileType = pending.contentType.startsWith('video/') ? 'video' : 'audio';
 
     const result = await pool.query(
-      `INSERT INTO transcripts (filename, description, status, type, file_size, file_url, folder_id, user_id)
-       VALUES ($1, $2, 'pending', $3, $4, $5, $6, $7)
+      `INSERT INTO transcripts (filename, description, status, type, file_size, file_url, folder_id, user_id, expected_speakers)
+       VALUES ($1, $2, 'pending', $3, $4, $5, $6, $7, $8)
        RETURNING *`,
       [
         pending.filename,
@@ -176,6 +176,7 @@ router.post('/confirm-upload', authenticateToken, async (req: AuthRequest, res: 
         fileUrl,
         folderId || null,
         req.userId,
+        expectedSpeakers && parseInt(expectedSpeakers) >= 2 && parseInt(expectedSpeakers) <= 10 ? parseInt(expectedSpeakers) : null,
       ]
     );
 

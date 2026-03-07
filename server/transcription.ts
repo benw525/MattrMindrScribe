@@ -7,6 +7,8 @@ import { tmpdir } from 'os';
 import OpenAI, { toFile } from 'openai';
 import pool from './db.js';
 import { isR2Url, getR2KeyFromUrl, downloadFromR2 } from './r2.js';
+import { diarizeWithAssemblyAI, mapDiarizationToSegments } from './diarization.js';
+import { refineSpeakersWithGPT } from './speakerRefinement.js';
 
 const whisperClient = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -271,13 +273,14 @@ export async function processTranscription(transcriptId: string): Promise<void> 
     );
 
     const { rows } = await pool.query(
-      'SELECT file_url, type, filename FROM transcripts WHERE id = $1',
+      'SELECT file_url, type, filename, expected_speakers FROM transcripts WHERE id = $1',
       [transcriptId]
     );
 
     if (rows.length === 0) throw new Error('Transcript not found');
 
-    const { file_url, filename } = rows[0];
+    const { file_url, filename, expected_speakers } = rows[0];
+    const expectedSpeakers = expected_speakers ? parseInt(expected_speakers) : null;
     let sourcePath: string;
 
     if (isR2Url(file_url)) {
@@ -295,7 +298,7 @@ export async function processTranscription(transcriptId: string): Promise<void> 
 
     await mkdir(workDir, { recursive: true });
 
-    console.log(`[Transcription] Starting for "${filename}" (${transcriptId})`);
+    console.log(`[Transcription] Starting for "${filename}" (${transcriptId})${expectedSpeakers ? ` — expecting ${expectedSpeakers} speakers` : ''}`);
 
     const duration = await getAudioDuration(sourcePath);
     console.log(`[Transcription] Duration: ${duration.toFixed(1)}s`);
@@ -307,23 +310,55 @@ export async function processTranscription(transcriptId: string): Promise<void> 
     const chunks = await splitWavIntoChunks(wavPath, workDir);
     console.log(`[Transcription] Processing ${chunks.length} chunk(s)...`);
 
-    let allSegments: TranscriptSegment[] = [];
+    console.log(`[Transcription] Step 1: Whisper transcription + Step 2: AssemblyAI diarization (parallel)...`);
 
-    for (let i = 0; i < chunks.length; i++) {
-      const chunk = chunks[i];
-      console.log(`[Transcription] Transcribing chunk ${i + 1}/${chunks.length}...`);
-
-      try {
-        const segments = await transcribeChunk(chunk.path, chunk.offsetSec);
-        allSegments.push(...segments);
-      } catch (err: any) {
-        console.error(`[Transcription] Chunk ${i + 1} failed:`, err.message);
-        throw new Error(`Transcription failed on chunk ${i + 1}: ${err.message}`);
+    const whisperPromise = (async () => {
+      let allSegments: TranscriptSegment[] = [];
+      for (let i = 0; i < chunks.length; i++) {
+        const chunk = chunks[i];
+        console.log(`[Transcription] Transcribing chunk ${i + 1}/${chunks.length}...`);
+        try {
+          const segments = await transcribeChunk(chunk.path, chunk.offsetSec);
+          allSegments.push(...segments);
+        } catch (err: any) {
+          console.error(`[Transcription] Chunk ${i + 1} failed:`, err.message);
+          throw new Error(`Transcription failed on chunk ${i + 1}: ${err.message}`);
+        }
       }
+      return deduplicateSegments(allSegments);
+    })();
+
+    const diarizationPromise = (async () => {
+      try {
+        if (!process.env.ASSEMBLYAI_API_KEY) {
+          console.log('[Transcription] AssemblyAI not configured, skipping diarization');
+          return null;
+        }
+        return await diarizeWithAssemblyAI(wavPath, expectedSpeakers);
+      } catch (err: any) {
+        console.error(`[Transcription] AssemblyAI diarization failed (non-fatal):`, err.message);
+        return null;
+      }
+    })();
+
+    const [whisperSegments, diarizationLabels] = await Promise.all([whisperPromise, diarizationPromise]);
+
+    let allSegments: TranscriptSegment[];
+
+    if (diarizationLabels && diarizationLabels.length > 0) {
+      console.log(`[Transcription] Mapping AssemblyAI speaker labels onto ${whisperSegments.length} Whisper segments...`);
+      allSegments = mapDiarizationToSegments(whisperSegments, diarizationLabels);
+    } else {
+      console.log(`[Transcription] No diarization data, falling back to heuristic speaker assignment`);
+      allSegments = assignSpeakers(whisperSegments);
     }
 
-    allSegments = deduplicateSegments(allSegments);
-    allSegments = assignSpeakers(allSegments);
+    try {
+      console.log(`[Transcription] Step 3: GPT-4o speaker refinement...`);
+      allSegments = await refineSpeakersWithGPT(allSegments, expectedSpeakers);
+    } catch (err: any) {
+      console.error(`[Transcription] GPT refinement failed (non-fatal):`, err.message);
+    }
 
     await pool.query('DELETE FROM transcript_segments WHERE transcript_id = $1', [transcriptId]);
 

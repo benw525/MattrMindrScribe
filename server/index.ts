@@ -154,6 +154,12 @@ pool.query(`
   CREATE INDEX IF NOT EXISTS idx_summaries_transcript ON transcript_summaries(transcript_id);
 `).catch((err: any) => console.error('Migration error:', err.message));
 
+pool.query(`
+  ALTER TABLE transcripts ADD COLUMN IF NOT EXISTS expected_speakers INTEGER DEFAULT NULL;
+`).catch((err: any) => {
+  if (!err.message.includes('already exists')) console.error('Migration error (expected_speakers):', err.message);
+});
+
 async function seedAdminAccounts() {
   const raw = process.env.ADMIN_ACCOUNTS;
   if (!raw) return;

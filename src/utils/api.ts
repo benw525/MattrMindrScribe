@@ -72,7 +72,7 @@ export const api = {
   },
   transcripts: {
     list: () => request('/transcripts'),
-    upload: async (file: File, description?: string, folderId?: string, onProgress?: (percent: number) => void) => {
+    upload: async (file: File, description?: string, folderId?: string, onProgress?: (percent: number) => void, expectedSpeakers?: number | null) => {
       const presignedRes = await request('/transcripts/presigned-upload', {
         method: 'POST',
         body: JSON.stringify({
@@ -125,6 +125,7 @@ export const api = {
           uploadToken: presignedRes.uploadToken,
           description,
           folderId,
+          expectedSpeakers: expectedSpeakers || null,
         }),
       });
 
