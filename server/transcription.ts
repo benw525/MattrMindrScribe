@@ -262,6 +262,18 @@ export async function deduplicateExistingSegments(transcriptId: string): Promise
   return originalCount - deduped.length;
 }
 
+class TranscriptionCancelledError extends Error {
+  constructor(transcriptId: string) {
+    super(`Transcription cancelled — transcript ${transcriptId} was deleted`);
+    this.name = 'TranscriptionCancelledError';
+  }
+}
+
+async function isTranscriptDeleted(transcriptId: string): Promise<boolean> {
+  const { rows } = await pool.query('SELECT id FROM transcripts WHERE id = $1', [transcriptId]);
+  return rows.length === 0;
+}
+
 export async function processTranscription(transcriptId: string): Promise<void> {
   const workDir = path.join(tmpdir(), `transcription_${randomUUID()}`);
   let r2TempPath: string | null = null;
@@ -284,6 +296,12 @@ export async function processTranscription(transcriptId: string): Promise<void> 
     }
   };
 
+  const checkCancelled = async () => {
+    if (await isTranscriptDeleted(transcriptId)) {
+      throw new TranscriptionCancelledError(transcriptId);
+    }
+  };
+
   try {
     await pool.query(
       `UPDATE transcripts SET status = 'processing', updated_at = NOW() WHERE id = $1`,
@@ -300,6 +318,8 @@ export async function processTranscription(transcriptId: string): Promise<void> 
     const { file_url, filename, expected_speakers } = rows[0];
     const expectedSpeakers = expected_speakers ? parseInt(expected_speakers) : null;
     let sourcePath: string;
+
+    await checkCancelled();
 
     if (isR2Url(file_url)) {
       const r2Key = getR2KeyFromUrl(file_url);
@@ -328,6 +348,8 @@ export async function processTranscription(transcriptId: string): Promise<void> 
     const chunks = await splitWavIntoChunks(wavPath, workDir);
     console.log(`[Transcription] Processing ${chunks.length} chunk(s)...`);
 
+    await checkCancelled();
+
     console.log(`[Transcription] Step 1: Whisper transcription + Step 2: AssemblyAI diarization (parallel)...`);
 
     let whisperError: string | null = null;
@@ -338,6 +360,7 @@ export async function processTranscription(transcriptId: string): Promise<void> 
       let allSegments: TranscriptSegment[] = [];
       for (let i = 0; i < chunks.length; i++) {
         const chunk = chunks[i];
+        await checkCancelled();
         console.log(`[Transcription] Transcribing chunk ${i + 1}/${chunks.length}...`);
         try {
           const segments = await transcribeChunk(chunk.path, chunk.offsetSec);
@@ -409,6 +432,8 @@ export async function processTranscription(transcriptId: string): Promise<void> 
       allSegments = assignSpeakers(whisperSegments);
     }
 
+    await checkCancelled();
+
     try {
       console.log(`[Transcription] Step 3: GPT-4o speaker refinement...`);
       allSegments = await refineSpeakersWithGPT(allSegments, expectedSpeakers);
@@ -424,6 +449,8 @@ export async function processTranscription(transcriptId: string): Promise<void> 
     }
 
     await savePipelineLog();
+
+    await checkCancelled();
 
     pipelineLog.completedAt = new Date().toISOString();
 
@@ -446,13 +473,20 @@ export async function processTranscription(transcriptId: string): Promise<void> 
 
     console.log(`[Transcription] Completed for "${filename}" — ${allSegments.length} segment(s)`);
   } catch (err: any) {
-    console.error(`[Transcription] Error for ${transcriptId}:`, err.message);
-    pipelineLog.completedAt = new Date().toISOString();
-    pipelineLog.fatalError = err.message;
-    await pool.query(
-      `UPDATE transcripts SET status = 'error', error_message = $1, pipeline_log = $2::jsonb, updated_at = NOW() WHERE id = $3`,
-      [err.message, JSON.stringify(pipelineLog), transcriptId]
-    );
+    if (err instanceof TranscriptionCancelledError) {
+      console.log(`[Transcription] ${err.message} — stopping pipeline`);
+    } else {
+      console.error(`[Transcription] Error for ${transcriptId}:`, err.message);
+      pipelineLog.completedAt = new Date().toISOString();
+      pipelineLog.fatalError = err.message;
+      try {
+        await pool.query(
+          `UPDATE transcripts SET status = 'error', error_message = $1, pipeline_log = $2::jsonb, updated_at = NOW() WHERE id = $3`,
+          [err.message, JSON.stringify(pipelineLog), transcriptId]
+        );
+      } catch {
+      }
+    }
   } finally {
     await cleanupDir(workDir);
     if (r2TempPath) {
