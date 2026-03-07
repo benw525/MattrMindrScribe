@@ -3,6 +3,7 @@ import cors from 'cors';
 import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
+import bcrypt from 'bcryptjs';
 import { fileURLToPath } from 'url';
 import { isR2Url, getR2KeyFromUrl, getR2PublicUrl, getPresignedDownloadUrl } from './r2.js';
 import authRoutes from './routes/auth.js';
@@ -153,8 +154,37 @@ pool.query(`
   CREATE INDEX IF NOT EXISTS idx_summaries_transcript ON transcript_summaries(transcript_id);
 `).catch((err: any) => console.error('Migration error:', err.message));
 
+async function seedAdminAccounts() {
+  const raw = process.env.ADMIN_ACCOUNTS;
+  if (!raw) return;
+  let accounts: { email: string; password: string; fullName: string }[];
+  try { accounts = JSON.parse(raw); } catch { return; }
+  for (const acct of accounts) {
+    try {
+      const { rows } = await pool.query('SELECT id FROM users WHERE email = $1', [acct.email.toLowerCase()]);
+      if (rows.length === 0) {
+        const hash = await bcrypt.hash(acct.password, 12);
+        await pool.query(
+          `INSERT INTO users (id, email, password_hash, full_name, role, subscription_tier, created_at, updated_at)
+           VALUES (gen_random_uuid(), $1, $2, $3, 'admin', 'unlimited', NOW(), NOW())`,
+          [acct.email.toLowerCase(), hash, acct.fullName]
+        );
+        console.log(`[Seed] Created admin account: ${acct.email}`);
+      } else {
+        await pool.query(
+          `UPDATE users SET role = 'admin', subscription_tier = 'unlimited', updated_at = NOW() WHERE email = $1`,
+          [acct.email.toLowerCase()]
+        );
+      }
+    } catch (err: any) {
+      console.error(`[Seed] Error for ${acct.email}:`, err.message);
+    }
+  }
+}
+
 const server = app.listen(PORT, '0.0.0.0', () => {
   console.log(`Backend server running on http://0.0.0.0:${PORT}`);
+  seedAdminAccounts();
 });
 server.timeout = 30 * 60 * 1000;
 server.requestTimeout = 30 * 60 * 1000;

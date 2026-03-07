@@ -135,8 +135,9 @@ A full-stack application for managing legal case recordings/transcripts. Feature
 - Run: `NODE_ENV=production npx tsx server/index.ts`
 - In production, server runs on port 5000, serves static dist/ files
 
-## Admin Account
+## Admin Accounts
 
-- Email: benw52592@gmail.com
-- Role: admin
-- Subscription tier: unlimited
+Both accounts are seeded automatically on server startup (see `seedAdminAccounts()` in `server/index.ts`):
+
+- Email: benw52592@gmail.com — Role: admin, Tier: unlimited
+- Email: dcrdn@proton.me — Role: admin, Tier: unlimited
