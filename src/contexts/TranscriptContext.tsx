@@ -101,12 +101,23 @@ export function TranscriptProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const updateTranscript = useCallback(async (id: string, updates: Partial<Transcript>) => {
-    setTranscripts((prev) => prev.map((t) => (t.id === id ? { ...t, ...updates } : t)));
+    const rollback = new Map<string, Transcript>();
+    setTranscripts((prev) => prev.map((t) => {
+      if (t.id === id) {
+        rollback.set(id, t);
+        return { ...t, ...updates };
+      }
+      return t;
+    }));
     try {
-      const updated = await api.transcripts.update(id, updates);
-      setTranscripts((prev) => prev.map((t) => (t.id === id ? updated : t)));
+      await api.transcripts.update(id, updates);
     } catch (err) {
       console.error('Failed to update transcript:', err);
+      const original = rollback.get(id);
+      if (original) {
+        setTranscripts((prev) => prev.map((t) => (t.id === id ? original : t)));
+        toast.error('Failed to save changes');
+      }
     }
   }, []);
 
