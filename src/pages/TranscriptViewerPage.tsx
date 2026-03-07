@@ -315,11 +315,9 @@ export function TranscriptViewerPage() {
     const trimmed = name.trim();
     if (!trimmed) return;
     if (uniqueSpeakers.includes(trimmed)) {
-      toast.error(`Speaker "${trimmed}" already exists`);
       return;
     }
     setCustomSpeakers(prev => [...prev, trimmed]);
-    toast.success(`Added speaker "${trimmed}"`);
   };
 
   const handleRemoveSpeaker = (speaker: string) => {
@@ -564,9 +562,21 @@ export function TranscriptViewerPage() {
                   ref={speakerManagerRef}
                   className="fixed inset-x-0 bottom-0 sm:absolute sm:inset-auto sm:left-0 sm:top-full sm:mt-2 bg-white dark:bg-slate-800 border-t sm:border border-slate-200 dark:border-slate-700 rounded-t-2xl sm:rounded-xl shadow-xl z-40 sm:w-80 max-h-[70vh] sm:max-h-none"
                 >
-                  <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-700">
-                    <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200">Manage Speakers</h3>
-                    <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">Rename, recolor, add or remove speakers</p>
+                  <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-700 flex items-start justify-between">
+                    <div>
+                      <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200">Manage Speakers</h3>
+                      <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">Rename, recolor, add or remove speakers</p>
+                    </div>
+                    <button
+                      onClick={() => {
+                        setShowSpeakerManager(false);
+                        setEditingSpeaker(null);
+                        setColorPickerSpeaker(null);
+                      }}
+                      className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors flex-shrink-0 -mr-1"
+                    >
+                      <XIcon className="h-4 w-4" />
+                    </button>
                   </div>
                   <div className="max-h-64 overflow-y-auto py-1">
                     {uniqueSpeakers.map((speaker) => {
@@ -585,7 +595,7 @@ export function TranscriptViewerPage() {
                               <div className={`w-3.5 h-3.5 rounded-full ${colorObj.bg}`} />
                             </button>
                             {isEditing ?
-                              <div className="flex-1 flex items-center gap-1">
+                              <div className="flex-1 flex items-center gap-1.5">
                                 <input
                                   type="text"
                                   value={speakerEditValue}
@@ -594,18 +604,20 @@ export function TranscriptViewerPage() {
                                     if (e.key === 'Enter') handleRenameSpeaker(speaker, speakerEditValue);
                                     if (e.key === 'Escape') setEditingSpeaker(null);
                                   }}
-                                  className="flex-1 text-sm text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-700 border border-indigo-300 dark:border-indigo-600 rounded px-2 py-0.5 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                                  className="flex-1 text-base sm:text-sm text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-700 border border-indigo-300 dark:border-indigo-600 rounded-lg px-2 py-1.5 sm:py-0.5 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                                   autoFocus
                                 />
                                 <button
                                   onClick={() => handleRenameSpeaker(speaker, speakerEditValue)}
-                                  className="p-1 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 rounded"
+                                  className="p-1.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 active:bg-emerald-800 transition-colors flex-shrink-0"
+                                  aria-label="Save"
                                 >
                                   <CheckIcon className="h-3.5 w-3.5" />
                                 </button>
                                 <button
                                   onClick={() => setEditingSpeaker(null)}
-                                  className="p-1 text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700 rounded"
+                                  className="p-1.5 bg-slate-200 dark:bg-slate-600 text-slate-600 dark:text-slate-300 rounded-lg hover:bg-slate-300 dark:hover:bg-slate-500 active:bg-slate-400 transition-colors flex-shrink-0"
+                                  aria-label="Cancel"
                                 >
                                   <XIcon className="h-3.5 w-3.5" />
                                 </button>
@@ -652,7 +664,7 @@ export function TranscriptViewerPage() {
                   </div>
                   <div className="px-3 py-2 border-t border-slate-100 dark:border-slate-700">
                     {editingSpeaker === '__new__' ?
-                      <div className="flex items-center gap-1">
+                      <div className="flex items-center gap-2">
                         <input
                           type="text"
                           value={speakerEditValue}
@@ -669,7 +681,7 @@ export function TranscriptViewerPage() {
                             }
                           }}
                           placeholder="New speaker name"
-                          className="flex-1 text-sm text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-700 border border-emerald-300 dark:border-emerald-600 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-emerald-500 placeholder:text-slate-400"
+                          className="flex-1 text-base sm:text-sm text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-700 border border-emerald-300 dark:border-emerald-600 rounded-lg px-3 py-2 sm:py-1 focus:outline-none focus:ring-2 focus:ring-emerald-500 placeholder:text-slate-400"
                           autoFocus
                         />
                         <button
@@ -678,13 +690,15 @@ export function TranscriptViewerPage() {
                             setEditingSpeaker(null);
                             setSpeakerEditValue('');
                           }}
-                          className="p-1 text-emerald-600 hover:text-emerald-700"
+                          className="p-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 active:bg-emerald-800 transition-colors flex-shrink-0"
+                          aria-label="Add speaker"
                         >
                           <CheckIcon className="h-4 w-4" />
                         </button>
                         <button
                           onClick={() => { setEditingSpeaker(null); setSpeakerEditValue(''); }}
-                          className="p-1 text-slate-400 hover:text-slate-600"
+                          className="p-2 bg-slate-200 dark:bg-slate-600 text-slate-600 dark:text-slate-300 rounded-lg hover:bg-slate-300 dark:hover:bg-slate-500 active:bg-slate-400 transition-colors flex-shrink-0"
+                          aria-label="Cancel"
                         >
                           <XIcon className="h-4 w-4" />
                         </button>

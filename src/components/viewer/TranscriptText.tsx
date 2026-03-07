@@ -348,17 +348,19 @@ export function TranscriptText({
                                     }
                                   }}
                                   placeholder="Speaker name"
-                                  className="flex-1 text-sm text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-700 border border-emerald-300 dark:border-emerald-600 rounded px-2 py-0.5 focus:outline-none focus:ring-1 focus:ring-emerald-500 placeholder:text-slate-400"
+                                  className="flex-1 text-base sm:text-sm text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-700 border border-emerald-300 dark:border-emerald-600 rounded-lg px-2 py-1.5 sm:py-0.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 placeholder:text-slate-400"
                                 />
                                 <button
                                   onClick={() => handleAddNewSpeaker(segment.id)}
-                                  className="p-0.5 text-emerald-600 hover:text-emerald-700"
+                                  className="p-1.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 active:bg-emerald-800 transition-colors flex-shrink-0"
+                                  aria-label="Add speaker"
                                 >
                                   <CheckIcon className="h-3.5 w-3.5" />
                                 </button>
                                 <button
                                   onClick={() => { setAddingSpeakerInDropdown(false); setNewSpeakerName(''); }}
-                                  className="p-0.5 text-slate-400 hover:text-slate-600"
+                                  className="p-1.5 bg-slate-200 dark:bg-slate-600 text-slate-600 dark:text-slate-300 rounded-lg hover:bg-slate-300 dark:hover:bg-slate-500 active:bg-slate-400 transition-colors flex-shrink-0"
+                                  aria-label="Cancel"
                                 >
                                   <XIcon className="h-3.5 w-3.5" />
                                 </button>
