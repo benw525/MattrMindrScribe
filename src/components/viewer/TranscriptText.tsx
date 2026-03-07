@@ -116,7 +116,7 @@ export function TranscriptText({
   useEffect(() => {
     const container = scrollContainerRef.current;
     if (!container) return;
-    const handleScroll = () => {
+    const handleUserInteraction = () => {
       if (isAutoScrolling.current) return;
       if (!isPlaying) return;
       setUserScrolled(true);
@@ -125,9 +125,11 @@ export function TranscriptText({
         setUserScrolled(false);
       }, 5000);
     };
-    container.addEventListener('scroll', handleScroll);
+    container.addEventListener('scroll', handleUserInteraction, { passive: true });
+    container.addEventListener('touchstart', handleUserInteraction, { passive: true });
     return () => {
-      container.removeEventListener('scroll', handleScroll);
+      container.removeEventListener('scroll', handleUserInteraction);
+      container.removeEventListener('touchstart', handleUserInteraction);
       if (userScrollTimeout.current) clearTimeout(userScrollTimeout.current);
     };
   }, [isPlaying]);
@@ -235,10 +237,10 @@ export function TranscriptText({
                         setAddingSpeakerInDropdown(false);
                         setNewSpeakerName('');
                       }}
-                      className="flex items-center gap-1 font-semibold text-sm text-slate-900 dark:text-white hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors rounded px-1 -mx-1 hover:bg-slate-100 dark:hover:bg-slate-800"
+                      className="flex items-center gap-1 font-semibold text-sm text-slate-900 dark:text-white hover:text-indigo-600 dark:hover:text-indigo-400 active:text-indigo-700 transition-colors rounded px-1.5 py-1 -mx-1.5 -my-1 hover:bg-slate-100 dark:hover:bg-slate-800 active:bg-slate-200 dark:active:bg-slate-700"
                       title="Click to change speaker">
                       {segment.speaker}
-                      <ChevronDownIcon className="h-3 w-3 opacity-0 group-hover:opacity-60 transition-opacity" />
+                      <ChevronDownIcon className="h-3 w-3 opacity-60 sm:opacity-0 sm:group-hover:opacity-60 transition-opacity" />
                     </button>
                     {showDropdown && (
                       <div
@@ -253,7 +255,7 @@ export function TranscriptText({
                               }
                               setSpeakerDropdownId(null);
                             }}
-                            className={`w-full text-left px-3 py-1.5 text-sm flex items-center gap-2 transition-colors ${speaker === segment.speaker ? 'bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 font-medium' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700'}`}>
+                            className={`w-full text-left px-3 py-2.5 sm:py-1.5 text-sm flex items-center gap-2 transition-colors ${speaker === segment.speaker ? 'bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 font-medium' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 active:bg-slate-100 dark:active:bg-slate-600'}`}>
                             <span className={`w-2 h-2 rounded-full ${getSpeakerDotColor(speaker)}`} />
                             {speaker}
                           </button>
@@ -301,10 +303,10 @@ export function TranscriptText({
                       </div>
                     )}
                   </div>
-                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <div className="flex items-center gap-1 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
                     <button
                       onClick={() => handleSplit(segment)}
-                      className="p-1 text-slate-400 dark:text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 rounded transition-colors"
+                      className="p-1.5 sm:p-1 text-slate-400 dark:text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400 active:text-indigo-700 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 active:bg-indigo-100 dark:active:bg-indigo-950/70 rounded transition-colors"
                       title="Split this section"
                       aria-label="Split section">
                       <SplitIcon className="h-3.5 w-3.5" />
@@ -340,7 +342,7 @@ export function TranscriptText({
                 <div className="flex-1 flex items-center justify-center">
                   <button
                   onClick={() => onMergeSegments(segment.id, nextSegment.id)}
-                  className="flex items-center gap-1.5 px-2.5 py-0.5 text-xs text-slate-400 dark:text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 rounded-full transition-all opacity-0 hover:opacity-100 focus:opacity-100"
+                  className="flex items-center gap-1.5 px-2.5 py-1 sm:py-0.5 text-xs text-slate-400 dark:text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400 active:text-indigo-700 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 active:bg-indigo-100 dark:active:bg-indigo-950/70 rounded-full transition-all sm:opacity-0 sm:hover:opacity-100 sm:focus:opacity-100"
                   title="Merge with next section"
                   aria-label="Merge sections">
                     <MergeIcon className="h-3 w-3" />

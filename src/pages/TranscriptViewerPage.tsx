@@ -534,7 +534,7 @@ export function TranscriptViewerPage() {
       {/* Speaker Bar */}
       {!isProcessing && transcript.segments.length > 0 &&
       <div className="flex-shrink-0 border-b border-slate-100 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-900/50 px-3 sm:px-6 py-2 sm:py-2.5">
-          <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
             <span className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mr-1">
               Speakers
             </span>
@@ -563,7 +563,7 @@ export function TranscriptViewerPage() {
               {showSpeakerManager &&
                 <div
                   ref={speakerManagerRef}
-                  className="absolute left-0 top-full mt-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl z-40 w-72 sm:w-80"
+                  className="fixed inset-x-0 bottom-0 sm:absolute sm:inset-auto sm:left-0 sm:top-full sm:mt-2 bg-white dark:bg-slate-800 border-t sm:border border-slate-200 dark:border-slate-700 rounded-t-2xl sm:rounded-xl shadow-xl z-40 sm:w-80 max-h-[70vh] sm:max-h-none"
                 >
                   <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-700">
                     <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200">Manage Speakers</h3>

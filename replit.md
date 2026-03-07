@@ -118,11 +118,21 @@ A full-stack application for managing legal case recordings/transcripts. Feature
 - Vite proxies `/api` and `/uploads` to backend
 - `npm run dev` starts both servers
 
+## Mobile Responsiveness
+
+- Global: `touch-action: manipulation` on buttons/links to prevent double-tap zoom; `-webkit-tap-highlight-color: transparent` for clean taps
+- AudioPlayer: Pointer events for drag-to-scrub on progress bar; larger touch targets (12x12 play button); reduced speed options (6 instead of 8)
+- TranscriptText: Split/merge buttons visible on mobile (sm:opacity-0 pattern); speaker dropdown items have larger py on mobile; touchstart detection pauses auto-scroll
+- TranscriptToolbar: p-2 minimum touch targets on mobile; active states for visual feedback
+- Side panels (VersionHistory, AISummaryPanel): Full-width on mobile
+- Speaker manager popup: Bottom sheet on mobile (fixed inset-x-0 bottom-0), dropdown on desktop
+- Speaker bar: Horizontally scrollable with no-scrollbar utility
+
 ## Deployment
 
 - Target: autoscale
 - Build: `npm run build`
-- Run: `npx tsx server/index.ts`
+- Run: `NODE_ENV=production npx tsx server/index.ts`
 - In production, server runs on port 5000, serves static dist/ files
 
 ## Admin Account

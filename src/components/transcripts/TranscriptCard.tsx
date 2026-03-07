@@ -76,12 +76,12 @@ export function TranscriptCard({
       </div>
 
       {!selectionMode && !isSelected &&
-      <div className="absolute top-3 sm:top-4 left-3 sm:left-4 opacity-0 group-hover:opacity-100 transition-opacity">
+      <div className="absolute top-3 sm:top-4 left-3 sm:left-4 opacity-0 group-hover:opacity-100 sm:group-hover:opacity-100 transition-opacity">
           <input
           type="checkbox"
           checked={isSelected}
           onChange={(e) => onSelect(transcript.id, e.target.checked)}
-          className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-slate-300 dark:border-slate-600 rounded cursor-pointer bg-white dark:bg-slate-800" />
+          className="h-5 w-5 sm:h-4 sm:w-4 text-indigo-600 focus:ring-indigo-500 border-slate-300 dark:border-slate-600 rounded cursor-pointer bg-white dark:bg-slate-800" />
 
         </div>
       }

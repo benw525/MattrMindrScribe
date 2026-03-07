@@ -29,7 +29,7 @@ export function VersionHistory({
         damping: 25,
         stiffness: 200
       }}
-      className="absolute top-0 right-0 bottom-0 w-72 sm:w-80 bg-white dark:bg-slate-900 border-l border-slate-200 dark:border-slate-800 shadow-2xl z-20 flex flex-col">
+      className="absolute top-0 right-0 bottom-0 w-full sm:w-80 bg-white dark:bg-slate-900 border-l border-slate-200 dark:border-slate-800 shadow-2xl z-20 flex flex-col">
 
       <div className="px-4 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-900">
         <h3 className="font-semibold text-slate-900 dark:text-white">

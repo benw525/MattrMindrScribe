@@ -11,7 +11,35 @@
   body {
     font-family: 'Inter', sans-serif;
     @apply antialiased text-slate-900 bg-slate-50 dark:text-slate-100 dark:bg-slate-950;
+    -webkit-tap-highlight-color: transparent;
+    -webkit-text-size-adjust: 100%;
   }
+
+  button, a, [role="button"] {
+    touch-action: manipulation;
+  }
+
+  html {
+    overflow: hidden;
+    height: 100%;
+  }
+  
+  body {
+    height: 100%;
+    overflow: auto;
+  }
+
+  #root {
+    height: 100%;
+  }
+}
+
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
 }
 /* Custom scrollbar */
 ::-webkit-scrollbar {
