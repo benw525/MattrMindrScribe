@@ -534,27 +534,26 @@ export function TranscriptViewerPage() {
       {/* Speaker Bar */}
       {!isProcessing && transcript.segments.length > 0 &&
       <div className="flex-shrink-0 border-b border-slate-100 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-900/50 px-3 sm:px-6 py-2 sm:py-2.5">
-          <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
-            <span className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mr-1">
+          <div className="flex items-center gap-2 overflow-x-auto no-scrollbar flex-nowrap">
+            <span className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mr-1 flex-shrink-0">
               Speakers
             </span>
             {uniqueSpeakers.map((speaker) =>
-              <div key={speaker} className="flex items-center">
-                <span
-                  className="flex items-center gap-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-full px-2.5 py-1 text-xs font-medium text-slate-700 dark:text-slate-300">
-                  <div className={`w-2 h-2 rounded-full ${getSpeakerDotColor(speaker)}`} />
-                  {speaker}
-                </span>
-              </div>
+              <span
+                key={speaker}
+                className="flex items-center gap-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-full px-2.5 py-1 text-xs font-medium text-slate-700 dark:text-slate-300 whitespace-nowrap flex-shrink-0">
+                <div className={`w-2 h-2 rounded-full flex-shrink-0 ${getSpeakerDotColor(speaker)}`} />
+                {speaker}
+              </span>
             )}
-            <div className="relative">
+            <div className="relative flex-shrink-0">
               <button
                 onClick={() => {
                   setShowSpeakerManager(!showSpeakerManager);
                   setEditingSpeaker(null);
                   setColorPickerSpeaker(null);
                 }}
-                className="flex items-center gap-1 bg-white dark:bg-slate-800 border border-dashed border-slate-300 dark:border-slate-600 rounded-full px-2.5 py-1 text-xs font-medium text-slate-500 dark:text-slate-400 hover:border-indigo-400 dark:hover:border-indigo-600 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
+                className="flex items-center gap-1 bg-white dark:bg-slate-800 border border-dashed border-slate-300 dark:border-slate-600 rounded-full px-2.5 py-1 text-xs font-medium text-slate-500 dark:text-slate-400 hover:border-indigo-400 dark:hover:border-indigo-600 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors whitespace-nowrap"
                 title="Manage speakers">
                 <UsersIcon className="h-3 w-3" />
                 <span className="hidden sm:inline">Edit Speakers</span>

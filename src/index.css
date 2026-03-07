@@ -41,6 +41,12 @@
 .no-scrollbar::-webkit-scrollbar {
   display: none;
 }
+
+@media (max-width: 639px) {
+  .overflow-y-auto {
+    -webkit-overflow-scrolling: touch;
+  }
+}
 /* Custom scrollbar */
 ::-webkit-scrollbar {
   width: 8px;

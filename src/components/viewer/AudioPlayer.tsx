@@ -1,5 +1,5 @@
 import React, { useRef, useCallback, useState } from 'react';
-import { PlayIcon, PauseIcon, Undo2Icon, Redo2Icon } from 'lucide-react';
+import { PlayIcon, PauseIcon, Undo2Icon, Redo2Icon, ChevronUpIcon } from 'lucide-react';
 import { formatDuration } from '../../utils/formatters';
 
 interface AudioPlayerProps {
@@ -13,7 +13,7 @@ interface AudioPlayerProps {
   onRateChange: (rate: number) => void;
 }
 
-const SPEED_OPTIONS = [0.5, 0.75, 1, 1.25, 1.5, 2];
+const SPEED_OPTIONS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
 
 export function AudioPlayer({
   isPlaying,
@@ -29,6 +29,8 @@ export function AudioPlayer({
   const progressBarRef = useRef<HTMLDivElement>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [dragPercent, setDragPercent] = useState(0);
+  const [showSpeedMenu, setShowSpeedMenu] = useState(false);
+  const speedMenuRef = useRef<HTMLDivElement>(null);
 
   const getPercentFromEvent = useCallback((clientX: number) => {
     if (!progressBarRef.current) return 0;
@@ -59,9 +61,9 @@ export function AudioPlayer({
   const displayPercent = isDragging ? dragPercent : progressPercent;
 
   return (
-    <div className="bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 px-3 sm:px-6 py-3 sm:py-4 flex flex-col gap-2 sm:gap-3 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] dark:shadow-none z-10">
+    <div className="bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 px-3 sm:px-6 py-2 sm:py-3 flex flex-col gap-1.5 sm:gap-2 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] dark:shadow-none z-10">
       <div className="flex items-center gap-2 sm:gap-4">
-        <span className="text-xs font-medium text-slate-500 dark:text-slate-400 w-10 text-right tabular-nums">
+        <span className="text-[11px] sm:text-xs font-medium text-slate-500 dark:text-slate-400 w-[46px] sm:w-10 text-right tabular-nums flex-shrink-0">
           {formatDuration(isDragging ? (dragPercent / 100) * duration : currentTime)}
         </span>
         <div
@@ -72,7 +74,7 @@ export function AudioPlayer({
           onPointerUp={handlePointerUp}
           onPointerCancel={handlePointerUp}
         >
-          <div className="h-6 flex items-center">
+          <div className="h-8 sm:h-6 flex items-center">
             <div className="w-full h-1.5 sm:h-2 bg-slate-200 dark:bg-slate-700 rounded-full relative">
               <div
                 className="absolute top-0 left-0 h-full bg-indigo-600 dark:bg-indigo-500 rounded-full transition-[width] duration-75"
@@ -85,18 +87,51 @@ export function AudioPlayer({
             style={{ left: `calc(${displayPercent}% - 8px)` }}
           />
         </div>
-        <span className="text-xs font-medium text-slate-500 dark:text-slate-400 w-10 tabular-nums">
+        <span className="text-[11px] sm:text-xs font-medium text-slate-500 dark:text-slate-400 w-[46px] sm:w-10 tabular-nums flex-shrink-0">
           {formatDuration(duration)}
         </span>
       </div>
 
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-0.5 sm:gap-1">
+        <div className="relative sm:hidden flex-shrink-0" ref={speedMenuRef}>
+          <button
+            onClick={() => setShowSpeedMenu(!showSpeedMenu)}
+            className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold rounded-md bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 active:bg-slate-200 dark:active:bg-slate-700 transition-colors"
+          >
+            {playbackRate}x
+            <ChevronUpIcon className={`h-3 w-3 transition-transform ${showSpeedMenu ? '' : 'rotate-180'}`} />
+          </button>
+          {showSpeedMenu && (
+            <>
+              <div className="fixed inset-0 z-30" onClick={() => setShowSpeedMenu(false)} />
+              <div className="absolute bottom-full left-0 mb-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-xl z-40 py-1 min-w-[100px]">
+                {SPEED_OPTIONS.map((speed) => (
+                  <button
+                    key={speed}
+                    onClick={() => {
+                      onRateChange(speed);
+                      setShowSpeedMenu(false);
+                    }}
+                    className={`w-full text-left px-3 py-2 text-sm font-medium transition-colors ${
+                      playbackRate === speed
+                        ? 'bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300'
+                        : 'text-slate-700 dark:text-slate-300 active:bg-slate-100 dark:active:bg-slate-700'
+                    }`}
+                  >
+                    {speed}x
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+
+        <div className="hidden sm:flex items-center gap-1">
           {SPEED_OPTIONS.map((speed) =>
             <button
               key={speed}
               onClick={() => onRateChange(speed)}
-              className={`min-w-[36px] sm:min-w-[40px] py-1.5 text-xs font-medium rounded-md transition-colors text-center ${playbackRate === speed ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 active:bg-slate-200 dark:active:bg-slate-700'}`}
+              className={`min-w-[36px] py-1 text-xs font-medium rounded-md transition-colors text-center ${playbackRate === speed ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'}`}
               aria-label={`Set playback speed to ${speed}x`}
             >
               {speed}x
@@ -104,7 +139,7 @@ export function AudioPlayer({
           )}
         </div>
 
-        <div className="flex items-center gap-4 sm:gap-5">
+        <div className="flex items-center gap-3 sm:gap-5">
           <button
             onClick={() => onSkip(-15)}
             className="p-2 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white active:text-indigo-600 transition-colors rounded-full active:bg-indigo-50 dark:active:bg-indigo-950/30"
@@ -115,12 +150,12 @@ export function AudioPlayer({
 
           <button
             onClick={onTogglePlay}
-            className="h-12 w-12 bg-indigo-600 text-white rounded-full flex items-center justify-center hover:bg-indigo-700 active:bg-indigo-800 active:scale-95 transition-all shadow-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+            className="h-11 w-11 sm:h-12 sm:w-12 bg-indigo-600 text-white rounded-full flex items-center justify-center hover:bg-indigo-700 active:bg-indigo-800 active:scale-95 transition-all shadow-md focus:outline-none"
             aria-label={isPlaying ? 'Pause' : 'Play'}
           >
             {isPlaying ?
-              <PauseIcon className="h-6 w-6" /> :
-              <PlayIcon className="h-6 w-6 ml-0.5" />
+              <PauseIcon className="h-5 w-5 sm:h-6 sm:w-6" /> :
+              <PlayIcon className="h-5 w-5 sm:h-6 sm:w-6 ml-0.5" />
             }
           </button>
 
@@ -134,7 +169,7 @@ export function AudioPlayer({
         </div>
 
         <div className="hidden sm:block w-[200px]" />
-        <div className="block sm:hidden w-4" />
+        <div className="block sm:hidden w-[52px]" />
       </div>
     </div>
   );

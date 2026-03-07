@@ -121,12 +121,12 @@ A full-stack application for managing legal case recordings/transcripts. Feature
 ## Mobile Responsiveness
 
 - Global: `touch-action: manipulation` on buttons/links to prevent double-tap zoom; `-webkit-tap-highlight-color: transparent` for clean taps
-- AudioPlayer: Pointer events for drag-to-scrub on progress bar; larger touch targets (12x12 play button); reduced speed options (6 instead of 8)
-- TranscriptText: Split/merge buttons visible on mobile (sm:opacity-0 pattern); speaker dropdown items have larger py on mobile; touchstart detection pauses auto-scroll
+- AudioPlayer: Pointer events for drag-to-scrub on progress bar; speed is a dropdown menu on mobile (all 8 options), inline buttons on desktop; compact padding for mobile
+- TranscriptText: Checkbox-based merge on mobile (select 2+ segments, merge bar appears at top); inline merge buttons only on desktop; split button always visible; `overscroll-contain` for smooth scroll; touchstart detection pauses auto-scroll
 - TranscriptToolbar: p-2 minimum touch targets on mobile; active states for visual feedback
 - Side panels (VersionHistory, AISummaryPanel): Full-width on mobile
 - Speaker manager popup: Bottom sheet on mobile (fixed inset-x-0 bottom-0), dropdown on desktop
-- Speaker bar: Horizontally scrollable with no-scrollbar utility
+- Speaker bar: Horizontally scrollable with `flex-nowrap` + `whitespace-nowrap` + `flex-shrink-0` on all items; no wrapping
 
 ## Deployment
 
