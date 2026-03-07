@@ -101,6 +101,7 @@ A full-stack application for managing legal case recordings/transcripts. Feature
 - `transcript_segments` - Individual transcription segments
 - `transcript_versions` - Version snapshots
 - `transcript_summaries` - AI-generated legal summaries (per-agent, per-transcript)
+- `transcripts.pipeline_log` - JSONB column storing per-step results (whisper, diarization, refinement) with status, stats, and errors
 
 ## Cloudflare R2 Storage
 

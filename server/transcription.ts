@@ -266,6 +266,24 @@ export async function processTranscription(transcriptId: string): Promise<void> 
   const workDir = path.join(tmpdir(), `transcription_${randomUUID()}`);
   let r2TempPath: string | null = null;
 
+  const pipelineLog: Record<string, any> = {
+    whisper: { status: 'pending' },
+    diarization: { status: 'pending' },
+    refinement: { status: 'pending' },
+    startedAt: new Date().toISOString(),
+  };
+
+  const savePipelineLog = async () => {
+    try {
+      await pool.query(
+        `UPDATE transcripts SET pipeline_log = $1::jsonb, updated_at = NOW() WHERE id = $2`,
+        [JSON.stringify(pipelineLog), transcriptId]
+      );
+    } catch (e: any) {
+      console.error('[Pipeline Log] Failed to save:', e.message);
+    }
+  };
+
   try {
     await pool.query(
       `UPDATE transcripts SET status = 'processing', updated_at = NOW() WHERE id = $1`,
@@ -312,6 +330,10 @@ export async function processTranscription(transcriptId: string): Promise<void> 
 
     console.log(`[Transcription] Step 1: Whisper transcription + Step 2: AssemblyAI diarization (parallel)...`);
 
+    let whisperError: string | null = null;
+    let diarizationError: string | null = null;
+    let refinementError: string | null = null;
+
     const whisperPromise = (async () => {
       let allSegments: TranscriptSegment[] = [];
       for (let i = 0; i < chunks.length; i++) {
@@ -332,33 +354,78 @@ export async function processTranscription(transcriptId: string): Promise<void> 
       try {
         if (!process.env.ASSEMBLYAI_API_KEY) {
           console.log('[Transcription] AssemblyAI not configured, skipping diarization');
+          pipelineLog.diarization = { status: 'skipped', reason: 'API key not configured' };
           return null;
         }
         return await diarizeWithAssemblyAI(wavPath, expectedSpeakers);
       } catch (err: any) {
         console.error(`[Transcription] AssemblyAI diarization failed (non-fatal):`, err.message);
+        diarizationError = err.message;
         return null;
       }
     })();
 
-    const [whisperSegments, diarizationLabels] = await Promise.all([whisperPromise, diarizationPromise]);
+    let whisperSegments: TranscriptSegment[];
+    let diarizationLabels: any;
+
+    try {
+      [whisperSegments, diarizationLabels] = await Promise.all([whisperPromise, diarizationPromise]);
+      pipelineLog.whisper = {
+        status: 'success',
+        segments: whisperSegments.length,
+        chunks: chunks.length,
+      };
+    } catch (err: any) {
+      whisperError = err.message;
+      pipelineLog.whisper = { status: 'error', error: err.message };
+      await savePipelineLog();
+      throw err;
+    }
+
+    if (diarizationError) {
+      pipelineLog.diarization = { status: 'error', error: diarizationError };
+    }
+
+    await savePipelineLog();
 
     let allSegments: TranscriptSegment[];
 
     if (diarizationLabels && diarizationLabels.length > 0) {
       console.log(`[Transcription] Mapping AssemblyAI speaker labels onto ${whisperSegments.length} Whisper segments...`);
       allSegments = mapDiarizationToSegments(whisperSegments, diarizationLabels);
-    } else {
+      const uniqueSpeakers = new Set(allSegments.map(s => s.speaker));
+      pipelineLog.diarization = {
+        status: 'success',
+        utterances: diarizationLabels.length,
+        speakersDetected: uniqueSpeakers.size,
+      };
+    } else if (!diarizationError) {
+      if (pipelineLog.diarization.status !== 'skipped') {
+        pipelineLog.diarization = { status: 'skipped', reason: 'No utterances returned' };
+      }
       console.log(`[Transcription] No diarization data, falling back to heuristic speaker assignment`);
+      allSegments = assignSpeakers(whisperSegments);
+    } else {
       allSegments = assignSpeakers(whisperSegments);
     }
 
     try {
       console.log(`[Transcription] Step 3: GPT-4o speaker refinement...`);
       allSegments = await refineSpeakersWithGPT(allSegments, expectedSpeakers);
+      const uniqueSpeakers = new Set(allSegments.map(s => s.speaker));
+      pipelineLog.refinement = {
+        status: 'success',
+        speakersAfterRefinement: uniqueSpeakers.size,
+      };
     } catch (err: any) {
       console.error(`[Transcription] GPT refinement failed (non-fatal):`, err.message);
+      refinementError = err.message;
+      pipelineLog.refinement = { status: 'error', error: err.message };
     }
+
+    await savePipelineLog();
+
+    pipelineLog.completedAt = new Date().toISOString();
 
     await pool.query('DELETE FROM transcript_segments WHERE transcript_id = $1', [transcriptId]);
 
@@ -372,17 +439,19 @@ export async function processTranscription(transcriptId: string): Promise<void> 
     }
 
     await pool.query(
-      `UPDATE transcripts SET status = 'completed', duration = $1, error_message = NULL, updated_at = NOW()
-       WHERE id = $2`,
-      [duration, transcriptId]
+      `UPDATE transcripts SET status = 'completed', duration = $1, error_message = NULL, pipeline_log = $2::jsonb, updated_at = NOW()
+       WHERE id = $3`,
+      [duration, JSON.stringify(pipelineLog), transcriptId]
     );
 
     console.log(`[Transcription] Completed for "${filename}" — ${allSegments.length} segment(s)`);
   } catch (err: any) {
     console.error(`[Transcription] Error for ${transcriptId}:`, err.message);
+    pipelineLog.completedAt = new Date().toISOString();
+    pipelineLog.fatalError = err.message;
     await pool.query(
-      `UPDATE transcripts SET status = 'error', error_message = $1, updated_at = NOW() WHERE id = $2`,
-      [err.message, transcriptId]
+      `UPDATE transcripts SET status = 'error', error_message = $1, pipeline_log = $2::jsonb, updated_at = NOW() WHERE id = $3`,
+      [err.message, JSON.stringify(pipelineLog), transcriptId]
     );
   } finally {
     await cleanupDir(workDir);

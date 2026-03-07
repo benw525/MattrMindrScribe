@@ -152,6 +152,8 @@ export const api = {
       });
     },
     getSummaries: (id: string) => request(`/transcripts/${id}/summaries`),
+    retranscribe: (id: string) => request(`/transcripts/${id}/retranscribe`, { method: 'POST' }),
+    getStatus: (id: string) => request(`/transcripts/${id}/status`),
   },
   folders: {
     list: () => request('/folders'),

@@ -156,8 +156,9 @@ pool.query(`
 
 pool.query(`
   ALTER TABLE transcripts ADD COLUMN IF NOT EXISTS expected_speakers INTEGER DEFAULT NULL;
+  ALTER TABLE transcripts ADD COLUMN IF NOT EXISTS pipeline_log JSONB DEFAULT NULL;
 `).catch((err: any) => {
-  if (!err.message.includes('already exists')) console.error('Migration error (expected_speakers):', err.message);
+  if (!err.message.includes('already exists')) console.error('Migration error:', err.message);
 });
 
 async function seedAdminAccounts() {

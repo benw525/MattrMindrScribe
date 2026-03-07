@@ -1,3 +1,23 @@
+export interface PipelineStepLog {
+  status: 'pending' | 'success' | 'error' | 'skipped';
+  error?: string;
+  reason?: string;
+  segments?: number;
+  chunks?: number;
+  utterances?: number;
+  speakersDetected?: number;
+  speakersAfterRefinement?: number;
+}
+
+export interface PipelineLog {
+  whisper: PipelineStepLog;
+  diarization: PipelineStepLog;
+  refinement: PipelineStepLog;
+  startedAt?: string;
+  completedAt?: string;
+  fatalError?: string;
+}
+
 export interface Transcript {
   id: string;
   filename: string;
@@ -12,6 +32,7 @@ export interface Transcript {
   folderId: string | null;
   segments: TranscriptSegment[];
   versions: TranscriptVersion[];
+  pipelineLog?: PipelineLog | null;
 }
 
 export interface TranscriptSegment {

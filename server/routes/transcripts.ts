@@ -82,6 +82,7 @@ router.get('/', async (req: AuthRequest, res: Response) => {
       fileUrl: row.file_url,
       folderId: row.folder_id,
       errorMessage: row.error_message,
+      pipelineLog: row.pipeline_log,
       segments: row.segments,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
@@ -376,7 +377,7 @@ router.get('/:id/status', async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
     const result = await pool.query(
-      'SELECT status, error_message, duration FROM transcripts WHERE id = $1 AND user_id = $2',
+      'SELECT status, error_message, duration, pipeline_log FROM transcripts WHERE id = $1 AND user_id = $2',
       [id, req.userId]
     );
     if (result.rows.length === 0) {
@@ -387,6 +388,7 @@ router.get('/:id/status', async (req: AuthRequest, res: Response) => {
       status: row.status,
       errorMessage: row.error_message,
       duration: row.duration,
+      pipelineLog: row.pipeline_log,
     });
   } catch (err) {
     console.error('Get status error:', err);

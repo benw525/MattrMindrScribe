@@ -9,7 +9,8 @@ import {
   Undo2Icon,
   PanelLeftCloseIcon,
   PanelLeftOpenIcon,
-  BrainCircuitIcon } from
+  BrainCircuitIcon,
+  ActivityIcon } from
 'lucide-react';
 import { toast } from 'sonner';
 interface TranscriptToolbarProps {
@@ -23,6 +24,8 @@ interface TranscriptToolbarProps {
   sidebarHidden: boolean;
   onToggleSidebar: () => void;
   onAISummarize: () => void;
+  onShowPipeline?: () => void;
+  hasPipelineIssue?: boolean;
 }
 export function TranscriptToolbar({
   transcriptId,
@@ -34,7 +37,9 @@ export function TranscriptToolbar({
   canUndo,
   sidebarHidden,
   onToggleSidebar,
-  onAISummarize
+  onAISummarize,
+  onShowPipeline,
+  hasPipelineIssue
 }: TranscriptToolbarProps) {
   const navigate = useNavigate();
   const handleExport = () => {
@@ -92,6 +97,23 @@ export function TranscriptToolbar({
         <DownloadIcon className="h-4 w-4" />
         <span className="hidden lg:inline">Export</span>
       </button>
+
+      {onShowPipeline && (
+        <button
+          onClick={onShowPipeline}
+          className={`inline-flex items-center gap-1.5 p-2 sm:px-2.5 text-sm font-medium rounded-md transition-colors relative ${
+            hasPipelineIssue
+              ? 'text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/30 hover:bg-amber-100 dark:hover:bg-amber-900/50'
+              : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 active:bg-slate-200 dark:active:bg-slate-700'
+          }`}
+          title="View transcription pipeline details">
+          <ActivityIcon className="h-4 w-4" />
+          <span className="hidden lg:inline">Pipeline</span>
+          {hasPipelineIssue && (
+            <span className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 bg-amber-500 rounded-full border-2 border-white dark:border-slate-900" />
+          )}
+        </button>
+      )}
 
       <button
         onClick={onToggleHistory}

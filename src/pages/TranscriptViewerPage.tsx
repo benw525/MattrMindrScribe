@@ -19,6 +19,7 @@ import { VideoPlayer } from '../components/viewer/VideoPlayer';
 import { VersionHistory } from '../components/viewer/VersionHistory';
 import { AISummarizeModal } from '../components/viewer/AISummarizeModal';
 import { AISummaryPanel } from '../components/viewer/AISummaryPanel';
+import { PipelineSummary } from '../components/viewer/PipelineSummary';
 import { TranscriptSegment, TranscriptVersion } from '../types/transcript';
 import { api } from '../utils/api';
 interface UndoEntry {
@@ -60,7 +61,7 @@ export function TranscriptViewerPage() {
     id: string;
   }>();
   const navigate = useNavigate();
-  const { transcripts, updateTranscript } = useTranscripts();
+  const { transcripts, updateTranscript, refreshData } = useTranscripts();
   const { sidebarHidden, setSidebarHidden } = useOutletContext<{
     selectedFolderId: string | null;
     sidebarHidden: boolean;
@@ -82,6 +83,7 @@ export function TranscriptViewerPage() {
   const speakerManagerRef = useRef<HTMLDivElement>(null);
   const [mobileShowVideo, setMobileShowVideo] = useState(false);
   const [showSummarizeModal, setShowSummarizeModal] = useState(false);
+  const [showPipeline, setShowPipeline] = useState(false);
   const [showSummaryPanel, setShowSummaryPanel] = useState(false);
   const [agents, setAgents] = useState<{ id: string; name: string; icon: string; description: string }[]>([]);
   const [summaries, setSummaries] = useState<{ id: string; agentType: string; summary: string; modelUsed: string; createdAt: string }[]>([]);
@@ -509,7 +511,14 @@ export function TranscriptViewerPage() {
             canUndo={undoStack.length > 0}
             sidebarHidden={sidebarHidden}
             onToggleSidebar={() => setSidebarHidden(!sidebarHidden)}
-            onAISummarize={() => setShowSummarizeModal(true)} />
+            onAISummarize={() => setShowSummarizeModal(true)}
+            onShowPipeline={() => setShowPipeline(true)}
+            hasPipelineIssue={!!(transcript.pipelineLog && (
+              transcript.pipelineLog.whisper?.status === 'error' ||
+              transcript.pipelineLog.diarization?.status === 'error' ||
+              transcript.pipelineLog.refinement?.status === 'error' ||
+              transcript.pipelineLog.fatalError
+            ))} />
 
         </div>
         {/* Mobile: compact toolbar */}
@@ -524,7 +533,14 @@ export function TranscriptViewerPage() {
             canUndo={undoStack.length > 0}
             sidebarHidden={sidebarHidden}
             onToggleSidebar={() => setSidebarHidden(!sidebarHidden)}
-            onAISummarize={() => setShowSummarizeModal(true)} />
+            onAISummarize={() => setShowSummarizeModal(true)}
+            onShowPipeline={() => setShowPipeline(true)}
+            hasPipelineIssue={!!(transcript.pipelineLog && (
+              transcript.pipelineLog.whisper?.status === 'error' ||
+              transcript.pipelineLog.diarization?.status === 'error' ||
+              transcript.pipelineLog.refinement?.status === 'error' ||
+              transcript.pipelineLog.fatalError
+            ))} />
 
         </div>
       </header>
@@ -931,6 +947,17 @@ export function TranscriptViewerPage() {
 
         }
       </AnimatePresence>
+
+      {showPipeline &&
+      <PipelineSummary
+        pipelineLog={transcript.pipelineLog}
+        transcriptStatus={transcript.status}
+        errorMessage={transcript.errorMessage}
+        transcriptId={transcript.id}
+        onClose={() => setShowPipeline(false)}
+        onRetranscribeStarted={() => refreshData()} />
+
+      }
 
       {!isProcessing &&
       <AudioPlayer
