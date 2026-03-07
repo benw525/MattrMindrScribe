@@ -4,7 +4,7 @@ import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
 import pool from '../db.js';
 import { authenticateToken, AuthRequest } from '../middleware/auth.js';
-import { processTranscription } from '../transcription.js';
+import { processTranscription, deduplicateExistingSegments } from '../transcription.js';
 import { r2Configured, uploadFileToR2, deleteFromR2, isR2Url, getR2KeyFromUrl, getPresignedUploadUrl } from '../r2.js';
 import { LEGAL_AGENTS, getAgentById } from '../legalAgents.js';
 import OpenAI from 'openai';
@@ -416,6 +416,57 @@ router.post('/:id/retranscribe', async (req: AuthRequest, res: Response) => {
     res.json({ success: true, status: 'pending' });
   } catch (err) {
     console.error('Retranscribe error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.post('/:id/deduplicate', async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const existing = await pool.query(
+      'SELECT id FROM transcripts WHERE id = $1 AND user_id = $2',
+      [id, req.userId]
+    );
+    if (existing.rows.length === 0) {
+      return res.status(404).json({ error: 'Transcript not found' });
+    }
+
+    const removed = await deduplicateExistingSegments(id);
+
+    const result = await pool.query(
+      `SELECT t.*,
+        COALESCE(json_agg(
+          json_build_object('id', s.id, 'startTime', s.start_time, 'endTime', s.end_time, 'speaker', s.speaker, 'text', s.text)
+          ORDER BY s.segment_order
+        ) FILTER (WHERE s.id IS NOT NULL), '[]') as segments
+      FROM transcripts t
+      LEFT JOIN transcript_segments s ON s.transcript_id = t.id
+      WHERE t.id = $1
+      GROUP BY t.id`,
+      [id]
+    );
+
+    const t = result.rows[0];
+    res.json({
+      removed,
+      transcript: {
+        id: t.id,
+        filename: t.filename,
+        description: t.description,
+        status: t.status,
+        type: t.type,
+        duration: t.duration,
+        fileSize: t.file_size,
+        fileUrl: t.file_url,
+        folderId: t.folder_id,
+        errorMessage: t.error_message,
+        segments: t.segments,
+        createdAt: t.created_at,
+        updatedAt: t.updated_at,
+      }
+    });
+  } catch (err) {
+    console.error('Deduplicate error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

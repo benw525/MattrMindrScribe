@@ -135,16 +135,27 @@ function textSimilarity(a: string, b: string): number {
 function deduplicateSegments(segments: TranscriptSegment[]): TranscriptSegment[] {
   if (segments.length === 0) return [];
 
-  segments.sort((a, b) => a.startTime - b.startTime);
+  segments.sort((a, b) => {
+    if (a.startTime !== b.startTime) return a.startTime - b.startTime;
+    if (a.endTime !== b.endTime) return a.endTime - b.endTime;
+    return 0;
+  });
 
-  const deduped: TranscriptSegment[] = [segments[0]];
+  const seen = new Set<string>();
+  const firstPass: TranscriptSegment[] = [];
+  for (const seg of segments) {
+    const key = `${seg.startTime}|${seg.endTime}|${seg.text}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    firstPass.push(seg);
+  }
 
-  for (let i = 1; i < segments.length; i++) {
-    const seg = segments[i];
+  const deduped: TranscriptSegment[] = [firstPass[0]];
+
+  for (let i = 1; i < firstPass.length; i++) {
+    const seg = firstPass[i];
     const prev = deduped[deduped.length - 1];
 
-    if (Math.abs(seg.startTime - prev.startTime) < 1.5 && seg.text === prev.text) continue;
-    if (seg.startTime < prev.endTime - 0.5 && seg.text === prev.text) continue;
     if (Math.abs(seg.startTime - prev.startTime) < 1.5 && textSimilarity(seg.text, prev.text) > 0.7) continue;
     if (seg.startTime < prev.endTime - 0.5 && textSimilarity(seg.text, prev.text) > 0.7) continue;
 
@@ -188,6 +199,65 @@ async function cleanupDir(dirPath: string): Promise<void> {
       rmSync(dirPath, { recursive: true, force: true });
     }
   } catch {}
+}
+
+export async function deduplicateExistingSegments(transcriptId: string): Promise<number> {
+  const { rows } = await pool.query(
+    `SELECT start_time, end_time, speaker, text 
+     FROM transcript_segments 
+     WHERE transcript_id = $1 
+     ORDER BY segment_order`,
+    [transcriptId]
+  );
+
+  if (rows.length === 0) return 0;
+
+  const segments: TranscriptSegment[] = rows.map((r: any) => ({
+    speaker: r.speaker,
+    text: r.text,
+    startTime: parseFloat(r.start_time),
+    endTime: parseFloat(r.end_time),
+  }));
+
+  const originalCount = segments.length;
+  let deduped = deduplicateSegments(segments);
+  deduped = assignSpeakers(deduped);
+
+  if (deduped.length === originalCount) return 0;
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('DELETE FROM transcript_segments WHERE transcript_id = $1', [transcriptId]);
+
+    const BATCH_SIZE = 200;
+    for (let b = 0; b < deduped.length; b += BATCH_SIZE) {
+      const batch = deduped.slice(b, b + BATCH_SIZE);
+      const values: any[] = [];
+      const placeholders: string[] = [];
+      for (let i = 0; i < batch.length; i++) {
+        const seg = batch[i];
+        const offset = i * 6;
+        placeholders.push(`($${offset+1}, $${offset+2}, $${offset+3}, $${offset+4}, $${offset+5}, $${offset+6})`);
+        values.push(transcriptId, seg.startTime, seg.endTime, seg.speaker, seg.text, b + i);
+      }
+      await client.query(
+        `INSERT INTO transcript_segments (transcript_id, start_time, end_time, speaker, text, segment_order)
+         VALUES ${placeholders.join(', ')}`,
+        values
+      );
+    }
+
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+
+  console.log(`[Dedup] Reduced ${originalCount} segments to ${deduped.length} for transcript ${transcriptId}`);
+  return originalCount - deduped.length;
 }
 
 export async function processTranscription(transcriptId: string): Promise<void> {

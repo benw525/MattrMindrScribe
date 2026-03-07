@@ -10,6 +10,7 @@ import transcriptRoutes from './routes/transcripts.js';
 import folderRoutes from './routes/folders.js';
 import { authenticateToken } from './middleware/auth.js';
 import pool from './db.js';
+import { deduplicateExistingSegments } from './transcription.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -157,3 +158,31 @@ const server = app.listen(PORT, '0.0.0.0', () => {
 });
 server.timeout = 30 * 60 * 1000;
 server.requestTimeout = 30 * 60 * 1000;
+
+setTimeout(async () => {
+  try {
+    await pool.query(`CREATE TABLE IF NOT EXISTS _migrations (key VARCHAR(100) PRIMARY KEY, ran_at TIMESTAMP DEFAULT NOW())`);
+    const { rows: done } = await pool.query(`SELECT 1 FROM _migrations WHERE key = 'dedup_segments_v1'`);
+    if (done.length > 0) return;
+
+    const { rows } = await pool.query(
+      `SELECT t.id, t.filename, 
+        (SELECT COUNT(*) FROM transcript_segments s WHERE s.transcript_id = t.id) as seg_count
+       FROM transcripts t WHERE t.status = 'completed'`
+    );
+    let fixed = 0;
+    for (const row of rows) {
+      if (parseInt(row.seg_count) > 200) {
+        const removed = await deduplicateExistingSegments(row.id);
+        if (removed > 0) {
+          console.log(`[Startup Dedup] "${row.filename}": removed ${removed} duplicate segments`);
+          fixed++;
+        }
+      }
+    }
+    await pool.query(`INSERT INTO _migrations (key) VALUES ('dedup_segments_v1')`);
+    if (fixed > 0) console.log(`[Startup Dedup] Completed — fixed ${fixed} transcript(s)`);
+  } catch (err: any) {
+    console.error('[Startup Dedup] Error:', err.message);
+  }
+}, 2000);
