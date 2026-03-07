@@ -10,7 +10,8 @@ import {
   PanelLeftCloseIcon,
   PanelLeftOpenIcon,
   BrainCircuitIcon,
-  ActivityIcon } from
+  ActivityIcon,
+  FileTextIcon } from
 'lucide-react';
 import { toast } from 'sonner';
 interface TranscriptToolbarProps {
@@ -26,6 +27,8 @@ interface TranscriptToolbarProps {
   onAISummarize: () => void;
   onShowPipeline?: () => void;
   hasPipelineIssue?: boolean;
+  onShowSummaries?: () => void;
+  summaryCount?: number;
 }
 export function TranscriptToolbar({
   transcriptId,
@@ -39,7 +42,9 @@ export function TranscriptToolbar({
   onToggleSidebar,
   onAISummarize,
   onShowPipeline,
-  hasPipelineIssue
+  hasPipelineIssue,
+  onShowSummaries,
+  summaryCount
 }: TranscriptToolbarProps) {
   const navigate = useNavigate();
   const handleExport = () => {
@@ -81,6 +86,21 @@ export function TranscriptToolbar({
         <BrainCircuitIcon className="h-4 w-4" />
         <span className="hidden sm:inline">AI Summarize</span>
       </button>
+
+      {onShowSummaries && (
+        <button
+          onClick={onShowSummaries}
+          className="inline-flex items-center gap-1.5 p-2 sm:px-3 sm:py-2 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 active:bg-slate-200 dark:active:bg-slate-700 rounded-md transition-colors relative"
+          title="View previously generated summaries">
+          <FileTextIcon className="h-4 w-4" />
+          <span className="hidden lg:inline">Summaries</span>
+          {!!summaryCount && summaryCount > 0 && (
+            <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] flex items-center justify-center bg-emerald-500 text-white text-[10px] font-bold rounded-full border-2 border-white dark:border-slate-900 px-1">
+              {summaryCount}
+            </span>
+          )}
+        </button>
+      )}
 
       <button
         onClick={onSuggestName}

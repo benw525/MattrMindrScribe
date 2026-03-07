@@ -18,6 +18,7 @@ interface AISummaryPanelProps {
   isStreaming: boolean;
   onClose: () => void;
   agentNames: Record<string, string>;
+  onGenerateNew?: () => void;
 }
 
 const AGENT_LABELS: Record<string, string> = {
@@ -71,7 +72,7 @@ function renderMarkdown(text: string) {
   return elements;
 }
 
-export function AISummaryPanel({ summaries, streamingContent, streamingAgentType, isStreaming, onClose, agentNames }: AISummaryPanelProps) {
+export function AISummaryPanel({ summaries, streamingContent, streamingAgentType, isStreaming, onClose, agentNames, onGenerateNew }: AISummaryPanelProps) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   return (
@@ -88,13 +89,29 @@ export function AISummaryPanel({ summaries, streamingContent, streamingAgentType
           <h3 className="font-semibold text-slate-900 dark:text-white">
             AI Summaries
           </h3>
+          {summaries.length > 0 && (
+            <span className="text-xs text-slate-500 dark:text-slate-400">
+              ({summaries.length})
+            </span>
+          )}
         </div>
-        <button
-          onClick={onClose}
-          className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
-        >
-          <XIcon className="h-5 w-5" />
-        </button>
+        <div className="flex items-center gap-2">
+          {onGenerateNew && !isStreaming && (
+            <button
+              onClick={onGenerateNew}
+              className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-900/30 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 rounded-md transition-colors"
+            >
+              <SparklesIcon className="h-3 w-3" />
+              Generate New
+            </button>
+          )}
+          <button
+            onClick={onClose}
+            className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+          >
+            <XIcon className="h-5 w-5" />
+          </button>
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-3">

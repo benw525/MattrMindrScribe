@@ -518,7 +518,9 @@ export function TranscriptViewerPage() {
               transcript.pipelineLog.diarization?.status === 'error' ||
               transcript.pipelineLog.refinement?.status === 'error' ||
               transcript.pipelineLog.fatalError
-            ))} />
+            ))}
+            onShowSummaries={() => setShowSummaryPanel(true)}
+            summaryCount={summaries.length} />
 
         </div>
         {/* Mobile: compact toolbar */}
@@ -540,7 +542,9 @@ export function TranscriptViewerPage() {
               transcript.pipelineLog.diarization?.status === 'error' ||
               transcript.pipelineLog.refinement?.status === 'error' ||
               transcript.pipelineLog.fatalError
-            ))} />
+            ))}
+            onShowSummaries={() => setShowSummaryPanel(true)}
+            summaryCount={summaries.length} />
 
         </div>
       </header>
@@ -931,7 +935,11 @@ export function TranscriptViewerPage() {
             streamingAgentType={streamingAgentType}
             isStreaming={isStreaming}
             onClose={() => setShowSummaryPanel(false)}
-            agentNames={agentNames} />
+            agentNames={agentNames}
+            onGenerateNew={() => {
+              setShowSummaryPanel(false);
+              setShowSummarizeModal(true);
+            }} />
 
           }
         </AnimatePresence>
