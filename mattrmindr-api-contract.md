@@ -248,8 +248,185 @@ All error responses should follow this format:
 
 If MattrMindrScribe and MattrMindr are on different domains, MattrMindr must allow CORS from the MattrMindrScribe origin. However, since MattrMindrScribe proxies all requests through its own backend server (not the browser), CORS is not strictly required. The requests will be server-to-server.
 
+---
+
+# Reverse Integration: Sending Files FROM MattrMindr TO MattrMindrScribe
+
+MattrMindr can also send audio/video files to MattrMindrScribe for transcription. The flow is: MattrMindr connects to the user's MattrMindrScribe account, uploads a file from a case, and MattrMindrScribe runs its full AI transcription pipeline on it.
+
+MattrMindrScribe exposes the following endpoints under `/api/external/` for MattrMindr to call.
+
+## Authentication (Inbound)
+
+### POST /api/external/auth
+
+Authenticate against MattrMindrScribe. This is the same shape as the outbound auth endpoint — MattrMindr stores the user's MattrMindrScribe credentials and gets a token.
+
+**Request:**
+```json
+{
+  "email": "user@lawfirm.com",
+  "password": "their-scribe-password"
+}
+```
+
+**Success Response (200):**
+```json
+{
+  "token": "jwt-token-string",
+  "user": {
+    "id": "uuid-of-user",
+    "email": "user@lawfirm.com",
+    "fullName": "Jane Doe"
+  }
+}
+```
+
+**Notes:**
+- Token is a JWT valid for 7 days.
+- MattrMindr should send this token as `Authorization: Bearer <token>` on all subsequent requests.
+
+---
+
+## Sending Files for Transcription
+
+### POST /api/external/receive
+
+Send an audio or video file to MattrMindrScribe for AI transcription. MattrMindr provides a publicly accessible download URL for the file and MattrMindrScribe downloads it, stores it, and runs the full transcription pipeline (Whisper + AssemblyAI diarization + GPT-4o refinement).
+
+**Headers:**
+```
+Authorization: Bearer <token>
+Content-Type: application/json
+```
+
+**Request Body:**
+```json
+{
+  "filename": "Deposition - John Smith.mp3",
+  "fileUrl": "https://mattrmindr.example.com/api/files/abc123/download?token=temp-token",
+  "contentType": "audio/mpeg",
+  "fileSize": 52428800,
+  "description": "Deposition taken on 2024-01-15",
+  "caseId": "case-uuid-1",
+  "caseName": "Smith v. Johnson",
+  "expectedSpeakers": 3
+}
+```
+
+**Field Descriptions:**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| filename | string | Yes | Original filename of the media file |
+| fileUrl | string | Yes | A publicly accessible URL where MattrMindrScribe can download the file. This can be a temporary/signed URL. |
+| contentType | string | No | MIME type of the file (e.g. `audio/mpeg`, `video/mp4`). Used to determine audio vs video. |
+| fileSize | number | No | File size in bytes. For informational/validation purposes. |
+| description | string | No | Description to attach to the transcript |
+| caseId | string | No | MattrMindr case ID. If provided, the transcript will be placed in a folder linked to this case (creating one if needed). |
+| caseName | string | No | Human-readable case name. Used if a new folder needs to be created for this case. |
+| expectedSpeakers | number | No | Expected number of speakers (2-10). Helps the diarization pipeline. |
+
+**Success Response (201):**
+```json
+{
+  "transcriptId": "transcript-uuid",
+  "filename": "Deposition - John Smith.mp3",
+  "status": "pending",
+  "folderId": "folder-uuid-or-null",
+  "message": "File received and transcription started"
+}
+```
+
+**Error Responses:**
+
+| Status | Body | Condition |
+|--------|------|-----------|
+| 400 | `{ "error": "filename and fileUrl are required" }` | Missing required fields |
+| 400 | `{ "error": "Unsupported file type: .xyz" }` | File extension not allowed |
+| 401 | `{ "error": "Authentication required" }` | Missing auth token |
+| 403 | `{ "error": "Invalid or expired token" }` | Bad auth token |
+| 502 | `{ "error": "Could not download file from the provided URL" }` | File URL unreachable |
+
+**Important Notes for MattrMindr:**
+- The `fileUrl` must be downloadable by the MattrMindrScribe server (server-to-server). If your files are behind auth, generate a temporary signed/public URL.
+- Transcription is asynchronous. The response comes back immediately with `status: "pending"`. Use the status endpoint below to poll for completion.
+- Supported file types: `.mp3`, `.wav`, `.m4a`, `.ogg`, `.flac`, `.aac`, `.webm`, `.wma`, `.amr`, `.opus`, `.aiff`, `.mp4`, `.mov`, `.avi`, `.mkv`, `.wmv`, `.flv`, `.3gp`, `.m4v`, `.mpg`, `.mpeg`
+
+---
+
+## Checking Transcription Status
+
+### GET /api/external/transcripts/:transcriptId/status
+
+Poll the status of a previously submitted transcription. Once status is `completed`, the response includes all transcript segments.
+
+**Headers:**
+```
+Authorization: Bearer <token>
+```
+
+**Success Response (200) — Pending/Processing:**
+```json
+{
+  "transcriptId": "transcript-uuid",
+  "filename": "Deposition - John Smith.mp3",
+  "status": "processing",
+  "duration": null,
+  "errorMessage": null,
+  "pipelineLog": null,
+  "segments": []
+}
+```
+
+**Success Response (200) — Completed:**
+```json
+{
+  "transcriptId": "transcript-uuid",
+  "filename": "Deposition - John Smith.mp3",
+  "status": "completed",
+  "duration": 3600.5,
+  "errorMessage": null,
+  "pipelineLog": {
+    "whisper": { "status": "success", "segments": 142 },
+    "diarization": { "status": "success", "speakersDetected": 3 },
+    "refinement": { "status": "success", "speakersAfterRefinement": 3 }
+  },
+  "segments": [
+    {
+      "startTime": 0.0,
+      "endTime": 5.2,
+      "speaker": "Speaker 1",
+      "text": "Please state your name for the record."
+    },
+    {
+      "startTime": 5.5,
+      "endTime": 8.1,
+      "speaker": "Speaker 2",
+      "text": "My name is John Smith."
+    }
+  ]
+}
+```
+
+**Status Values:**
+- `pending` — File received, waiting to start
+- `processing` — Transcription pipeline running
+- `completed` — Done, segments available
+- `failed` — Pipeline failed, check `errorMessage`
+
+**Error Response (404):**
+```json
+{
+  "error": "Transcript not found"
+}
+```
+
+---
+
 ## Implementation Checklist
 
+### Endpoints MattrMindr must implement (for outbound: Scribe → MattrMindr):
 1. [ ] `POST /api/external/auth` — User authentication, returns long-lived token
 2. [ ] `GET /api/external/cases` — Case search with team filtering and pin sorting
 3. [ ] `GET /api/external/cases/:caseId/files` — Check file existence by filename
@@ -257,3 +434,16 @@ If MattrMindrScribe and MattrMindr are on different domains, MattrMindr must all
 5. [ ] Ensure the token from step 1 is validated on all other endpoints
 6. [ ] Only return cases where the authenticated user is a team member
 7. [ ] Sort case search results with pinned cases first
+
+### Endpoints MattrMindrScribe already implements (for inbound: MattrMindr → Scribe):
+1. [x] `POST /api/external/auth` — Authenticate against MattrMindrScribe, get JWT
+2. [x] `POST /api/external/receive` — Send a file URL for transcription
+3. [x] `GET /api/external/transcripts/:id/status` — Poll transcription status and get results
+
+### What MattrMindr needs to do for inbound:
+1. [ ] Add a "Send to MattrMindrScribe for Transcription" option on case files
+2. [ ] Store the user's MattrMindrScribe URL + auth token (from `/api/external/auth`)
+3. [ ] Generate a temporary download URL for the file to send in `fileUrl`
+4. [ ] Call `POST /api/external/receive` with the file metadata
+5. [ ] Poll `GET /api/external/transcripts/:id/status` until `completed` or `failed`
+6. [ ] Display the returned transcript segments to the user

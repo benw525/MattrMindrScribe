@@ -57,6 +57,7 @@ A full-stack application for managing legal case recordings/transcripts. Feature
 - `server/speakerRefinement.ts` - GPT-4o speaker refinement (analyzes transcript text to correct speaker misattributions)
 - `server/routes/folders.ts` - Folder CRUD + move transcripts + MattrMindr case linking
 - `server/routes/mattrmindr.ts` - MattrMindr integration API (connect, disconnect, status, case search proxy, send files)
+- `server/routes/external.ts` - External API for inbound integrations (auth, receive files for transcription, transcription status)
 - `server/replit_integrations/` - OpenAI AI Integrations (audio, chat, image, batch utilities)
 
 ## Routes
@@ -97,6 +98,9 @@ A full-stack application for managing legal case recordings/transcripts. Feature
 - `GET /api/mattrmindr/cases?q=` - Search MattrMindr cases (proxied)
 - `POST /api/mattrmindr/send/:folderId` - Send folder contents to linked MattrMindr case
 - `POST /api/mattrmindr/send/:folderId/confirm` - Confirm send with file replacements
+- `POST /api/external/auth` - External auth (for MattrMindr inbound connections)
+- `POST /api/external/receive` - Receive file URL from MattrMindr for transcription
+- `GET /api/external/transcripts/:id/status` - Poll transcription status (for external callers)
 - `POST /api/media/token` - Get short-lived media access token (authenticated)
 - `GET /api/media/:filename?token=` - Serve media file with secure token
 
@@ -130,7 +134,8 @@ A full-stack application for managing legal case recordings/transcripts. Feature
 - Case linking: When creating a folder, users can search MattrMindr cases and link the folder to a case
 - Sending: Folders linked to a case have a "Send to MattrMindr" option that sends all completed transcripts (with segments, versions, summaries, pipeline log) to the MattrMindr case
 - Conflict detection: If a file with the same name exists in MattrMindr, user is prompted to choose which files to replace
-- API contract for MattrMindr is documented in `mattrmindr-api-contract.md`
+- Inbound: MattrMindr can send files to MattrMindrScribe for transcription via `POST /api/external/receive` (provides a download URL, Scribe fetches and runs the pipeline); MattrMindr polls status via `GET /api/external/transcripts/:id/status`
+- API contract for MattrMindr is documented in `mattrmindr-api-contract.md` (covers both outbound and inbound directions)
 - All MattrMindr API calls are proxied through the backend (server-to-server), no direct browser-to-MattrMindr requests
 
 ## Development

@@ -10,6 +10,7 @@ import authRoutes from './routes/auth.js';
 import transcriptRoutes from './routes/transcripts.js';
 import folderRoutes from './routes/folders.js';
 import mattrmindrRoutes from './routes/mattrmindr.js';
+import externalRoutes from './routes/external.js';
 import { authenticateToken } from './middleware/auth.js';
 import pool from './db.js';
 import { deduplicateExistingSegments } from './transcription.js';
@@ -117,6 +118,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/transcripts', transcriptRoutes);
 app.use('/api/folders', folderRoutes);
 app.use('/api/mattrmindr', mattrmindrRoutes);
+app.use('/api/external', externalRoutes);
 
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
