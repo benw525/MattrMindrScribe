@@ -55,6 +55,8 @@ export interface Folder {
   name: string;
   caseNumber: string;
   parentId: string | null;
+  mattrmindrCaseId?: string | null;
+  mattrmindrCaseName?: string | null;
 }
 
 export interface UploadEntry {

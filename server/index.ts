@@ -9,6 +9,7 @@ import { isR2Url, getR2KeyFromUrl, getR2PublicUrl, getPresignedDownloadUrl } fro
 import authRoutes from './routes/auth.js';
 import transcriptRoutes from './routes/transcripts.js';
 import folderRoutes from './routes/folders.js';
+import mattrmindrRoutes from './routes/mattrmindr.js';
 import { authenticateToken } from './middleware/auth.js';
 import pool from './db.js';
 import { deduplicateExistingSegments } from './transcription.js';
@@ -115,6 +116,7 @@ app.get('/api/media/:filename', async (req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/transcripts', transcriptRoutes);
 app.use('/api/folders', folderRoutes);
+app.use('/api/mattrmindr', mattrmindrRoutes);
 
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
@@ -159,6 +161,26 @@ pool.query(`
   ALTER TABLE transcripts ADD COLUMN IF NOT EXISTS pipeline_log JSONB DEFAULT NULL;
 `).catch((err: any) => {
   if (!err.message.includes('already exists')) console.error('Migration error:', err.message);
+});
+
+pool.query(`
+  CREATE TABLE IF NOT EXISTS mattrmindr_connections (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    base_url TEXT NOT NULL,
+    email VARCHAR(255) NOT NULL,
+    auth_token TEXT NOT NULL,
+    connected_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW(),
+    UNIQUE(user_id)
+  );
+`).catch((err: any) => console.error('Migration error (mattrmindr_connections):', err.message));
+
+pool.query(`
+  ALTER TABLE folders ADD COLUMN IF NOT EXISTS mattrmindr_case_id VARCHAR(255) DEFAULT NULL;
+  ALTER TABLE folders ADD COLUMN IF NOT EXISTS mattrmindr_case_name VARCHAR(255) DEFAULT NULL;
+`).catch((err: any) => {
+  if (!err.message.includes('already exists')) console.error('Migration error (folders mattrmindr):', err.message);
 });
 
 async function seedAdminAccounts() {

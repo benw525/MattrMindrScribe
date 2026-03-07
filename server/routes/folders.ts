@@ -18,6 +18,8 @@ router.get('/', async (req: AuthRequest, res: Response) => {
       name: f.name,
       caseNumber: f.case_number,
       parentId: f.parent_id,
+      mattrmindrCaseId: f.mattrmindr_case_id || null,
+      mattrmindrCaseName: f.mattrmindr_case_name || null,
     }));
 
     res.json(folders);
@@ -29,16 +31,16 @@ router.get('/', async (req: AuthRequest, res: Response) => {
 
 router.post('/', async (req: AuthRequest, res: Response) => {
   try {
-    const { name, caseNumber, parentId } = req.body;
+    const { name, caseNumber, parentId, mattrmindrCaseId, mattrmindrCaseName } = req.body;
 
     if (!name) {
       return res.status(400).json({ error: 'Folder name is required' });
     }
 
     const result = await pool.query(
-      `INSERT INTO folders (name, case_number, parent_id, user_id)
-       VALUES ($1, $2, $3, $4) RETURNING *`,
-      [name, caseNumber || null, parentId || null, req.userId]
+      `INSERT INTO folders (name, case_number, parent_id, user_id, mattrmindr_case_id, mattrmindr_case_name)
+       VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+      [name, caseNumber || null, parentId || null, req.userId, mattrmindrCaseId || null, mattrmindrCaseName || null]
     );
 
     const f = result.rows[0];
@@ -47,6 +49,8 @@ router.post('/', async (req: AuthRequest, res: Response) => {
       name: f.name,
       caseNumber: f.case_number,
       parentId: f.parent_id,
+      mattrmindrCaseId: f.mattrmindr_case_id || null,
+      mattrmindrCaseName: f.mattrmindr_case_name || null,
     });
   } catch (err) {
     console.error('Create folder error:', err);
@@ -75,6 +79,8 @@ router.patch('/:id', async (req: AuthRequest, res: Response) => {
       name: f.name,
       caseNumber: f.case_number,
       parentId: f.parent_id,
+      mattrmindrCaseId: f.mattrmindr_case_id || null,
+      mattrmindrCaseName: f.mattrmindr_case_name || null,
     });
   } catch (err) {
     console.error('Update folder error:', err);

@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import React, { useState, useEffect } from 'react';
+import { motion } from 'framer-motion';
 import {
   XIcon,
   SunIcon,
@@ -8,7 +8,10 @@ import {
   KeyIcon,
   ShieldCheckIcon,
   LinkIcon,
-  LogOutIcon } from
+  Link2OffIcon,
+  LogOutIcon,
+  CheckCircleIcon,
+  Loader2Icon } from
 'lucide-react';
 import { useTheme } from '../../hooks/useTheme';
 import { useAuth } from '../../contexts/AuthContext';
@@ -133,6 +136,186 @@ export function ChangePasswordModal({ onClose }: { onClose: () => void }) {
   );
 }
 
+interface MattrMindrStatus {
+  connected: boolean;
+  baseUrl?: string;
+  email?: string;
+  connectedAt?: string;
+}
+
+function MattrMindrIntegration() {
+  const [status, setStatus] = useState<MattrMindrStatus | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [showForm, setShowForm] = useState(false);
+  const [isConnecting, setIsConnecting] = useState(false);
+  const [isDisconnecting, setIsDisconnecting] = useState(false);
+  const [baseUrl, setBaseUrl] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+
+  useEffect(() => {
+    api.mattrmindr.status()
+      .then((data: MattrMindrStatus) => setStatus(data))
+      .catch(() => setStatus({ connected: false }))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const handleConnect = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!baseUrl || !email || !password) {
+      toast.error('Please fill in all fields');
+      return;
+    }
+    setIsConnecting(true);
+    try {
+      await api.mattrmindr.connect(baseUrl, email, password);
+      const data = await api.mattrmindr.status();
+      setStatus(data);
+      setShowForm(false);
+      setBaseUrl('');
+      setEmail('');
+      setPassword('');
+      toast.success('Connected to MattrMindr successfully');
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to connect to MattrMindr');
+    } finally {
+      setIsConnecting(false);
+    }
+  };
+
+  const handleDisconnect = async () => {
+    setIsDisconnecting(true);
+    try {
+      await api.mattrmindr.disconnect();
+      setStatus({ connected: false });
+      toast.success('Disconnected from MattrMindr');
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to disconnect');
+    } finally {
+      setIsDisconnecting(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-700">
+        <p className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2">
+          Integrations
+        </p>
+        <div className="flex items-center gap-2 text-xs text-slate-400 py-2">
+          <Loader2Icon className="h-4 w-4 animate-spin" />
+          Checking connection...
+        </div>
+      </div>
+    );
+  }
+
+  if (status?.connected) {
+    return (
+      <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-700">
+        <p className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2">
+          Integrations
+        </p>
+        <div className="rounded-lg bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 p-3 space-y-2">
+          <div className="flex items-center gap-2">
+            <CheckCircleIcon className="h-4 w-4 text-green-600 dark:text-green-400" />
+            <span className="text-xs font-medium text-green-700 dark:text-green-300">MattrMindr Connected</span>
+          </div>
+          <div className="space-y-1 text-xs text-slate-600 dark:text-slate-400">
+            <div className="flex items-center gap-1.5">
+              <LinkIcon className="h-3 w-3" />
+              <span className="truncate">{status.baseUrl}</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <MailIcon className="h-3 w-3" />
+              <span>{status.email}</span>
+            </div>
+            {status.connectedAt && (
+              <div className="text-[10px] text-slate-400 dark:text-slate-500 mt-1">
+                Connected {new Date(status.connectedAt).toLocaleDateString()}
+              </div>
+            )}
+          </div>
+          <button
+            onClick={handleDisconnect}
+            disabled={isDisconnecting}
+            className="w-full flex items-center justify-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/40 border border-red-200 dark:border-red-800 transition-colors disabled:opacity-50">
+            {isDisconnecting ? <Loader2Icon className="h-3.5 w-3.5 animate-spin" /> : <Link2OffIcon className="h-3.5 w-3.5" />}
+            {isDisconnecting ? 'Disconnecting...' : 'Disconnect'}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-700">
+      <p className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2">
+        Integrations
+      </p>
+      {!showForm ? (
+        <button
+          onClick={() => setShowForm(true)}
+          className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-900/30 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-colors text-left">
+          <LinkIcon className="h-4 w-4" />
+          Link to MattrMindr
+        </button>
+      ) : (
+        <form onSubmit={handleConnect} className="space-y-2.5" noValidate>
+          <div>
+            <label className="block text-[10px] font-medium text-slate-500 dark:text-slate-400 mb-0.5">
+              MattrMindr URL
+            </label>
+            <input
+              type="url"
+              value={baseUrl}
+              onChange={(e) => setBaseUrl(e.target.value)}
+              placeholder="https://your-mattrmindr.replit.app"
+              className="w-full px-2.5 py-1.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent" />
+          </div>
+          <div>
+            <label className="block text-[10px] font-medium text-slate-500 dark:text-slate-400 mb-0.5">
+              Email
+            </label>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="you@example.com"
+              className="w-full px-2.5 py-1.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent" />
+          </div>
+          <div>
+            <label className="block text-[10px] font-medium text-slate-500 dark:text-slate-400 mb-0.5">
+              Password
+            </label>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Enter password"
+              className="w-full px-2.5 py-1.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent" />
+          </div>
+          <div className="flex gap-2 pt-0.5">
+            <button
+              type="submit"
+              disabled={isConnecting}
+              className="flex-1 flex items-center justify-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-70 text-white text-xs font-medium py-1.5 rounded-lg transition-colors">
+              {isConnecting ? <Loader2Icon className="h-3.5 w-3.5 animate-spin" /> : <LinkIcon className="h-3.5 w-3.5" />}
+              {isConnecting ? 'Connecting...' : 'Connect'}
+            </button>
+            <button
+              type="button"
+              onClick={() => { setShowForm(false); setBaseUrl(''); setEmail(''); setPassword(''); }}
+              className="flex-1 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-300 text-xs font-medium py-1.5 rounded-lg transition-colors">
+              Cancel
+            </button>
+          </div>
+        </form>
+      )}
+    </div>
+  );
+}
+
 export function SettingsPanel({ onClose, onChangePassword }: SettingsPanelProps) {
   const { theme, setTheme } = useTheme();
   const { user, logout } = useAuth();
@@ -230,20 +413,7 @@ export function SettingsPanel({ onClose, onChangePassword }: SettingsPanelProps)
           </div>
         </div>
 
-        <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-700">
-          <p className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2">
-            Integrations
-          </p>
-          <button
-            onClick={() => {
-              toast.info('MattrMindr linking flow would open here');
-              onClose();
-            }}
-            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-900/30 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-colors text-left">
-            <LinkIcon className="h-4 w-4" />
-            Link to MattrMindr
-          </button>
-        </div>
+        <MattrMindrIntegration />
 
         <div className="px-4 py-3">
           <button

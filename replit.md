@@ -55,7 +55,8 @@ A full-stack application for managing legal case recordings/transcripts. Feature
 - `server/transcription.ts` - AI transcription pipeline (ffmpeg conversion, chunking, Whisper API, 3-step diarization, R2 download support)
 - `server/diarization.ts` - AssemblyAI speaker diarization (upload audio, get speaker labels, map onto Whisper segments)
 - `server/speakerRefinement.ts` - GPT-4o speaker refinement (analyzes transcript text to correct speaker misattributions)
-- `server/routes/folders.ts` - Folder CRUD + move transcripts
+- `server/routes/folders.ts` - Folder CRUD + move transcripts + MattrMindr case linking
+- `server/routes/mattrmindr.ts` - MattrMindr integration API (connect, disconnect, status, case search proxy, send files)
 - `server/replit_integrations/` - OpenAI AI Integrations (audio, chat, image, batch utilities)
 
 ## Routes
@@ -90,6 +91,12 @@ A full-stack application for managing legal case recordings/transcripts. Feature
 - `PATCH /api/folders/:id` - Update folder
 - `DELETE /api/folders/:id` - Delete folder
 - `POST /api/folders/move-transcripts` - Move transcripts
+- `POST /api/mattrmindr/connect` - Connect to MattrMindr (baseUrl, email, password)
+- `GET /api/mattrmindr/status` - Get MattrMindr connection status
+- `DELETE /api/mattrmindr/disconnect` - Disconnect MattrMindr
+- `GET /api/mattrmindr/cases?q=` - Search MattrMindr cases (proxied)
+- `POST /api/mattrmindr/send/:folderId` - Send folder contents to linked MattrMindr case
+- `POST /api/mattrmindr/send/:folderId/confirm` - Confirm send with file replacements
 - `POST /api/media/token` - Get short-lived media access token (authenticated)
 - `GET /api/media/:filename?token=` - Serve media file with secure token
 
@@ -102,6 +109,8 @@ A full-stack application for managing legal case recordings/transcripts. Feature
 - `transcript_versions` - Version snapshots
 - `transcript_summaries` - AI-generated legal summaries (per-agent, per-transcript)
 - `transcripts.pipeline_log` - JSONB column storing per-step results (whisper, diarization, refinement) with status, stats, and errors
+- `mattrmindr_connections` - MattrMindr integration connections (one per user, stores base_url, email, auth_token)
+- `folders.mattrmindr_case_id` / `folders.mattrmindr_case_name` - Links a folder to a MattrMindr case
 
 ## Cloudflare R2 Storage
 
@@ -113,6 +122,16 @@ A full-stack application for managing legal case recordings/transcripts. Feature
 - Transcription pipeline downloads R2 files to temp dir before processing, cleans up after
 - Falls back to local disk storage when R2 is not configured
 - Bucket name is normalized to lowercase (R2 requirement)
+
+## MattrMindr Integration
+
+- MattrMindrScribe connects to an external MattrMindr case management server via API
+- Connection: User provides MattrMindr URL, email, password in Settings; backend authenticates and stores the token
+- Case linking: When creating a folder, users can search MattrMindr cases and link the folder to a case
+- Sending: Folders linked to a case have a "Send to MattrMindr" option that sends all completed transcripts (with segments, versions, summaries, pipeline log) to the MattrMindr case
+- Conflict detection: If a file with the same name exists in MattrMindr, user is prompted to choose which files to replace
+- API contract for MattrMindr is documented in `mattrmindr-api-contract.md`
+- All MattrMindr API calls are proxied through the backend (server-to-server), no direct browser-to-MattrMindr requests
 
 ## Development
 

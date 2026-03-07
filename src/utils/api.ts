@@ -157,12 +157,23 @@ export const api = {
   },
   folders: {
     list: () => request('/folders'),
-    create: (name: string, caseNumber?: string, parentId?: string | null) =>
-      request('/folders', { method: 'POST', body: JSON.stringify({ name, caseNumber, parentId }) }),
+    create: (name: string, caseNumber?: string, parentId?: string | null, mattrmindrCaseId?: string | null, mattrmindrCaseName?: string | null) =>
+      request('/folders', { method: 'POST', body: JSON.stringify({ name, caseNumber, parentId, mattrmindrCaseId, mattrmindrCaseName }) }),
     update: (id: string, updates: Record<string, any>) =>
       request(`/folders/${id}`, { method: 'PATCH', body: JSON.stringify(updates) }),
     delete: (id: string) => request(`/folders/${id}`, { method: 'DELETE' }),
     moveTranscripts: (transcriptIds: string[], folderId: string | null) =>
       request('/folders/move-transcripts', { method: 'POST', body: JSON.stringify({ transcriptIds, folderId }) }),
+  },
+  mattrmindr: {
+    connect: (baseUrl: string, email: string, password: string) =>
+      request('/mattrmindr/connect', { method: 'POST', body: JSON.stringify({ baseUrl, email, password }) }),
+    status: () => request('/mattrmindr/status'),
+    disconnect: () => request('/mattrmindr/disconnect', { method: 'DELETE' }),
+    searchCases: (query: string) => request(`/mattrmindr/cases?q=${encodeURIComponent(query)}`),
+    sendToCase: (folderId: string) =>
+      request(`/mattrmindr/send/${folderId}`, { method: 'POST' }),
+    confirmSend: (folderId: string, replaceFileIds: Record<string, string>) =>
+      request(`/mattrmindr/send/${folderId}/confirm`, { method: 'POST', body: JSON.stringify({ replaceFileIds }) }),
   },
 };
