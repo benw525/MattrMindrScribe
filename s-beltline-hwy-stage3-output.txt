@@ -1,153 +1,160 @@
 S Beltline Hwy.m4a — Stage 3 (Claude Opus 4.6) Output
 =====================================================
-Total segments: 965
+Transcript ID: 3d6f4684-ca46-4854-896a-d7befbc479e7
+Processed: March 8, 2026 (completed 21:23 UTC)
+Total segments: 948
 
-Speakers identified: Speaker 1, Speaker 2, Speaker 3, Speaker 4, Speaker 5
+Speakers identified:
+  Speaker 1: 390 segments
+  Speaker 2: 10 segments
+  Speaker 3: 175 segments
+  Speaker 4: 27 segments
+  Speaker 5: 346 segments
 
---- TRANSCRIPT ---
+--- FULL TRANSCRIPT ---
 
 [0:00] Speaker 1: Okay.
 [0:01] Speaker 1: I'm good.
 [0:02] Speaker 1: Stand by please.
-[0:03] Speaker 1: This begins the video deposition of Barry Porter in the manner of Eric and Tori Turner,
-[0:12] Speaker 2: excuse me, versus Chong Sue Thwaites.
-[0:19] Speaker 2: We are now on the record, the time is 1.33 p.m., the date is March 6, 2026.
-[0:33] Speaker 2: Would counsel please identify yourself and state whom you represent?
-[0:38] Speaker 3: Alexander Kirkland here for the plaintiff.
+[0:03] Speaker 1: This begins the video deposition of Barry Porter in the manner of Eric and Torrey,
+[0:10] Speaker 2: um, Turner, excuse me, versus Chong Sue Thwaites.
+[0:20] Speaker 2: We are now on the record, the time is 1.33 p.m., the date is March 6th, 2026.
+[0:32] Speaker 2: Would counsel please identify yourself and state whom you represent?
+[0:37] Speaker 3: Alexander Kirkland here for the plaintiff.
 [0:40] Speaker 4: Ben Warren for defendant.
-[0:42] Speaker 2: Would you raise your hand please?
-[0:47] Speaker 2: Excuse me.
-[0:48] Speaker 2: Do you swear or affirm the testimony you're about to give in this cause will be the truth,
+[0:41] Speaker 4: Would you raise your hand please?
+[0:42] Speaker 4: Excuse me.
+[0:43] Speaker 4: Do you swear or affirm the testimony you're about to give in this cause?
+[0:44] Speaker 2: I do.
+[0:45] Speaker 2: Would you raise your hand please?
+[0:46] Speaker 2: Excuse me.
+[0:47] Speaker 2: Do you swear or affirm the testimony you're about to give in this cause will be the truth,
 [0:51] Speaker 2: the whole truth, and nothing but the truth, so be God?
 [0:54] Speaker 2: I do.
 [0:55] Speaker 2: Are you sure?
 [0:56] Speaker 4: Congratulations.
 [0:57] Speaker 4: Yes.
-[1:03] Speaker 3: Barry, we met briefly a moment ago for the first time.
-[1:06] Speaker 3: If you could, this is being videotaped for a jury, potentially.
-[1:11] Speaker 5: Just state your full name for the record.
-[1:13] Speaker 1: I'm Barry E. Porter.
-[1:16] Speaker 5: And you go by Barry?
-[1:17] Speaker 5: I do.
-[1:18] Speaker 3: Okay.
-[1:19] Speaker 3: Barry, have you ever given a deposition before?
-[1:21] Speaker 1: I have not.
+[0:58] Speaker 3: Barry, we met briefly a moment ago for the first time, if you could, this is being videotaped
+[1:08] Speaker 3: for a jury, potentially, just state your full name for the record.
+[1:12] Speaker 1: I'm Barry E. Porter.
+[1:14] Speaker 5: Okay.
+[1:15] Speaker 5: And you go by Barry?
+[1:16] Speaker 5: I do.
+[1:17] Speaker 3: Okay.
+[1:18] Speaker 3: Barry, have you ever given a deposition before?
+[1:21] Speaker 1: I've not.
 [1:22] Speaker 3: Okay.
-[1:23] Speaker 3: So, the main purpose of this is a discovery deposition in the matter involving a car wreck
-[1:31] Speaker 3: that occurred on October 12, 2022, in which I believe your mother was involved.
-[1:37] Speaker 5: I've asked you to come here today to give us some information.
-[1:41] Speaker 5: You're under oath.
-[1:43] Speaker 3: If at any point you wish to take a break, that's not a problem.
-[1:46] Speaker 5: We can take a break for any reason.
-[1:48] Speaker 5: Just let me know.
+[1:23] Speaker 3: So, main purpose of this is a discovery deposition in the matter involving a car wreck that occurred
+[1:31] Speaker 3: on October 12th of 2022, in which I believe your mother was involved.
+[1:36] Speaker 5: I've asked you to come here today to give us some information, you're under oath.
+[1:43] Speaker 3: If at any point you wish to take a break, that's not a problem, we can take a break
+[1:46] Speaker 5: for any reason, just let me know.
 [1:49] Speaker 3: All I ask is that if I've already put a question to you, you just answer it before we take
-[1:53] Speaker 5: a break.
-[1:54] Speaker 1: Is that okay?
-[1:55] Speaker 5: Sure.
-[1:56] Speaker 5: Also, everything we say here today is being taken down by a court reporter for that reason.
-[2:00] Speaker 5: Unlike sometimes in conversations where we will nod our head or give a mm-hmm as an affirmative,
+[1:53] Speaker 5: a break, is that okay?
+[1:54] Speaker 5: Sure.
+[1:55] Speaker 5: Also, everything we say here today is being taken down by a court reporter for that reason,
+[1:59] Speaker 5: unlike sometimes in conversations where we will nod our head, give a mm-hmm as an affirmative,
 [2:05] Speaker 5: if you will just make your responses verbal.
-[2:08] Speaker 1: No problem.
-[2:11] Speaker 3: Also, because everything we say is being taken down by a single court reporter, if you will
-[2:15] Speaker 3: wait until I finish asking a question before you answer, I will wait until you finish answering
-[2:19] Speaker 3: before you make your response.
-[2:21] Speaker 1: Okay?
-[2:22] Speaker 1: Okay.
-[2:29] Speaker 3: Also, if I ask you a question that you don't understand or you're not sure what I'm getting
-[2:33] Speaker 3: at, please just let me know and I'll rephrase it.
-[2:35] Speaker 5: I want you to answer questions that you understand.
-[2:38] Speaker 1: Okay?
-[2:40] Speaker 3: Barry, where do you currently live?
-[2:43] Speaker 1: You want the address?
-[2:45] Speaker 5: Yes, please.
+[2:08] Speaker 1: No, no problem.
+[2:10] Speaker 3: Also, because everything we say is being taken down by a single court reporter, if you will
+[2:14] Speaker 3: wait until I finish asking a question before you answer, I will wait until you finish answering
+[2:18] Speaker 3: the question as well, okay?
+[2:20] Speaker 1: Okay.
+[2:28] Speaker 3: Also, if I ask you a question that you don't understand or you're not sure what I'm getting
+[2:32] Speaker 3: at, please just let me know and I'll rephrase it.
+[2:34] Speaker 5: I want you to answer questions that you understand, okay?
+[2:37] Speaker 5: Sure.
+[2:41] Speaker 3: Barry, where do you currently live?
+[2:44] Speaker 1: You want the address?
+[2:45] Speaker 1: Yes, please.
 [2:46] Speaker 1: 4321 Benton Spur Road, Mobile.
-[2:51] Speaker 3: Does anyone else live with you at that address?
+[2:53] Speaker 3: Does anyone else live with you at that address?
 [2:55] Speaker 1: My wife and my youngest son.
 [2:58] Speaker 5: What's your wife's name?
-[3:00] Speaker 1: Jennifer Porter.
+[2:59] Speaker 5: Jennifer Porter.
 [3:01] Speaker 5: And how old is your son?
-[3:03] Speaker 1: Eighteen.
-[3:04] Speaker 3: Does he go to high school?
+[3:03] Speaker 1: 18.
+[3:06] Speaker 3: Does he go to high school?
 [3:07] Speaker 1: He does.
-[3:08] Speaker 5: Where at?
+[3:08] Speaker 1: Where?
 [3:09] Speaker 1: McGill-Tillman.
 [3:11] Speaker 3: Does your wife work?
-[3:13] Speaker 1: She does.
-[3:14] Speaker 5: Where at?
-[3:15] Speaker 1: McGill-Tillman.
-[3:16] Speaker 5: What does she do there?
-[3:17] Speaker 1: Teaches.
-[3:18] Speaker 5: Okay.
-[3:19] Speaker 3: What grade or class?
-[3:21] Speaker 1: Um, I want to say 10th grade.
-[3:24] Speaker 1: Algebra.
-[3:26] Speaker 1: Algebra 2.
-[3:28] Speaker 1: I should probably know that specifically.
+[3:12] Speaker 1: She does.
+[3:13] Speaker 5: Where?
+[3:14] Speaker 1: McGill-Tillman.
+[3:15] Speaker 5: What does she do there?
+[3:16] Speaker 1: Teaches.
+[3:18] Speaker 3: What grade or class?
+[3:22] Speaker 1: I want to say 10th grade.
+[3:23] Speaker 1: Algebra.
+[3:25] Speaker 1: Algebra 2.
+[3:27] Speaker 1: I should probably know that specifically.
 [3:30] Speaker 1: Math.
 [3:31] Speaker 1: How's that?
 [3:32] Speaker 5: Bringing back nightmares.
-[3:34] Speaker 5: Um, and do you work, sir?
-[3:37] Speaker 1: I do.
-[3:38] Speaker 1: Where at?
-[3:39] Speaker 1: Armbrick-Jackson.
-[3:40] Speaker 5: What do you do at Armbrick?
-[3:41] Speaker 1: CFO.
-[3:42] Speaker 1: Okay.
-[3:48] Speaker 5: And before that, were you, uh, well, let me rephrase that.
+[3:35] Speaker 5: And do you work, sir?
+[3:36] Speaker 1: I do.
+[3:37] Speaker 5: Where?
+[3:38] Speaker 1: Armbrick-Jackson.
+[3:39] Speaker 5: What do you do at Armbrick?
+[3:40] Speaker 1: CFO.
+[3:47] Speaker 5: And before that, were you...
+[3:50] Speaker 5: Well, let me rephrase that.
 [3:52] Speaker 5: How long have you been at Armbrick-Jackson?
-[3:54] Speaker 1: Uh, November 3rd.
-[3:56] Speaker 1: Recent.
-[3:57] Speaker 1: First day.
-[3:58] Speaker 1: 2025, yeah.
-[3:59] Speaker 5: Okay.
-[4:00] Speaker 5: Where'd you work before that?
-[4:01] Speaker 1: Alabama Orthopedic Clinic.
-[4:03] Speaker 5: What'd you do there?
-[4:04] Speaker 1: A CEO.
-[4:07] Speaker 5: And they're now closed, correct?
-[4:09] Speaker 1: Correct.
-[4:12] Speaker 5: And how long were you at AOC?
-[4:15] Speaker 1: August, I don't know the exact date, 23?
-[4:19] Speaker 1: Okay.
-[4:20] Speaker 1: August 20.
-[4:21] Speaker 5: So 2023?
-[4:22] Speaker 5: 2023, yeah.
-[4:23] Speaker 5: Okay.
-[4:24] Speaker 5: And where'd you work before that?
-[4:25] Speaker 1: Uh, Mobile OBGYN.
-[4:27] Speaker 5: Okay.
-[4:28] Speaker 5: What'd you do there?
-[4:29] Speaker 1: Uh, CEO.
-[4:33] Speaker 5: And the reason I'm asking is if we get in front of a jury,
-[4:36] Speaker 5: I wouldn't be able to ask them if they know you or worked at these places
-[4:39] Speaker 5: while you worked there.
-[4:40] Speaker 5: Sure.
-[4:41] Speaker 5: I know that can seem a little irrelevant.
-[4:43] Speaker 5: Doesn't matter.
-[4:44] Speaker 5: And how long were you at Mobile OBGYN?
-[4:46] Speaker 1: One year.
-[4:47] Speaker 1: About one year.
-[4:49] Speaker 5: Okay.
-[4:50] Speaker 5: So that takes us back to about 2022-ish?
-[4:52] Speaker 5: Mm-hmm.
-[4:53] Speaker 5: Okay.
-[4:54] Speaker 5: Where were you at before then?
-[4:56] Speaker 1: I was with Amazon North America.
-[5:00] Speaker 5: Okay.
-[5:01] Speaker 5: What'd you do there?
-[5:02] Speaker 1: Um, like operations consulting.
+[3:54] Speaker 1: November 3rd.
+[3:56] Speaker 1: My first day.
+[3:57] Speaker 1: 2025, yeah.
+[3:59] Speaker 5: Where'd you work before that?
+[4:00] Speaker 1: Alabama Orthopedic Clinic.
+[4:02] Speaker 5: What'd you do there?
+[4:03] Speaker 1: A CEO.
+[4:05] Speaker 5: And they're now closed, correct?
+[4:07] Speaker 5: Correct.
+[4:10] Speaker 5: And how long were you at AOC?
+[4:13] Speaker 5: August...
+[4:14] Speaker 1: I don't know the exact date.
+[4:15] Speaker 1: 23?
+[4:18] Speaker 1: August 20.
+[4:19] Speaker 1: So 2023?
+[4:20] Speaker 5: 2023, yeah.
+[4:21] Speaker 5: Okay.
+[4:22] Speaker 5: And where'd you work before that?
+[4:24] Speaker 5: Mobile OBGYN.
+[4:26] Speaker 1: And what'd you do there?
+[4:28] Speaker 5: CEO.
+[4:31] Speaker 1: And the reason I'm asking is,
+[4:32] Speaker 5: if we get in front of a jury,
+[4:33] Speaker 5: I'd like to be able to ask them
+[4:34] Speaker 5: if they know you or worked at these places
+[4:37] Speaker 5: while you worked there.
+[4:38] Speaker 5: Sure.
+[4:39] Speaker 5: I know that can seem a little irrelevant.
+[4:41] Speaker 5: Doesn't matter.
+[4:42] Speaker 5: And how long were you at Mobile OBGYN?
+[4:44] Speaker 5: One year.
+[4:45] Speaker 5: About one year.
+[4:47] Speaker 1: Okay.
+[4:48] Speaker 5: So that takes us back to about 2022-ish?
+[4:50] Speaker 5: Mm-hmm.
+[4:51] Speaker 5: Okay.
+[4:52] Speaker 5: Where were you at before then?
+[4:55] Speaker 1: I was with Amazon North America.
+[4:58] Speaker 1: Okay.
+[4:59] Speaker 5: What'd you do there?
+[5:02] Speaker 1: Like operations consulting.
 [5:05] Speaker 5: And how long were you there?
-[5:07] Speaker 1: Uh, about a year and a half, maybe.
+[5:09] Speaker 1: About a year and a half, maybe.
 [5:12] Speaker 1: Yeah, a year and a half.
 [5:14] Speaker 1: Okay.
 [5:15] Speaker 1: And before that?
 [5:18] Speaker 1: What did I do before that?
-[5:20] Speaker 1: I was with USA Health.
-[5:22] Speaker 1: Okay.
+[5:19] Speaker 1: I was with USA Health.
+[5:22] Speaker 5: Okay.
 [5:23] Speaker 5: What'd you do there?
-[5:24] Speaker 1: Uh, ran the service lines for emergency medicine and radiology and pathology.
-[5:30] Speaker 5: And how long were you at USA Health?
-[5:33] Speaker 1: All together, about four years.
+[5:24] Speaker 1: Ran the service lines for emergency medicine
+[5:27] Speaker 1: and radiology and pathology.
+[5:29] Speaker 5: And how long were you at USA Health?
+[5:33] Speaker 1: Altogether about four years.
 [5:37] Speaker 3: Okay.
 [5:43] Speaker 3: Did you attend school locally here?
 [5:45] Speaker 1: I did.
@@ -159,123 +166,112 @@ Speakers identified: Speaker 1, Speaker 2, Speaker 3, Speaker 4, Speaker 5
 [5:52] Speaker 5: And what year did you graduate at LaFleur?
 [5:54] Speaker 1: 95.
 [5:55] Speaker 5: After that, did you have continuing education?
-[5:58] Speaker 1: I did.
-[5:59] Speaker 1: Where?
-[6:00] Speaker 1: Spring Hill College.
-[6:01] Speaker 5: Okay.
-[6:02] Speaker 5: And what'd you study there?
+[5:57] Speaker 5: I did.
+[5:58] Speaker 1: Where?
+[5:59] Speaker 1: Spring Hill College.
+[6:00] Speaker 5: Okay.
+[6:01] Speaker 5: And what'd you study there?
 [6:03] Speaker 1: Psychology.
 [6:05] Speaker 5: Did you get a degree in psychology there?
 [6:08] Speaker 1: I did.
-[6:09] Speaker 5: What'd you study after that?
-[6:11] Speaker 1: Um, well I went to South to do a master's program in counseling psych.
-[6:17] Speaker 1: Okay.
-[6:18] Speaker 1: And then changed from that to a program called Instructional Systems Design.
-[6:23] Speaker 1: Okay.
-[6:24] Speaker 1: And then I got a master's in that.
+[6:09] Speaker 5: What'd you study at school?
+[6:12] Speaker 1: Well, I went to South to do a master's program in counseling psych.
+[6:17] Speaker 1: And then changed from that to a program called Instructional Systems Design.
+[6:22] Speaker 1: Okay.
+[6:23] Speaker 1: And then I got a master's in that.
 [6:26] Speaker 5: What year did you get that degree?
 [6:29] Speaker 1: 2002, I believe.
 [6:32] Speaker 5: And you've been working locally ever since?
-[6:35] Speaker 1: Yeah, except with a stint with Amazon.
-[6:38] Speaker 1: I was in Birmingham for a while and, um, well for most of the time.
+[6:35] Speaker 1: Yeah, except for the stint with Amazon.
+[6:37] Speaker 1: I was in Birmingham for a while and, well, for most of the time.
 [6:43] Speaker 1: Okay.
-[6:52] Speaker 3: You ever been charged with a felony?
-[6:54] Speaker 1: No.
+[6:51] Speaker 3: Have you ever been charged with a felony?
+[6:53] Speaker 3: No.
 [6:59] Speaker 3: Have you ever filed a lawsuit against somebody?
-[7:04] Speaker 1: No.
-[7:05] Speaker 5: Have you ever had a lawsuit filed against you personally?
+[7:03] Speaker 1: No.
+[7:04] Speaker 5: Have you ever had a lawsuit filed against you personally?
 [7:08] Speaker 1: No.
-[7:17] Speaker 5: What's your cell phone number?
-[7:19] Speaker 1: 251-605-1153.
+[7:16] Speaker 5: What's your cell phone number?
+[7:18] Speaker 1: 251-605-1153.
 [7:23] Speaker 3: And who is your cell phone provider carrier?
-[7:27] Speaker 1: AT&T.
-[7:31] Speaker 3: The wreck that we're here about occurred in October of 2022.
-[7:34] Speaker 5: Would that have been your same cell phone number and carrier at that time?
-[7:38] Speaker 1: Cell phone number, yes.
-[7:40] Speaker 1: Um, I think I was with Verizon at that time.
-[7:44] Speaker 5: Is it fair to say that at the time your cell phone provider would have been either AT&T or Verizon?
-[7:50] Speaker 1: I'm pretty sure it was Verizon.
-[7:52] Speaker 1: Okay.
-[7:54] Speaker 1: I think, yeah, for the most part.
-[7:56] Speaker 1: Because I just switched to AT&T maybe less than a year ago.
-[8:03] Speaker 1: Okay.
-[8:11] Speaker 3: Currently, how often do you speak with your mother, Chong Toits?
-[8:19] Speaker 1: Probably at least every other day.
-[8:23] Speaker 3: Would that have been about the same back in 2022 when the wreck occurred?
-[8:29] Speaker 1: Probably every day at that point, I would guess.
-[8:33] Speaker 1: I mean, every other day at least.
-[8:35] Speaker 1: Yeah, I mean, we lived in the same house.
-[8:39] Speaker 3: Okay. At the time, you were living in the same house as your mother?
-[8:42] Speaker 3: Mm-hmm.
-[8:44] Speaker 1: Yes. Yes.
-[8:47] Speaker 5: And when did that living situation change?
-[8:50] Speaker 1: When I moved out? Or when did I get there?
-[8:56] Speaker 5: Well, I guess we'll start with when did your mother stop living with you?
-[9:05] Speaker 1: That would have been 2023.
-[9:13] Speaker 5: What precipitated the change?
-[9:15] Speaker 5: What precipitated the change?
-[9:18] Speaker 1: Well, we were just there in transition.
-[9:20] Speaker 1: We had sold our house, and we were looking to buy another one.
-[9:26] Speaker 5: And you were with your wife at the time, Jennifer?
-[9:28] Speaker 1: Yes.
-[9:29] Speaker 5: Okay.
-[9:30] Speaker 5: How long did you live with your mother for that time period?
-[9:35] Speaker 5: Roughly.
+[7:26] Speaker 1: AT&T.
+[7:30] Speaker 3: The wreck that we're here about occurred in October of 2022.
+[7:33] Speaker 5: Would that have been your same cell phone number and carrier at that time?
+[7:37] Speaker 1: Cell phone number, yes.
+[7:40] Speaker 1: I think I was with Verizon at that time.
+[7:43] Speaker 5: Is it fair to say that at the time your cell phone provider would have been either AT&T or Verizon?
+[7:49] Speaker 5: I'm pretty sure it was Verizon.
+[7:52] Speaker 1: I think, yeah, for the most part.
+[7:55] Speaker 1: Because I just switched to AT&T maybe less than a year ago.
+[8:10] Speaker 3: Currently, how often do you speak with your mother, Chong Toich?
+[8:18] Speaker 1: Probably at least every other day.
+[8:21] Speaker 3: Would that have been about the same back in 2022 when the wreck occurred?
+[8:27] Speaker 1: Probably every day at that point, I would guess.
+[8:31] Speaker 1: I mean, every other day at least.
+[8:33] Speaker 1: Yeah, I mean, we lived in the same house.
+[8:37] Speaker 3: Okay, at the time you were living in the same house as your mother?
+[8:42] Speaker 3: Yes, yes.
+[8:45] Speaker 5: And when did that living situation change?
+[8:48] Speaker 5: When I moved out? Or when did I get there?
+[8:54] Speaker 5: Well, I guess we'll start with when did your mother stop living with you?
+[9:03] Speaker 1: That would have been 2023.
+[9:11] Speaker 5: What precipitated the change?
+[9:14] Speaker 5: What precipitated the change?
+[9:17] Speaker 1: Well, we were just there in transition. We had sold our house and we were looking to buy another one.
+[9:25] Speaker 5: And you were with your wife at the time, Jennifer?
+[9:27] Speaker 5: Yes.
+[9:29] Speaker 5: How long did you live with your mother for that time period?
+[9:34] Speaker 5: Roughly.
 [9:38] Speaker 1: Maybe a year.
-[9:46] Speaker 1: Okay.
+[9:44] Speaker 1: Okay.
 [9:56] Speaker 3: Would that have been the 804 Country Club Court address?
-[9:59] Speaker 3: Yes.
-[10:00] Speaker 5: Okay.
+[9:59] Speaker 5: Yes.
 [10:01] Speaker 5: Do you know how long your mother's lived at that address, roughly?
-[10:06] Speaker 1: No.
+[10:05] Speaker 1: No.
 [10:08] Speaker 1: Maybe.
 [10:09] Speaker 5: Do you know what decade she moved into that?
-[10:11] Speaker 1: Yeah, I want to say it was around 2013.
-[10:15] Speaker 5: Okay.
-[10:19] Speaker 5: And it's okay if that's off by a year.
-[10:21] Speaker 5: I mean, it's not a big deal.
-[10:23] Speaker 5: I'm just trying to establish kind of a timeline.
-[10:25] Speaker 1: Sure.
+[10:12] Speaker 1: I want to say it was around 2013.
+[10:14] Speaker 5: Okay.
+[10:18] Speaker 5: And it's okay if that's off by a year. I mean, it's not a big deal.
+[10:22] Speaker 5: I'm just trying to establish kind of a timeline.
+[10:24] Speaker 1: Sure.
 [10:26] Speaker 5: When did you last live with your mother before that year-long stint, if you recall?
-[10:32] Speaker 1: Um, summer year of senior college.
-[10:41] Speaker 5: Okay.
-[10:42] Speaker 5: Roughly what year would that be?
+[10:35] Speaker 1: Summer year of senior college.
+[10:41] Speaker 5: Roughly what year would that be?
 [10:44] Speaker 1: 988.
 [10:47] Speaker 5: So it had been a little while.
-[10:48] Speaker 5: Yeah.
-[11:01] Speaker 1: Okay.
-[11:11] Speaker 5: Did you speak with your mother or your father or anybody, honestly, about this wreck or the topics that might be covered in this deposition before coming to give the deposition?
-[11:27] Speaker 1: No.
-[11:28] Speaker 5: This did not come up at all between you and your mother?
-[11:31] Speaker 1: I mean, she said I would probably get a call and be deposed.
-[11:34] Speaker 5: Did she say anything about why that might be?
-[11:38] Speaker 1: It's related to this accident.
-[11:40] Speaker 1: Okay.
-[11:41] Speaker 5: Do you have any idea why you're being asked to be deposed in this case?
-[11:49] Speaker 1: Maybe because I was on the scene?
-[11:51] Speaker 5: Okay.
-[11:52] Speaker 1: Yeah.
-[11:53] Speaker 1: I mean, that's what I'm, you know, I'm assuming.
-[11:59] Speaker 5: Have you reviewed any documents or materials prior in preparation for this deposition?
-[12:05] Speaker 1: No.
-[12:06] Speaker 3: Okay.
-[12:07] Speaker 3: Have you ever seen the accident report involved in this wreck?
-[12:09] Speaker 3: No.
-[12:10] Speaker 5: Okay.
-[12:11] Speaker 5: I'm going to make this a plan to exhibit one.
-[12:13] Speaker 3: It's a copy of the crash report in this case.
+[10:48] Speaker 1: Yeah.
+[10:49] Speaker 1: Okay.
+[11:10] Speaker 5: Did you speak with your mother or your father or anybody, honestly,
+[11:16] Speaker 5: about this wreck or the topics that might be covered in this deposition
+[11:22] Speaker 5: before coming to give the deposition?
+[11:26] Speaker 1: No.
+[11:27] Speaker 5: This did not come up at all between you and your mother?
+[11:30] Speaker 1: I mean, she said I would probably get a call and be deposed.
+[11:33] Speaker 5: Did she say anything about why that might be?
+[11:37] Speaker 1: That's related to this accident.
+[11:39] Speaker 5: Okay. Do you have any idea why you're being asked to be deposed?
+[11:47] Speaker 1: Maybe because I was on the scene?
+[11:50] Speaker 1: Okay.
+[11:51] Speaker 5: I'm just curious.
+[11:52] Speaker 1: I mean, that's why I'm on the scene.
+[11:58] Speaker 5: Have you reviewed any documents or materials prior in preparation for this deposition?
+[12:04] Speaker 5: No.
+[12:05] Speaker 3: Have you ever seen the accident report?
+[12:07] Speaker 3: No.
+[12:08] Speaker 3: This wreck.
+[12:09] Speaker 5: I'm going to make this plan to exhibit one.
+[12:12] Speaker 3: Exhibit one is a copy of the crash report in this case.
 [12:20] Speaker 4: I assume it's been highly edited.
 [12:22] Speaker 5: Yes.
-[12:28] Speaker 5: Okay.
+[12:43] Speaker 5: Done.
 [12:44] Speaker 5: Wow, look at this.
-[12:46] Speaker 3: Yeah, I'm going to ask you something.
-[12:48] Speaker 1: Oh, okay.
-[12:49] Speaker 4: I figured you needed to reference it since you've never seen it before.
-[12:52] Speaker 1: Yeah.
-[12:58] Speaker 1: Okay.
-[13:04] Speaker 3: All right.
-[13:05] Speaker 3: So this is the standard.
-[13:06] Speaker 3: This is the standard, as you see at the top, Alabama Uniformed Traffic Crash Report.
+[12:45] Speaker 3: Yeah, I'm going to ask you something.
+[12:47] Speaker 1: Oh, okay.
+[12:48] Speaker 4: I figured you needed to reference it since you've never seen it before.
+[12:51] Speaker 4: Yeah.
+[13:03] Speaker 3: All right, so this is the standard.
+[13:05] Speaker 3: This is the standard, as you see at the top, Alabama Uniformed Traffic Crash Report.
 [13:10] Speaker 3: And you've testified you've never seen this document before?
 [13:13] Speaker 1: I have not.
 [13:14] Speaker 5: Okay.
@@ -292,7 +288,7 @@ Speakers identified: Speaker 1, Speaker 2, Speaker 3, Speaker 4, Speaker 5
 [14:02] Speaker 3: Traffic was slowing when Unit 1, which is Ms. Thwaites, struck the rear of Unit 2, causing Unit 2 to strike the rear of Unit 3.
 [14:11] Speaker 5: Do you have any basis to dispute the narrative of the wreck as your mother striking the rear of my client's vehicle and then causing her to strike the rear of another vehicle?
 [14:26] Speaker 1: I don't know what you're asking me.
-[14:27] Speaker 1: Yes, sir.
+[14:27] Speaker 5: Yes, sir.
 [14:28] Speaker 5: I'm asking you that right now our understanding of the wreck is that your mother rear-ended my client and then caused Ms. Turner's vehicle to hit a third vehicle.
 [14:38] Speaker 5: Do you have any basis to dispute that claim?
 [14:41] Speaker 1: That wasn't fair, no.
@@ -497,7 +493,7 @@ Speakers identified: Speaker 1, Speaker 2, Speaker 3, Speaker 4, Speaker 5
 [25:36] Speaker 1: you know, what was going on after the surgery
 [25:39] Speaker 1: and sort of what to expect and that sort of thing.
 [25:42] Speaker 5: Okay.
-[25:47] Speaker 5: Any other doctors particularly that she asks you to attend the visits for,
+[25:47] Speaker 3: Any other doctors particularly that she asks you to attend the visits for,
 [25:50] Speaker 5: would you go with her?
 [25:52] Speaker 1: I've gone to a neurologist with her.
 [25:54] Speaker 5: What's that for?
@@ -525,7 +521,7 @@ Speakers identified: Speaker 1, Speaker 2, Speaker 3, Speaker 4, Speaker 5
 [27:21] Speaker 1: Probably close to a year.
 [27:24] Speaker 5: From a year ago from today?
 [27:26] Speaker 1: Yeah, probably.
-[27:28] Speaker 3: Now, do you remember when is the...
+[27:28] Speaker 5: Now, do you remember when is the...
 [27:30] Speaker 5: I guess the first time you went to see Dr. Hecker with your mother would have been shortly after this wreck?
 [27:35] Speaker 5: Yes.
 [27:42] Speaker 3: Who was the cardiologist, if you recall, that you would go see?
@@ -847,107 +843,101 @@ Speakers identified: Speaker 1, Speaker 2, Speaker 3, Speaker 4, Speaker 5
 [56:40] Speaker 5: did she report to you when she was going to give her deposition, did she let you know,
 [56:43] Speaker 1: I recall her, yes, telling me she was going to meet with the lawyers, okay, did she ever talk
 [56:48] Speaker 1: to you about how it went, she really didn't say much about it, she said it was fine,
-[56:54] Speaker 1: did you ask her, yeah, I said how was your, how did the lawyer thing go and she said it went fine,
-[56:59] Speaker 5: okay, I videotaped your mother's deposition, I'm videotaping, sure, and there's some portions
-[57:08] Speaker 5: that we went off the record but I'm telling you that it was my opinion, my observation,
+[56:54] Speaker 1: should I ask her, yeah, I said how was your, how did the lawyer thing go and she said it went fine,
+[56:59] Speaker 5: okay, I videotaped your mother's deposition, I'm videotaping, sure, and there's some portions that
+[57:09] Speaker 5: we went off the record but I'm telling you that it was my opinion, my observation,
 [57:16] Speaker 5: that your mother appeared highly confused, had difficulty recalling basic things,
 [57:27] Speaker 5: at one point did not forget where she put her reading glasses but forgot that she needed glasses
 [57:36] Speaker 5: to read as she was trying to read documents and was having a lot of difficulty and then was prompted
-[57:45] Speaker 5: and remembered that she needs glasses to read. Have you observed anything like that
-[57:50] Speaker 5: in your mother's behavior as far as confusion, significant memory problems?
-[57:56] Speaker 1: Following the accident probably over the past couple of years, yeah, but that was expected
-[58:01] Speaker 1: after open heart that Hashimi said that, you know, usually when somebody has a quadruple bypass that
-[58:07] Speaker 1: they are going to begin experiencing things, confusion at times, especially when they're
+[57:45] Speaker 5: and remembered that she needs glasses to read. Have you observed anything like that in your
+[57:50] Speaker 5: mother's behavior as far as confusion, significant memory problems? Following the accident probably
+[57:58] Speaker 1: over the past couple of years, yeah, but that was expected after open heart that
+[58:03] Speaker 1: Hashimi said that, you know, usually when somebody has a quadruple bypass that they
+[58:08] Speaker 1: are going to begin experiencing things, confusion at times, especially when they're
 [58:14] Speaker 1: maybe a little rattled or nervous, composure could, you know, compromise at times,
 [58:23] Speaker 1: mostly just because it's, you know, it's a major trauma as he put it, it's one that, you know,
 [58:31] Speaker 1: probably similar to, you know, smashing your face even because it leaves you sort of in a vulnerable
 [58:41] Speaker 1: state for months, a year after. But yeah, I think since she had the,
 [58:49] Speaker 1: if whatever they're calling it, seizure, stroke, she's definitely, I think because of maybe the
 [58:57] Speaker 1: medication, become a little more clumsy or if we want to use that word or forgetful even sometimes
-[59:06] Speaker 1: with some things that seem like she probably shouldn't.
-[59:11] Speaker 5: Do you believe, again, not as an expert, just in your own personal opinion,
-[59:16] Speaker 5: that it is safe for your mother to be driving currently?
-[59:22] Speaker 1: I mean, I've ridden with her. I don't think she's any more dangerous than any other,
-[59:27] Speaker 1: I don't want to say this the wrong way, I mean, 70 some odd year old person.
+[59:06] Speaker 1: with some things that seem like she probably shouldn't. Do you believe,
+[59:13] Speaker 5: again, not as an expert, just in your own personal opinion, that it is safe for your
+[59:17] Speaker 1: mother to be driving currently? I mean, I've ridden with her. I don't think she's any more
+[59:25] Speaker 1: dangerous than any other, I don't want to say this the wrong way, I mean, 70 some odd year old person.
 [59:31] Speaker 1: But you're asking somebody who thinks that everybody should not drive after 70, so
-[59:36] Speaker 1: it's for safety. But then again, it's not practical to assign everybody a bus pass
-[59:41] Speaker 1: and tell them to get on the bus either.
-[59:46] Speaker 1: So I guess in the sense of independence, I'm knowing to tell her she can't,
-[59:49] Speaker 1: if the doctor's cleared her and the licensed commissioner and licensor.
+[59:36] Speaker 1: it's for safety. But then again, it's not practical to assign everybody a bus pass and
+[59:41] Speaker 1: tell them to get on the bus either. So I guess in the sense of independence, I'm no one to tell her
+[59:47] Speaker 1: she can't, if the doctor's cleared her and the licensed commissioner and licensor.
 [59:55] Speaker 5: Is it fair to say then that you're personally not going to give an opinion one way or the other?
 [59:59] Speaker 5: Whether or not your mother should be driving, you want to defer to her doctors?
-[60:02] Speaker 5: Yeah, for the most part. I'm not one to impede on her liberty.
-[60:11] Speaker 1: She tries to remain independent.
-[60:14] Speaker 1: I understand that.
-[60:18] Speaker 1: And I think that's, you know, in essence, I mean,
-[60:23] Speaker 1: shit happens, man, you know, I mean, accidents happen.
-[60:26] Speaker 1: And I think that's what this is.
-[60:29] Speaker 1: Quote unquote, a pure accident.
-[60:31] Speaker 1: I think so. It's what it looks like to me.
-[60:40] Speaker 1: Pardon my language, I just don't know how to phrase it.
-[60:42] Speaker 1: Stuff happens, sorry.
-[60:44] Speaker 1: Strike that from the record.
-[60:45] Speaker 1: Can I do that?
-[60:48] Speaker 1: It's OK.
-[61:26] Speaker 3: All right, I'm going to label this plaintiff's exhibit five.
-[61:47] Speaker 3: This is a copy of medical records produced
-[61:50] Speaker 3: from Dr. Zeman's clinic regarding your mother.
-[62:00] Speaker 3: Excuse me.
-[62:10] Speaker 5: Thanks.
+[60:02] Speaker 5: For the most part, I'm not one to impede on her liberty.
+[60:11] Speaker 1: She tries to remain independent. I understand that.
+[60:17] Speaker 1: And I think that's, you know, in essence, I mean, shit happens, man. You know, I mean,
+[60:25] Speaker 1: shit happens, man. You know, I mean, accidents happen. And I think that's what this is.
+[60:32] Speaker 1: Quote unquote, a pure accident.
+[60:34] Speaker 1: Yeah, I think so. It's what it looks like to me.
+[60:43] Speaker 1: Pardon my language. I just don't know how to phrase it. Stuff happens. Sorry.
+[60:47] Speaker 1: Strike that from the record. Can I do that?
+[60:49] Speaker 1: Yeah.
+[60:51] Speaker 5: It's okay.
+[61:19] Speaker 5: Okay.
+[61:41] Speaker 3: All right, I'm going to label this plaintiff's exhibit five.
+[61:45] Speaker 3: This is a copy of medical records produced
+[61:53] Speaker 3: from Dr. Zeman's
+[61:57] Speaker 3: clinic regarding your mother.
+[62:03] Speaker 1: Excuse me.
+[62:09] Speaker 5: Thanks.
 [62:11] Speaker 3: Can you read what those records are dated?
-[62:14] Speaker 1: Uh, visit date 8-1-22.
-[62:21] Speaker 3: OK, so a couple months before the wreck that we're here about today,
-[62:24] Speaker 3: your mother reported to Dr. Zeman that she was having
-[62:27] Speaker 5: essentially partial paralysis of part of her face.
-[62:32] Speaker 3: You aware of that?
+[62:17] Speaker 1: Uh, visit date 8-1-22.
+[62:21] Speaker 3: Okay, so a couple months before the wreck that we're here about today,
+[62:24] Speaker 5: your mother reported to Dr. Zeman that she was having essentially partial paralysis,
+[62:29] Speaker 3: part of her face. You're aware of that?
 [62:33] Speaker 1: No.
 [62:34] Speaker 5: You were living with her at the time?
-[62:38] Speaker 1: 22, yes.
-[62:39] Speaker 1: We would have been moving in around this time.
-[62:44] Speaker 1: I believe.
-[62:48] Speaker 5: And you were in contact with her at that time about every other day at least?
-[62:53] Speaker 5: Yeah.
-[62:54] Speaker 5: If not every day.
-[62:55] Speaker 5: If not every day, yeah.
-[62:56] Speaker 1: OK, and you had no knowledge of this?
-[62:58] Speaker 5: She never told me anything about this.
-[63:06] Speaker 5: There's a tabbed page, I think it's the second or third page there,
-[63:10] Speaker 5: that shows some diagnoses.
+[62:35] Speaker 5: 22, yes.
+[62:37] Speaker 1: Well, we would have been moving in around this time.
+[62:43] Speaker 1: I believe.
+[62:47] Speaker 5: And you were in contact with her at that time about every other day at least?
+[62:51] Speaker 5: Yeah.
+[62:53] Speaker 5: If not every day.
+[62:55] Speaker 1: If not every day, yeah.
+[62:57] Speaker 5: And you had no knowledge of this?
+[62:59] Speaker 1: She never told me anything about this.
+[63:05] Speaker 5: Okay.
+[63:07] Speaker 5: There's a tabbed page,
+[63:09] Speaker 5: I think it's the second or third page there,
+[63:11] Speaker 5: that shows some diagnoses.
 [63:15] Speaker 5: Did you see that?
-[63:16] Speaker 1: I did, yeah.
+[63:17] Speaker 1: I did, yeah.
 [63:29] Speaker 5: Had you known that your mother was experiencing those symptoms a couple months beforehand,
-[63:34] Speaker 5: would that have changed your opinion on whether or not she should have been driving at the time?
+[63:33] Speaker 5: would that have changed your opinion on whether or not she should have been driving this time?
 [63:39] Speaker 1: Well, I think this would have been probably the blood pressure issues she was having.
-[63:45] Speaker 5: What do you mean by that?
-[63:46] Speaker 1: So when they did the open heart, they had a tough time with trying,
-[63:50] Speaker 1: because prior to the heart attack that prompted having to do this bypass surgery,
-[63:59] Speaker 1: she was experiencing some elevated blood pressure.
-[64:02] Speaker 1: I can recall her taking blood pressure all day.
-[64:06] Speaker 1: She always had this blood pressure thing and was writing it down.
-[64:09] Speaker 1: But I think that was probably associated with all the blockages.
-[64:13] Speaker 1: And so, that would have, so following the surgery,
-[64:20] Speaker 1: she had all these medications she was taking prior to the surgery,
-[64:23] Speaker 1: and they had a tough time getting the blood pressure stuff right.
-[64:29] Speaker 1: And then they had a couple of heart failure prevention medicines
-[64:34] Speaker 1: that were sort of interacting with them.
-[64:36] Speaker 1: And so, I remember her dealing with that,
-[64:40] Speaker 1: but I didn't know that she had any sort of facial, as you said, paralysis, paresis.
-[64:48] Speaker 1: I don't know what paresis is, but I'm guessing numbness maybe.
-[64:53] Speaker 1: Well, it says it right there, numbness to face.
-[64:55] Speaker 1: Is it fair to say that you did not go to that doctor?
-[64:57] Speaker 1: No, I did not go to this doctor.
-[64:59] Speaker 1: Okay.
-[65:01] Speaker 1: Mom will go to the doctor anytime she feels like something's, you know.
-[65:07] Speaker 5: Going on?
-[65:08] Speaker 5: Yeah.
-[65:10] Speaker 5: Okay.
-[65:10] Speaker 1: So, I don't know if it's fair to say that you did not go to that doctor.
-[65:21] Speaker 5: No, I did not go to this doctor.
+[63:43] Speaker 1: What do you mean by that?
+[63:45] Speaker 1: So when they did the open heart,
+[63:47] Speaker 1: they had a tough time with trying,
+[63:49] Speaker 1: because prior to the heart attack that prompted having to do this bypass surgery,
+[63:57] Speaker 1: she was experiencing some elevated blood pressure.
+[64:01] Speaker 1: I can recall her taking blood pressure,
+[64:05] Speaker 1: she always had this blood pressure thing and was writing it down.
+[64:11] Speaker 1: But I think that was probably associated with all the blockages.
+[64:21] Speaker 1: So following the surgery,
+[64:23] Speaker 1: she had all these medications she was taking prior to the surgery,
+[64:27] Speaker 1: and they had a tough time getting the blood pressure stuff right,
+[64:33] Speaker 1: and then they had a couple of heart failure prevention medicines
+[64:37] Speaker 1: that were sort of interacting with them, if I remember correctly.
+[64:45] Speaker 1: And so I remember her dealing with that,
+[64:47] Speaker 1: but I didn't know that she had any sort of facial,
+[64:53] Speaker 1: as you said, paralysis, paresis.
+[64:57] Speaker 1: I don't know what paresis is,
+[64:59] Speaker 1: but I'm guessing numbness maybe.
+[65:05] Speaker 1: It says it right there, numbness to face.
+[65:07] Speaker 5: Is it fair to say that you did not go to that doctor?
+[65:10] Speaker 1: No, I did not go to this doctor.
+[65:14] Speaker 1: Mom will go to the doctor anytime she feels like something's, you know.
+[65:20] Speaker 1: Going on?
+[65:21] Speaker 5: Yeah.
 [65:23] Speaker 5: Okay.
-[65:25] Speaker 5: Mom will go to the doctor anytime she feels like something's, you know.
-[65:30] Speaker 5: Other than yourself and your wife who moved in with your mom around the time of the wreck
-[65:52] Speaker 5: Going on?
-[65:31] Speaker 5: Yeah.
+[65:29] Speaker 5: Other than yourself and your wife who moved in with your mom around the time of the wreck
 [65:52] Speaker 5: and I guess it was also in regular contact with her.
 [65:57] Speaker 5: Is there anybody else that I could talk to who would have personal knowledge of her medical
 [66:08] Speaker 5: conditions or treatments around the time of the wreck back in October of 2022 or beforehand?
