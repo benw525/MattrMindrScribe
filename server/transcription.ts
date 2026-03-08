@@ -374,19 +374,31 @@ export async function processTranscription(transcriptId: string): Promise<void> 
 
       await checkCancelled();
 
-      let allSegments: TranscriptSegment[] = [];
-      for (let i = 0; i < chunks.length; i++) {
-        const chunk = chunks[i];
-        await checkCancelled();
-        console.log(`[Transcription] Transcribing chunk ${i + 1}/${chunks.length}...`);
-        try {
-          const segments = await transcribeChunk(chunk.path, chunk.offsetSec);
-          allSegments.push(...segments);
-        } catch (err: any) {
-          console.error(`[Transcription] Chunk ${i + 1} failed:`, err.message);
-          throw new Error(`Transcription failed on chunk ${i + 1}: ${err.message}`);
-        }
+      const WHISPER_CONCURRENCY = 3;
+      const chunkResults: { index: number; segments: TranscriptSegment[] }[] = [];
+      
+      for (let batchStart = 0; batchStart < chunks.length; batchStart += WHISPER_CONCURRENCY) {
+        const batch = chunks.slice(batchStart, batchStart + WHISPER_CONCURRENCY);
+        
+        const batchPromises = batch.map(async (chunk, batchIdx) => {
+          const globalIdx = batchStart + batchIdx;
+          await checkCancelled();
+          console.log(`[Transcription] Transcribing chunk ${globalIdx + 1}/${chunks.length}...`);
+          try {
+            const segments = await transcribeChunk(chunk.path, chunk.offsetSec);
+            return { index: globalIdx, segments };
+          } catch (err: any) {
+            console.error(`[Transcription] Chunk ${globalIdx + 1} failed:`, err.message);
+            throw new Error(`Transcription failed on chunk ${globalIdx + 1}: ${err.message}`);
+          }
+        });
+
+        const batchResults = await Promise.all(batchPromises);
+        chunkResults.push(...batchResults);
       }
+
+      chunkResults.sort((a, b) => a.index - b.index);
+      const allSegments = chunkResults.flatMap(r => r.segments);
       return { segments: deduplicateSegments(allSegments), chunks: chunks.length };
     })();
 
@@ -459,12 +471,21 @@ export async function processTranscription(transcriptId: string): Promise<void> 
 
     await pool.query('DELETE FROM transcript_segments WHERE transcript_id = $1', [transcriptId]);
 
-    for (let i = 0; i < allSegments.length; i++) {
-      const seg = allSegments[i];
+    const BATCH_SIZE = 200;
+    for (let b = 0; b < allSegments.length; b += BATCH_SIZE) {
+      const batch = allSegments.slice(b, b + BATCH_SIZE);
+      const values: any[] = [];
+      const placeholders: string[] = [];
+      for (let i = 0; i < batch.length; i++) {
+        const seg = batch[i];
+        const offset = i * 6;
+        placeholders.push(`($${offset+1}, $${offset+2}, $${offset+3}, $${offset+4}, $${offset+5}, $${offset+6})`);
+        values.push(transcriptId, seg.startTime, seg.endTime, seg.speaker, seg.text, b + i);
+      }
       await pool.query(
         `INSERT INTO transcript_segments (transcript_id, start_time, end_time, speaker, text, segment_order)
-         VALUES ($1, $2, $3, $4, $5, $6)`,
-        [transcriptId, seg.startTime, seg.endTime, seg.speaker, seg.text, i]
+         VALUES ${placeholders.join(', ')}`,
+        values
       );
     }
 

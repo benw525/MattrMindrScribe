@@ -54,7 +54,7 @@ ${JSON.stringify(segmentData)}`;
     console.log(`[Speaker Refinement] Sending ${segments.length} segments to GPT-4o for refinement...`);
 
     const response = await aiClient.chat.completions.create({
-      model: 'gpt-4o',
+      model: 'gpt-4o-mini',
       messages: [{ role: 'user', content: prompt }],
       response_format: { type: 'json_object' },
       temperature: 0.1,
