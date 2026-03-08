@@ -146,7 +146,7 @@ export function PipelineSummary({ pipelineLog, transcriptStatus, errorMessage, t
               />
 
               <StepCard
-                title="GPT-5.4 Refinement"
+                title="Claude Opus 4.6 Refinement"
                 icon={<BrainCircuitIcon className="h-3.5 w-3.5 text-slate-500 dark:text-slate-400" />}
                 step={pipelineLog.refinement}
                 description="AI-powered speaker identification & label correction"
