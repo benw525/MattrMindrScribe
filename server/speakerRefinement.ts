@@ -11,8 +11,8 @@ const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
 });
 
-const SINGLE_CALL_LIMIT = 2000;
-const BATCH_SIZE = 1500;
+const SINGLE_CALL_LIMIT = 5000;
+const BATCH_SIZE = 4000;
 const OVERLAP_CONTEXT = 20;
 
 function buildSystemPrompt(): string {
