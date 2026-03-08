@@ -1,5 +1,6 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { createPortal } from 'react-dom';
 import {
   DownloadIcon,
   MaximizeIcon,
@@ -55,19 +56,34 @@ export function TranscriptToolbar({
   const navigate = useNavigate();
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [exporting, setExporting] = useState(false);
-  const exportRef = useRef<HTMLDivElement>(null);
+  const exportBtnRef = useRef<HTMLButtonElement>(null);
+  const exportMenuRef = useRef<HTMLDivElement>(null);
+  const [menuPos, setMenuPos] = useState({ top: 0, left: 0 });
+
+  const updateMenuPos = useCallback(() => {
+    if (exportBtnRef.current) {
+      const rect = exportBtnRef.current.getBoundingClientRect();
+      setMenuPos({
+        top: rect.bottom + 4,
+        left: Math.max(8, rect.right - 224),
+      });
+    }
+  }, []);
 
   useEffect(() => {
+    if (!showExportMenu) return;
+    updateMenuPos();
     const handleClick = (e: MouseEvent) => {
-      if (exportRef.current && !exportRef.current.contains(e.target as Node)) {
+      if (
+        exportBtnRef.current && !exportBtnRef.current.contains(e.target as Node) &&
+        exportMenuRef.current && !exportMenuRef.current.contains(e.target as Node)
+      ) {
         setShowExportMenu(false);
       }
     };
-    if (showExportMenu) {
-      document.addEventListener('mousedown', handleClick);
-      return () => document.removeEventListener('mousedown', handleClick);
-    }
-  }, [showExportMenu]);
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [showExportMenu, updateMenuPos]);
 
   const handleExport = async (format: string) => {
     setShowExportMenu(false);
@@ -156,8 +172,9 @@ export function TranscriptToolbar({
         </button>
       )}
 
-      <div className="relative hidden sm:block" ref={exportRef}>
+      <div className="hidden sm:block">
         <button
+          ref={exportBtnRef}
           onClick={() => setShowExportMenu(!showExportMenu)}
           disabled={exporting}
           className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-md transition-colors disabled:opacity-50"
@@ -166,8 +183,11 @@ export function TranscriptToolbar({
           <span className="hidden lg:inline">{exporting ? 'Exporting...' : 'Export'}</span>
           <ChevronDownIcon className="h-3 w-3 hidden lg:block" />
         </button>
-        {showExportMenu && (
-          <div className="absolute right-0 top-full mt-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-xl z-50 w-56 py-1 overflow-hidden">
+        {showExportMenu && createPortal(
+          <div
+            ref={exportMenuRef}
+            style={{ position: 'fixed', top: menuPos.top, left: menuPos.left, zIndex: 9999 }}
+            className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-xl w-56 py-1 overflow-hidden">
             {EXPORT_FORMATS.map((fmt) => {
               const Icon = fmt.icon;
               return (
@@ -180,7 +200,8 @@ export function TranscriptToolbar({
                 </button>
               );
             })}
-          </div>
+          </div>,
+          document.body
         )}
       </div>
 
