@@ -450,7 +450,7 @@ export async function processTranscription(transcriptId: string): Promise<void> 
     await checkCancelled();
 
     try {
-      console.log(`[Transcription] Step 3: GPT-4o speaker refinement...`);
+      console.log(`[Transcription] Step 3: GPT-5.4 speaker refinement...`);
       allSegments = await refineSpeakersWithGPT(allSegments, expectedSpeakers);
       const uniqueSpeakers = new Set(allSegments.map(s => s.speaker));
       pipelineLog.refinement = {
