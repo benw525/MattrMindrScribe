@@ -65,7 +65,7 @@ STAGE 3: Anthropic Claude Opus 4.6 — Speaker Refinement
 Source: server/speakerRefinement.ts — refineSpeakersWithGPT()
 
   Model:       claude-opus-4-20250514
-  Max tokens:  8192
+  Max tokens:  dynamic — min(32000, max(8192, segments × 20 + 2000))
   Temperature: 0.1
   Single-call limit: up to 5,000 segments in one API call (~53% of 200K context)
   Batching: transcripts over 5,000 segments are split into batches of ~4,000

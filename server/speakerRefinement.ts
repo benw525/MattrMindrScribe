@@ -366,9 +366,12 @@ async function refineBatch(
 
   const userPrompt = buildUserPrompt(segmentData, speakerHint, batchContext);
 
+  const maxTokens = Math.min(32000, Math.max(8192, segments.length * 20 + 2000));
+  console.log(`[Speaker Refinement] Using max_tokens: ${maxTokens} for ${segments.length} segments`);
+
   const response = await anthropic.messages.create({
     model: 'claude-opus-4-20250514',
-    max_tokens: 8192,
+    max_tokens: maxTokens,
     temperature: 0.1,
     system: systemPrompt,
     messages: [{ role: 'user', content: userPrompt }],
