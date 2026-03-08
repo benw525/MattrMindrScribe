@@ -556,14 +556,48 @@ export function TranscriptViewerPage() {
             <span className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mr-1 flex-shrink-0">
               Speakers
             </span>
-            {uniqueSpeakers.map((speaker) =>
-              <span
-                key={speaker}
-                className="flex items-center gap-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-full px-2.5 py-1 text-xs font-medium text-slate-700 dark:text-slate-300 whitespace-nowrap flex-shrink-0">
-                <div className={`w-2 h-2 rounded-full flex-shrink-0 ${getSpeakerDotColor(speaker)}`} />
-                {speaker}
-              </span>
-            )}
+            {uniqueSpeakers.map((speaker) => {
+              const isEditing = editingSpeaker === speaker;
+              return isEditing ? (
+                <span key={speaker} className="flex items-center gap-1 bg-white dark:bg-slate-800 border border-indigo-400 dark:border-indigo-600 rounded-full pl-2.5 pr-1 py-0.5 flex-shrink-0">
+                  <div className={`w-2 h-2 rounded-full flex-shrink-0 ${getSpeakerDotColor(speaker)}`} />
+                  <input
+                    type="text"
+                    value={speakerEditValue}
+                    onChange={(e) => setSpeakerEditValue(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') handleRenameSpeaker(speaker, speakerEditValue);
+                      if (e.key === 'Escape') setEditingSpeaker(null);
+                    }}
+                    className="w-28 text-base sm:text-xs font-medium text-slate-800 dark:text-slate-200 bg-transparent border-none focus:outline-none py-0.5"
+                    autoFocus
+                  />
+                  <button
+                    onClick={() => handleRenameSpeaker(speaker, speakerEditValue)}
+                    className="p-0.5 text-emerald-600 hover:text-emerald-700 rounded-full transition-colors"
+                    title="Save"
+                  >
+                    <CheckIcon className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    onClick={() => setEditingSpeaker(null)}
+                    className="p-0.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 rounded-full transition-colors"
+                    title="Cancel"
+                  >
+                    <XIcon className="h-3.5 w-3.5" />
+                  </button>
+                </span>
+              ) : (
+                <button
+                  key={speaker}
+                  onClick={() => { setEditingSpeaker(speaker); setSpeakerEditValue(speaker); }}
+                  className="flex items-center gap-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-full px-2.5 py-1 text-xs font-medium text-slate-700 dark:text-slate-300 whitespace-nowrap flex-shrink-0 hover:border-indigo-400 dark:hover:border-indigo-500 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors cursor-pointer"
+                  title="Click to rename">
+                  <div className={`w-2 h-2 rounded-full flex-shrink-0 ${getSpeakerDotColor(speaker)}`} />
+                  {speaker}
+                </button>
+              );
+            })}
             <div className="relative flex-shrink-0">
               <button
                 onClick={() => {
