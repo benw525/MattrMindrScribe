@@ -470,25 +470,22 @@ export function TranscriptViewerPage() {
     <div className="flex-1 flex flex-col h-full bg-white dark:bg-slate-950 relative overflow-hidden">
       {/* Top Bar */}
       <header className="flex-shrink-0 border-b border-slate-200 dark:border-slate-800 px-3 sm:px-6 py-2 sm:py-3 flex items-center justify-between bg-white dark:bg-slate-900 z-10 gap-2">
-        <div className="flex items-center gap-2 sm:gap-4 min-w-0">
+        <div className="flex items-center gap-2 sm:gap-4 min-w-0 flex-shrink">
           <Link
             to="/app"
             className="p-1.5 text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 rounded-md transition-colors flex-shrink-0">
-
             <ChevronLeftIcon className="h-5 w-5" />
           </Link>
           <div className="flex items-center gap-2 sm:gap-3 min-w-0">
             <MetadataEditor
               transcript={transcript}
               onUpdate={(updates) => updateTranscript(transcript.id, updates)} />
-
-            <div className="hidden sm:block">
+            <div className="hidden sm:block flex-shrink-0">
               <StatusBadge status={transcript.status} />
             </div>
           </div>
         </div>
-
-        <div className="hidden md:flex">
+        <div className="hidden md:flex flex-shrink-0">
           <TranscriptToolbar
             transcriptId={transcript.id}
             onToggleHistory={() => setShowHistory(!showHistory)}
@@ -507,10 +504,8 @@ export function TranscriptViewerPage() {
             ))}
             onShowSummaries={() => setShowSummaryPanel(true)}
             summaryCount={summaries.length} />
-
         </div>
-        {/* Mobile: compact toolbar */}
-        <div className="flex md:hidden items-center gap-1">
+        <div className="flex md:hidden items-center gap-1 flex-shrink-0">
           <TranscriptToolbar
             transcriptId={transcript.id}
             onToggleHistory={() => setShowHistory(!showHistory)}
@@ -529,7 +524,6 @@ export function TranscriptViewerPage() {
             ))}
             onShowSummaries={() => setShowSummaryPanel(true)}
             summaryCount={summaries.length} />
-
         </div>
       </header>
 

@@ -80,7 +80,7 @@ export function MetadataEditor({ transcript, onUpdate }: MetadataEditorProps) {
         </div>
       }
 
-      <div className="hidden sm:flex items-center gap-3 text-xs text-slate-500 dark:text-slate-400 mt-1">
+      <div className="hidden lg:flex items-center gap-3 text-xs text-slate-500 dark:text-slate-400 mt-0.5">
         <span>{formatDuration(transcript.duration)}</span>
         <span>•</span>
         <span>{formatFileSize(transcript.fileSize)}</span>
