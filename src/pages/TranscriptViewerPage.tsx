@@ -68,7 +68,6 @@ export function TranscriptViewerPage() {
     setSidebarHidden: (v: boolean) => void;
   }>();
   const [showHistory, setShowHistory] = useState(false);
-  const [isSuggestingName, setIsSuggestingName] = useState(false);
   const [undoStack, setUndoStack] = useState<UndoEntry[]>([]);
   const [transcriptWidthPercent, setTranscriptWidthPercent] = useState(66);
   const isDraggingRef = useRef(false);
@@ -453,17 +452,6 @@ export function TranscriptViewerPage() {
   const agentNames: Record<string, string> = {};
   agents.forEach(a => { agentNames[a.id] = a.name; });
 
-  const handleSuggestName = () => {
-    setIsSuggestingName(true);
-    setTimeout(() => {
-      const suggestedName = `AI Suggested: ${transcript.type === 'video' ? 'Deposition' : 'Call'} Summary`;
-      updateTranscript(transcript.id, {
-        filename: suggestedName
-      });
-      setIsSuggestingName(false);
-      toast.success('Name updated based on content');
-    }, 1500);
-  };
   const handleRevertVersion = (versionId: string) => {
     const version = versions.find((v) => v.id === versionId);
     if (version) {
@@ -504,8 +492,6 @@ export function TranscriptViewerPage() {
           <TranscriptToolbar
             transcriptId={transcript.id}
             onToggleHistory={() => setShowHistory(!showHistory)}
-            onSuggestName={handleSuggestName}
-            isSuggesting={isSuggestingName}
             onSave={handleSave}
             onUndo={handleUndo}
             canUndo={undoStack.length > 0}
@@ -528,8 +514,6 @@ export function TranscriptViewerPage() {
           <TranscriptToolbar
             transcriptId={transcript.id}
             onToggleHistory={() => setShowHistory(!showHistory)}
-            onSuggestName={handleSuggestName}
-            isSuggesting={isSuggestingName}
             onSave={handleSave}
             onUndo={handleUndo}
             canUndo={undoStack.length > 0}

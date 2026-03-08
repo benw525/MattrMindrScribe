@@ -2,7 +2,6 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   DownloadIcon,
-  SparklesIcon,
   MaximizeIcon,
   HistoryIcon,
   SaveIcon,
@@ -17,8 +16,6 @@ import { toast } from 'sonner';
 interface TranscriptToolbarProps {
   transcriptId: string;
   onToggleHistory: () => void;
-  onSuggestName: () => void;
-  isSuggesting: boolean;
   onSave: () => void;
   onUndo: () => void;
   canUndo: boolean;
@@ -33,8 +30,6 @@ interface TranscriptToolbarProps {
 export function TranscriptToolbar({
   transcriptId,
   onToggleHistory,
-  onSuggestName,
-  isSuggesting,
   onSave,
   onUndo,
   canUndo,
@@ -102,13 +97,6 @@ export function TranscriptToolbar({
         </button>
       )}
 
-      <button
-        onClick={onSuggestName}
-        disabled={isSuggesting}
-        className="hidden sm:inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-900/30 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 rounded-md transition-colors disabled:opacity-50">
-        <SparklesIcon className="h-4 w-4" />
-        {isSuggesting ? 'Suggesting...' : 'Name'}
-      </button>
 
       <button
         onClick={handleExport}
