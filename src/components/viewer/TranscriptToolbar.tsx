@@ -73,7 +73,7 @@ export function TranscriptToolbar({
 
       <button
         onClick={onSave}
-        className="inline-flex items-center gap-1.5 p-2 sm:px-3 sm:py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 rounded-md transition-colors shadow-sm">
+        className="inline-flex items-center gap-1.5 p-2 sm:px-3 sm:py-2 text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 rounded-md transition-colors shadow-sm">
         <SaveIcon className="h-4 w-4" />
         <span className="hidden sm:inline">Save</span>
       </button>
@@ -84,7 +84,7 @@ export function TranscriptToolbar({
         onClick={onAISummarize}
         className="inline-flex items-center gap-1.5 p-2 sm:px-3 sm:py-2 text-sm font-medium text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-900/30 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 active:bg-emerald-200 dark:active:bg-emerald-900/70 rounded-md transition-colors">
         <BrainCircuitIcon className="h-4 w-4" />
-        <span className="hidden sm:inline">AI Summarize</span>
+        <span className="hidden sm:inline">Summarize</span>
       </button>
 
       {onShowSummaries && (
@@ -107,7 +107,7 @@ export function TranscriptToolbar({
         disabled={isSuggesting}
         className="hidden sm:inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-900/30 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 rounded-md transition-colors disabled:opacity-50">
         <SparklesIcon className="h-4 w-4" />
-        {isSuggesting ? 'Suggesting...' : 'AI Name'}
+        {isSuggesting ? 'Suggesting...' : 'Name'}
       </button>
 
       <button

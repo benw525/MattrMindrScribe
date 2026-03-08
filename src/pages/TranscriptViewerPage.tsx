@@ -598,7 +598,7 @@ export function TranscriptViewerPage() {
                 </button>
               );
             })}
-            <div className="relative flex-shrink-0">
+            <div className="relative flex-shrink-0 md:hidden">
               <button
                 onClick={() => {
                   setShowSpeakerManager(!showSpeakerManager);
