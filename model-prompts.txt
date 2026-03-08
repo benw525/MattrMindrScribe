@@ -67,6 +67,11 @@ Source: server/speakerRefinement.ts — refineSpeakersWithGPT()
   Model:       claude-opus-4-20250514
   Max tokens:  8192
   Temperature: 0.1
+  Single-call limit: up to 2,000 segments in one API call
+  Batching: transcripts over 2,000 segments are split into batches of ~1,500
+            with 20 segments of overlap context at boundaries for speaker continuity;
+            speaker identifications from earlier batches are passed forward to maintain
+            consistent naming across the full transcript
 
 --- SYSTEM PROMPT (sent as "system" parameter) ---
 

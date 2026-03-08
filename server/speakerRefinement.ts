@@ -11,33 +11,40 @@ const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
 });
 
-export async function refineSpeakersWithGPT(
-  segments: Segment[],
-  expectedSpeakers?: number | null
-): Promise<Segment[]> {
-  if (segments.length === 0) return segments;
-  if (segments.length > 500) {
-    console.log(`[Speaker Refinement] Skipping refinement — ${segments.length} segments exceeds limit`);
-    return segments;
-  }
+const SINGLE_CALL_LIMIT = 2000;
+const BATCH_SIZE = 1500;
+const OVERLAP_CONTEXT = 20;
 
-  const segmentData = segments.map((s, i) => ({
-    i,
-    s: s.speaker,
-    t: s.text,
-  }));
-
-  const speakerHint = expectedSpeakers
-    ? `The recording is expected to have ${expectedSpeakers} speakers.`
-    : 'Determine the correct number of speakers from context.';
-
-  const systemPrompt = `You are an expert legal transcript analyst with deep expertise in speaker identification across all types of legal recordings — depositions, court hearings, recorded statements, police interrogations, and informal recordings. You understand the structure, roles, and conversational patterns unique to each type of legal proceeding.
+function buildSystemPrompt(): string {
+  return `You are an expert legal transcript analyst with deep expertise in speaker identification across all types of legal recordings — depositions, court hearings, recorded statements, police interrogations, and informal recordings. You understand the structure, roles, and conversational patterns unique to each type of legal proceeding.
 
 Your response must be valid JSON with two fields:
 - "labels": an array of speaker labels (one per segment, in order)
 - "identifications": an object mapping generic labels to identified names/roles (only for 75%+ confidence identifications)`;
+}
 
-  const userPrompt = `Below is a transcript with preliminary speaker labels. You have two tasks:
+function buildUserPrompt(
+  segmentData: { i: number; s: string; t: string }[],
+  speakerHint: string,
+  batchContext?: { batchNumber: number; totalBatches: number; contextSegments?: { i: number; s: string; t: string }[]; priorIdentifications?: Record<string, string> }
+): string {
+  let batchPreamble = '';
+  if (batchContext && batchContext.totalBatches > 1) {
+    batchPreamble = `**IMPORTANT: This is batch ${batchContext.batchNumber} of ${batchContext.totalBatches} from a longer transcript.**\n`;
+    if (batchContext.priorIdentifications && Object.keys(batchContext.priorIdentifications).length > 0) {
+      batchPreamble += `Speaker identifications from previous batches (use these to maintain consistency):\n`;
+      for (const [generic, identified] of Object.entries(batchContext.priorIdentifications)) {
+        batchPreamble += `- ${generic} = ${identified}\n`;
+      }
+      batchPreamble += `\n`;
+    }
+    if (batchContext.contextSegments && batchContext.contextSegments.length > 0) {
+      batchPreamble += `The following segments are CONTEXT from the end of the previous batch (do NOT include labels for these — only label the segments in the main "Transcript segments" section below):\n`;
+      batchPreamble += `${JSON.stringify(batchContext.contextSegments)}\n\n`;
+    }
+  }
+
+  return `${batchPreamble}Below is a transcript with preliminary speaker labels. You have two tasks:
 
 **Task 1: Correct speaker labels**
 Review the conversational flow and correct any speaker misattributions. ${speakerHint}
@@ -305,79 +312,202 @@ GENERAL RULES (ALL RECORDING TYPES)
 
 Transcript segments:
 ${JSON.stringify(segmentData)}`;
+}
 
+function parseResponse(content: string, expectedCount: number): { labels: string[]; identifications: Record<string, string> } | null {
+  const jsonMatch = content.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) return null;
+
+  let parsed: any;
   try {
-    console.log(`[Speaker Refinement] Sending ${segments.length} segments to Claude Opus 4.6 for refinement and name identification...`);
+    parsed = JSON.parse(jsonMatch[0]);
+  } catch {
+    console.log('[Speaker Refinement] Failed to parse JSON from response');
+    return null;
+  }
+  let labels: string[];
 
-    const response = await anthropic.messages.create({
-      model: 'claude-opus-4-20250514',
-      max_tokens: 8192,
-      temperature: 0.1,
-      system: systemPrompt,
-      messages: [{ role: 'user', content: userPrompt }],
-    });
-
-    const textBlock = response.content.find(b => b.type === 'text');
-    const content = textBlock?.text;
-    if (!content) {
-      console.log('[Speaker Refinement] Empty response from Claude Opus 4.6, keeping original labels');
-      return segments;
-    }
-
-    const jsonMatch = content.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-      console.log('[Speaker Refinement] Could not extract JSON from response, keeping original labels');
-      return segments;
-    }
-
-    const parsed = JSON.parse(jsonMatch[0]);
-    let labels: string[];
-
-    if (parsed.labels && Array.isArray(parsed.labels)) {
-      labels = parsed.labels;
-    } else if (Array.isArray(parsed)) {
-      labels = parsed;
-    } else if (parsed.speakers && Array.isArray(parsed.speakers)) {
-      labels = parsed.speakers;
+  if (parsed.labels && Array.isArray(parsed.labels)) {
+    labels = parsed.labels;
+  } else if (Array.isArray(parsed)) {
+    labels = parsed;
+  } else if (parsed.speakers && Array.isArray(parsed.speakers)) {
+    labels = parsed.speakers;
+  } else {
+    const firstArrayKey = Object.keys(parsed).find(k => Array.isArray(parsed[k]));
+    if (firstArrayKey) {
+      labels = parsed[firstArrayKey];
     } else {
-      const firstArrayKey = Object.keys(parsed).find(k => Array.isArray(parsed[k]));
-      if (firstArrayKey) {
-        labels = parsed[firstArrayKey];
-      } else {
-        console.log('[Speaker Refinement] Unexpected response format, keeping original labels');
+      return null;
+    }
+  }
+
+  if (labels.length !== expectedCount) return null;
+
+  const identifications: Record<string, string> = {};
+  if (parsed.identifications && typeof parsed.identifications === 'object') {
+    Object.assign(identifications, parsed.identifications);
+  }
+
+  return { labels, identifications };
+}
+
+async function refineBatch(
+  segments: Segment[],
+  speakerHint: string,
+  systemPrompt: string,
+  batchContext?: { batchNumber: number; totalBatches: number; contextSegments?: { i: number; s: string; t: string }[]; priorIdentifications?: Record<string, string> }
+): Promise<{ labels: string[]; identifications: Record<string, string> } | null> {
+  const segmentData = segments.map((s, i) => ({
+    i,
+    s: s.speaker,
+    t: s.text,
+  }));
+
+  const userPrompt = buildUserPrompt(segmentData, speakerHint, batchContext);
+
+  const response = await anthropic.messages.create({
+    model: 'claude-opus-4-20250514',
+    max_tokens: 8192,
+    temperature: 0.1,
+    system: systemPrompt,
+    messages: [{ role: 'user', content: userPrompt }],
+  });
+
+  const textBlock = response.content.find(b => b.type === 'text');
+  const content = textBlock?.text;
+  if (!content) return null;
+
+  return parseResponse(content, segments.length);
+}
+
+export async function refineSpeakersWithGPT(
+  segments: Segment[],
+  expectedSpeakers?: number | null
+): Promise<Segment[]> {
+  if (segments.length === 0) return segments;
+
+  const speakerHint = expectedSpeakers
+    ? `The recording is expected to have ${expectedSpeakers} speakers.`
+    : 'Determine the correct number of speakers from context.';
+
+  const systemPrompt = buildSystemPrompt();
+
+  if (segments.length <= SINGLE_CALL_LIMIT) {
+    console.log(`[Speaker Refinement] Sending ${segments.length} segments to Claude Opus 4.6 (single call)...`);
+    try {
+      const result = await refineBatch(segments, speakerHint, systemPrompt);
+      if (!result) {
+        console.log('[Speaker Refinement] Failed to parse response, keeping original labels');
         return segments;
       }
-    }
 
-    if (labels.length !== segments.length) {
-      console.log(`[Speaker Refinement] Label count mismatch (${labels.length} vs ${segments.length}), keeping original labels`);
-      return segments;
-    }
-
-    if (parsed.identifications && typeof parsed.identifications === 'object') {
-      const ids = parsed.identifications;
-      const idEntries = Object.entries(ids);
+      const idEntries = Object.entries(result.identifications);
       if (idEntries.length > 0) {
         console.log(`[Speaker Refinement] Identified speakers: ${idEntries.map(([from, to]) => `${from} → ${to}`).join(', ')}`);
       } else {
         console.log('[Speaker Refinement] No speakers could be confidently identified by name');
       }
+
+      const refined = segments.map((seg, i) => {
+        const label = result.labels[i];
+        if (typeof label === 'string' && label.trim().length > 0) {
+          return { ...seg, speaker: label.trim() };
+        }
+        return seg;
+      });
+
+      const uniqueSpeakers = new Set(refined.map(s => s.speaker));
+      console.log(`[Speaker Refinement] Refined to ${uniqueSpeakers.size} speaker(s): ${[...uniqueSpeakers].join(', ')}`);
+      return refined;
+    } catch (err: any) {
+      console.error('[Speaker Refinement] Claude Opus 4.6 refinement failed:', err.message);
+      return segments;
+    }
+  }
+
+  const totalBatches = Math.ceil(segments.length / BATCH_SIZE);
+  console.log(`[Speaker Refinement] Large transcript (${segments.length} segments) — processing in ${totalBatches} batches of ~${BATCH_SIZE}...`);
+
+  const allLabels: string[] = new Array(segments.length);
+  let cumulativeIdentifications: Record<string, string> = {};
+  let processedUpTo = 0;
+
+  for (let batchNum = 0; batchNum < totalBatches; batchNum++) {
+    const batchStart = batchNum * BATCH_SIZE;
+    const batchEnd = Math.min(batchStart + BATCH_SIZE, segments.length);
+    const batchSegments = segments.slice(batchStart, batchEnd);
+
+    let contextSegments: { i: number; s: string; t: string }[] | undefined;
+    if (batchNum > 0) {
+      const contextStart = Math.max(0, batchStart - OVERLAP_CONTEXT);
+      const contextSlice = segments.slice(contextStart, batchStart);
+      contextSegments = contextSlice.map((s, i) => ({
+        i: contextStart + i,
+        s: allLabels[contextStart + i] || s.speaker,
+        t: s.text,
+      }));
     }
 
-    const refined = segments.map((seg, i) => {
-      const label = labels[i];
-      if (typeof label === 'string' && label.trim().length > 0) {
-        return { ...seg, speaker: label.trim() };
+    const batchContext = {
+      batchNumber: batchNum + 1,
+      totalBatches,
+      contextSegments,
+      priorIdentifications: batchNum > 0 ? { ...cumulativeIdentifications } : undefined,
+    };
+
+    console.log(`[Speaker Refinement] Batch ${batchNum + 1}/${totalBatches}: segments ${batchStart}-${batchEnd - 1} (${batchSegments.length} segments)...`);
+
+    try {
+      const result = await refineBatch(batchSegments, speakerHint, systemPrompt, batchContext);
+      if (!result) {
+        console.log(`[Speaker Refinement] Batch ${batchNum + 1} failed to parse, keeping original labels for this batch`);
+        for (let i = batchStart; i < batchEnd; i++) {
+          allLabels[i] = segments[i].speaker;
+        }
+      } else {
+        for (let i = 0; i < result.labels.length; i++) {
+          const label = result.labels[i];
+          allLabels[batchStart + i] = (typeof label === 'string' && label.trim().length > 0) ? label.trim() : segments[batchStart + i].speaker;
+        }
+        Object.assign(cumulativeIdentifications, result.identifications);
+
+        const batchSpeakers = new Set(result.labels.map(l => l.trim()).filter(l => l.length > 0));
+        console.log(`[Speaker Refinement] Batch ${batchNum + 1} speakers: ${[...batchSpeakers].join(', ')}`);
       }
-      return seg;
-    });
-
-    const uniqueSpeakers = new Set(refined.map(s => s.speaker));
-    console.log(`[Speaker Refinement] Refined to ${uniqueSpeakers.size} speaker(s): ${[...uniqueSpeakers].join(', ')}`);
-
-    return refined;
-  } catch (err: any) {
-    console.error('[Speaker Refinement] Claude Opus 4.6 refinement failed:', err.message);
-    return segments;
+      processedUpTo = batchEnd;
+    } catch (err: any) {
+      console.error(`[Speaker Refinement] Batch ${batchNum + 1} failed:`, err.message);
+      for (let i = batchStart; i < batchEnd; i++) {
+        allLabels[i] = segments[i].speaker;
+      }
+      processedUpTo = batchEnd;
+    }
   }
+
+  const idEntries = Object.entries(cumulativeIdentifications);
+  if (idEntries.length > 0) {
+    console.log(`[Speaker Refinement] Cross-batch identifications: ${idEntries.map(([from, to]) => `${from} → ${to}`).join(', ')}`);
+
+    const reverseMap: Record<string, string> = {};
+    for (const [generic, identified] of idEntries) {
+      reverseMap[generic] = identified;
+    }
+
+    for (let i = 0; i < allLabels.length; i++) {
+      if (reverseMap[allLabels[i]]) {
+        allLabels[i] = reverseMap[allLabels[i]];
+      }
+    }
+  }
+
+  const refined = segments.map((seg, i) => ({
+    ...seg,
+    speaker: allLabels[i] || seg.speaker,
+  }));
+
+  const uniqueSpeakers = new Set(refined.map(s => s.speaker));
+  console.log(`[Speaker Refinement] Refined to ${uniqueSpeakers.size} speaker(s) across ${totalBatches} batches: ${[...uniqueSpeakers].join(', ')}`);
+
+  return refined;
 }
