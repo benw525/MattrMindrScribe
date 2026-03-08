@@ -469,14 +469,14 @@ export function TranscriptViewerPage() {
   return (
     <div className="flex-1 flex flex-col h-full bg-white dark:bg-slate-950 relative overflow-hidden">
       {/* Top Bar */}
-      <header className="flex-shrink-0 border-b border-slate-200 dark:border-slate-800 px-3 sm:px-6 py-2 sm:py-3 flex items-center justify-between bg-white dark:bg-slate-900 z-10 gap-2">
-        <div className="flex items-center gap-2 sm:gap-4 min-w-0 flex-shrink">
+      <header className="flex-shrink-0 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 z-10">
+        <div className="px-3 sm:px-6 py-2 sm:py-2.5 flex items-center gap-2 sm:gap-4">
           <Link
             to="/app"
             className="p-1.5 text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 rounded-md transition-colors flex-shrink-0">
             <ChevronLeftIcon className="h-5 w-5" />
           </Link>
-          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
             <MetadataEditor
               transcript={transcript}
               onUpdate={(updates) => updateTranscript(transcript.id, updates)} />
@@ -484,28 +484,28 @@ export function TranscriptViewerPage() {
               <StatusBadge status={transcript.status} />
             </div>
           </div>
+          <div className="flex md:hidden items-center gap-1 flex-shrink-0">
+            <TranscriptToolbar
+              transcriptId={transcript.id}
+              onToggleHistory={() => setShowHistory(!showHistory)}
+              onSave={handleSave}
+              onUndo={handleUndo}
+              canUndo={undoStack.length > 0}
+              sidebarHidden={sidebarHidden}
+              onToggleSidebar={() => setSidebarHidden(!sidebarHidden)}
+              onAISummarize={() => setShowSummarizeModal(true)}
+              onShowPipeline={() => setShowPipeline(true)}
+              hasPipelineIssue={!!(transcript.pipelineLog && (
+                transcript.pipelineLog.whisper?.status === 'error' ||
+                transcript.pipelineLog.diarization?.status === 'error' ||
+                transcript.pipelineLog.refinement?.status === 'error' ||
+                transcript.pipelineLog.fatalError
+              ))}
+              onShowSummaries={() => setShowSummaryPanel(true)}
+              summaryCount={summaries.length} />
+          </div>
         </div>
-        <div className="hidden md:flex flex-shrink-0">
-          <TranscriptToolbar
-            transcriptId={transcript.id}
-            onToggleHistory={() => setShowHistory(!showHistory)}
-            onSave={handleSave}
-            onUndo={handleUndo}
-            canUndo={undoStack.length > 0}
-            sidebarHidden={sidebarHidden}
-            onToggleSidebar={() => setSidebarHidden(!sidebarHidden)}
-            onAISummarize={() => setShowSummarizeModal(true)}
-            onShowPipeline={() => setShowPipeline(true)}
-            hasPipelineIssue={!!(transcript.pipelineLog && (
-              transcript.pipelineLog.whisper?.status === 'error' ||
-              transcript.pipelineLog.diarization?.status === 'error' ||
-              transcript.pipelineLog.refinement?.status === 'error' ||
-              transcript.pipelineLog.fatalError
-            ))}
-            onShowSummaries={() => setShowSummaryPanel(true)}
-            summaryCount={summaries.length} />
-        </div>
-        <div className="flex md:hidden items-center gap-1 flex-shrink-0">
+        <div className="hidden md:flex items-center px-3 sm:px-6 pb-2 overflow-x-auto no-scrollbar">
           <TranscriptToolbar
             transcriptId={transcript.id}
             onToggleHistory={() => setShowHistory(!showHistory)}
