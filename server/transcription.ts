@@ -47,9 +47,14 @@ async function getAudioDuration(filePath: string): Promise<number> {
 async function convertToWav(inputPath: string, outputPath: string): Promise<void> {
   return new Promise((resolve, reject) => {
     const proc = spawn('ffmpeg', [
-      '-y', '-i', inputPath,
+      '-y',
+      '-thread_queue_size', '512',
+      '-i', inputPath,
       '-vn', '-ar', '16000', '-ac', '1',
       '-threads', '0',
+      '-filter_threads', '0',
+      '-filter_complex_threads', '0',
+      '-max_muxing_queue_size', '9999',
       '-acodec', 'pcm_s16le', '-f', 'wav',
       outputPath,
     ]);
