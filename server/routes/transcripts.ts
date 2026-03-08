@@ -728,4 +728,133 @@ router.get('/:id/summaries', async (req: AuthRequest, res: Response) => {
   }
 });
 
+router.get('/:id/export/:format', async (req: AuthRequest, res: Response) => {
+  try {
+    const { id, format } = req.params;
+
+    if (!['txt', 'docx', 'pdf'].includes(format)) {
+      return res.status(400).json({ error: 'Invalid format. Use txt, docx, or pdf.' });
+    }
+
+    const tResult = await pool.query(
+      'SELECT id, filename, duration FROM transcripts WHERE id = $1 AND user_id = $2',
+      [id, req.userId]
+    );
+    if (tResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Transcript not found' });
+    }
+    const transcript = tResult.rows[0];
+
+    const sResult = await pool.query(
+      `SELECT speaker, text, start_time, end_time FROM transcript_segments
+       WHERE transcript_id = $1 ORDER BY segment_order`,
+      [id]
+    );
+    const segments = sResult.rows;
+
+    const formatTime = (seconds: number) => {
+      const h = Math.floor(seconds / 3600);
+      const m = Math.floor((seconds % 3600) / 60);
+      const s = Math.floor(seconds % 60);
+      return h > 0 ? `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}` : `${m}:${String(s).padStart(2, '0')}`;
+    };
+
+    const displayName = transcript.filename || 'Untitled Transcript';
+    const safeName = displayName.replace(/[^a-zA-Z0-9_\- ]/g, '').trim() || 'transcript';
+
+    if (format === 'txt') {
+      let text = `${displayName}\n`;
+      text += `${'='.repeat(displayName.length)}\n\n`;
+      for (const seg of segments) {
+        text += `[${formatTime(seg.start_time)}] ${seg.speaker}\n${seg.text}\n\n`;
+      }
+      res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+      res.setHeader('Content-Disposition', `attachment; filename="${safeName}.txt"`);
+      return res.send(text);
+    }
+
+    if (format === 'docx') {
+      const docxLib = await import('docx');
+      const { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType, BorderStyle } = docxLib;
+
+      const children: any[] = [
+        new Paragraph({
+          text: displayName,
+          heading: HeadingLevel.HEADING_1,
+          spacing: { after: 200 },
+        }),
+        new Paragraph({
+          children: [
+            new TextRun({ text: `Duration: ${formatTime(transcript.duration || 0)}`, italics: true, color: '666666', size: 20 }),
+          ],
+          spacing: { after: 400 },
+        }),
+      ];
+
+      for (const seg of segments) {
+        children.push(
+          new Paragraph({
+            children: [
+              new TextRun({ text: `[${formatTime(seg.start_time)}] `, color: '888888', size: 20 }),
+              new TextRun({ text: seg.speaker, bold: true, size: 22 }),
+            ],
+            spacing: { before: 200 },
+            border: { bottom: { style: BorderStyle.SINGLE, size: 1, color: 'DDDDDD' } },
+          }),
+          new Paragraph({
+            text: seg.text,
+            spacing: { after: 120 },
+          })
+        );
+      }
+
+      const doc = new Document({
+        sections: [{ children }],
+      });
+
+      const buffer = await Packer.toBuffer(doc);
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+      res.setHeader('Content-Disposition', `attachment; filename="${safeName}.docx"`);
+      return res.send(Buffer.from(buffer));
+    }
+
+    if (format === 'pdf') {
+      const PDFDocument = (await import('pdfkit')).default;
+      const doc = new PDFDocument({ margin: 50, size: 'LETTER' });
+
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="${safeName}.pdf"`);
+      doc.pipe(res);
+
+      doc.fontSize(20).font('Helvetica-Bold').text(displayName, { align: 'left' });
+      doc.moveDown(0.3);
+      doc.fontSize(10).font('Helvetica-Oblique').fillColor('#666666')
+        .text(`Duration: ${formatTime(transcript.duration || 0)}`);
+      doc.moveDown(1);
+      doc.fillColor('#000000');
+
+      for (const seg of segments) {
+        if (doc.y > 680) {
+          doc.addPage();
+        }
+        doc.fontSize(9).font('Helvetica').fillColor('#888888')
+          .text(`[${formatTime(seg.start_time)}] `, { continued: true });
+        doc.fontSize(11).font('Helvetica-Bold').fillColor('#000000')
+          .text(seg.speaker);
+        doc.fontSize(10).font('Helvetica').fillColor('#333333')
+          .text(seg.text);
+        doc.moveDown(0.5);
+      }
+
+      doc.end();
+      return;
+    }
+  } catch (err) {
+    console.error('Export error:', err);
+    if (!res.headersSent) {
+      res.status(500).json({ error: 'Export failed' });
+    }
+  }
+});
+
 export default router;

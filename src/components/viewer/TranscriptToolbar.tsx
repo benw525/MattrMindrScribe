@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   DownloadIcon,
@@ -10,9 +10,13 @@ import {
   PanelLeftOpenIcon,
   BrainCircuitIcon,
   ActivityIcon,
-  FileTextIcon } from
+  FileTextIcon,
+  FileTypeIcon,
+  FileIcon,
+  ChevronDownIcon } from
 'lucide-react';
 import { toast } from 'sonner';
+
 interface TranscriptToolbarProps {
   transcriptId: string;
   onToggleHistory: () => void;
@@ -27,6 +31,13 @@ interface TranscriptToolbarProps {
   onShowSummaries?: () => void;
   summaryCount?: number;
 }
+
+const EXPORT_FORMATS = [
+  { key: 'txt', label: 'Plain Text (.txt)', icon: FileTextIcon },
+  { key: 'docx', label: 'Word Document (.docx)', icon: FileTypeIcon },
+  { key: 'pdf', label: 'PDF Document (.pdf)', icon: FileIcon },
+] as const;
+
 export function TranscriptToolbar({
   transcriptId,
   onToggleHistory,
@@ -42,9 +53,57 @@ export function TranscriptToolbar({
   summaryCount
 }: TranscriptToolbarProps) {
   const navigate = useNavigate();
-  const handleExport = () => {
-    toast.success('Transcript exported as text successfully');
+  const [showExportMenu, setShowExportMenu] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const exportRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClick = (e: MouseEvent) => {
+      if (exportRef.current && !exportRef.current.contains(e.target as Node)) {
+        setShowExportMenu(false);
+      }
+    };
+    if (showExportMenu) {
+      document.addEventListener('mousedown', handleClick);
+      return () => document.removeEventListener('mousedown', handleClick);
+    }
+  }, [showExportMenu]);
+
+  const handleExport = async (format: string) => {
+    setShowExportMenu(false);
+    setExporting(true);
+    try {
+      const token = localStorage.getItem('auth_token');
+      const response = await fetch(`/api/transcripts/${transcriptId}/export/${format}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({ error: 'Export failed' }));
+        throw new Error(err.error || 'Export failed');
+      }
+
+      const blob = await response.blob();
+      const disposition = response.headers.get('Content-Disposition') || '';
+      const filenameMatch = disposition.match(/filename="?([^"]+)"?/);
+      const filename = filenameMatch ? filenameMatch[1] : `transcript.${format}`;
+
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      toast.success(`Exported as ${format.toUpperCase()}`);
+    } catch (err: any) {
+      toast.error(err.message || 'Export failed');
+    } finally {
+      setExporting(false);
+    }
   };
+
   return (
     <div className="flex items-center gap-1 sm:gap-2">
       <button
@@ -97,14 +156,33 @@ export function TranscriptToolbar({
         </button>
       )}
 
-
-      <button
-        onClick={handleExport}
-        className="hidden sm:inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-md transition-colors"
-        title="Export as Text">
-        <DownloadIcon className="h-4 w-4" />
-        <span className="hidden lg:inline">Export</span>
-      </button>
+      <div className="relative hidden sm:block" ref={exportRef}>
+        <button
+          onClick={() => setShowExportMenu(!showExportMenu)}
+          disabled={exporting}
+          className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-md transition-colors disabled:opacity-50"
+          title="Export transcript">
+          <DownloadIcon className={`h-4 w-4 ${exporting ? 'animate-pulse' : ''}`} />
+          <span className="hidden lg:inline">{exporting ? 'Exporting...' : 'Export'}</span>
+          <ChevronDownIcon className="h-3 w-3 hidden lg:block" />
+        </button>
+        {showExportMenu && (
+          <div className="absolute right-0 top-full mt-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-xl z-50 w-56 py-1 overflow-hidden">
+            {EXPORT_FORMATS.map((fmt) => {
+              const Icon = fmt.icon;
+              return (
+                <button
+                  key={fmt.key}
+                  onClick={() => handleExport(fmt.key)}
+                  className="w-full flex items-center gap-3 px-3 py-2.5 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors text-left">
+                  <Icon className="h-4 w-4 text-slate-400 flex-shrink-0" />
+                  {fmt.label}
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
 
       {onShowPipeline && (
         <button
@@ -137,5 +215,4 @@ export function TranscriptToolbar({
         <span className="hidden lg:inline">Present</span>
       </button>
     </div>);
-
 }

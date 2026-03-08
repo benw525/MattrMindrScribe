@@ -54,7 +54,7 @@ A full-stack application for managing legal case recordings/transcripts. Feature
 - `server/routes/transcripts.ts` - Transcript CRUD + file upload (R2 or local) + status/retranscribe endpoints
 - `server/transcription.ts` - AI transcription pipeline (ffmpeg conversion, chunking, Whisper API, 3-step diarization, R2 download support)
 - `server/diarization.ts` - AssemblyAI speaker diarization (upload audio, get speaker labels, map onto Whisper segments)
-- `server/speakerRefinement.ts` - GPT-4o speaker refinement (analyzes transcript text to correct speaker misattributions)
+- `server/speakerRefinement.ts` - GPT-5.4 speaker refinement (analyzes transcript text to identify speaker names at 75%+ confidence and correct speaker misattributions)
 - `server/routes/folders.ts` - Folder CRUD + move transcripts + MattrMindr case linking
 - `server/routes/mattrmindr.ts` - MattrMindr integration API (connect, disconnect, status, case search proxy, send files)
 - `server/routes/external.ts` - External API for inbound integrations (auth, receive files for transcription, transcription status)
@@ -80,6 +80,7 @@ A full-stack application for managing legal case recordings/transcripts. Feature
 - `POST /api/transcripts/upload` - Legacy upload via server (fallback, limited by proxy body size)
 - `GET /api/transcripts/:id/status` - Poll transcription status
 - `POST /api/transcripts/:id/retranscribe` - Re-run transcription
+- `GET /api/transcripts/:id/export/:format` - Export transcript (txt, docx, pdf)
 - `PATCH /api/transcripts/:id` - Update transcript
 - `DELETE /api/transcripts` - Batch delete transcripts
 - `POST /api/transcripts/:id/versions` - Create version snapshot
