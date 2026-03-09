@@ -111,24 +111,44 @@ async function splitWavIntoChunks(wavPath: string, workDir: string): Promise<{ p
 }
 
 async function transcribeChunk(filePath: string, offsetSec: number = 0): Promise<TranscriptSegment[]> {
-  const buffer = await readFile(filePath);
-  const file = await toFile(buffer, 'audio.wav');
+  const MAX_ATTEMPTS = 4;
+  let lastError: Error | null = null;
 
-  const response = await whisperClient.audio.transcriptions.create({
-    file,
-    model: 'whisper-1',
-    response_format: 'verbose_json',
-    timestamp_granularities: ['segment'],
-  });
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    try {
+      const buffer = await readFile(filePath);
+      const file = await toFile(buffer, 'audio.wav');
 
-  const segments = ((response as any).segments || []).map((s: any) => ({
-    speaker: 'Speaker 1',
-    text: (s.text || '').trim(),
-    startTime: Math.round((s.start + offsetSec) * 100) / 100,
-    endTime: Math.round((s.end + offsetSec) * 100) / 100,
-  }));
+      const response = await whisperClient.audio.transcriptions.create({
+        file,
+        model: 'whisper-1',
+        response_format: 'verbose_json',
+        timestamp_granularities: ['segment'],
+      });
 
-  return segments.filter((s: TranscriptSegment) => s.text.length > 0);
+      const segments = ((response as any).segments || []).map((s: any) => ({
+        speaker: 'Speaker 1',
+        text: (s.text || '').trim(),
+        startTime: Math.round((s.start + offsetSec) * 100) / 100,
+        endTime: Math.round((s.end + offsetSec) * 100) / 100,
+      }));
+
+      return segments.filter((s: TranscriptSegment) => s.text.length > 0);
+    } catch (err: any) {
+      lastError = err;
+      const errStr = `${err.message || ''} ${err.code || ''} ${err.status || ''}`;
+      const isRetryable = /connection|ECONNRESET|ETIMEDOUT|socket|network|timeout|503|502|429/i.test(errStr);
+      if (!isRetryable || attempt === MAX_ATTEMPTS) {
+        throw err;
+      }
+      const jitter = 0.8 + Math.random() * 0.4;
+      const delaySec = Math.round(Math.pow(2, attempt) * 2 * jitter);
+      console.log(`[Transcription] Chunk failed (attempt ${attempt}/${MAX_ATTEMPTS}): ${err.message} — retrying in ${delaySec}s...`);
+      await new Promise(resolve => setTimeout(resolve, delaySec * 1000));
+    }
+  }
+
+  throw lastError!;
 }
 
 function textSimilarity(a: string, b: string): number {
