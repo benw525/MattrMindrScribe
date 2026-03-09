@@ -407,8 +407,13 @@ export async function processTranscription(transcriptId: string): Promise<void> 
     if (rows.length === 0) throw new Error('Transcript not found');
 
     const { file_url, filename, expected_speakers, recording_type } = rows[0];
-    const expectedSpeakers = expected_speakers ? parseInt(expected_speakers) : null;
+    let expectedSpeakers = expected_speakers ? parseInt(expected_speakers) : null;
     const recordingType: string | null = recording_type || null;
+
+    if (!expectedSpeakers && recordingType === 'deposition') {
+      expectedSpeakers = 5;
+      console.log(`[Transcription] Deposition recording type detected — auto-setting expected speakers to 5`);
+    }
     let sourcePath: string;
 
     await checkCancelled();
