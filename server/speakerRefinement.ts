@@ -11,8 +11,8 @@ const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
 });
 
-const SINGLE_CALL_LIMIT = 2000;
-const BATCH_SIZE = 1500;
+const SINGLE_CALL_LIMIT = 800;
+const BATCH_SIZE = 600;
 const OVERLAP_CONTEXT = 20;
 
 function buildSystemPrompt(): string {
@@ -222,7 +222,7 @@ async function refineBatch(
 
   const userPrompt = buildUserPrompt(segmentData, speakerHint, recordingType, batchContext, knownRoster);
 
-  const maxTokens = Math.min(64000, Math.max(8192, segments.length * 40 + 2000));
+  const maxTokens = Math.min(128000, Math.max(16000, segments.length * 80 + 4000));
   console.log(`[Speaker Refinement] Using max_tokens: ${maxTokens} for ${segments.length} segments`);
 
   let content = '';
