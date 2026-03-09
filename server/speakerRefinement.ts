@@ -20,7 +20,7 @@ function buildSystemPrompt(): string {
 
 Your response must be valid JSON with two fields:
 - "labels": an array of speaker labels (one per segment, in order)
-- "identifications": an object mapping generic labels to identified names/roles (only for 75%+ confidence identifications)`;
+- "identifications": an object mapping generic labels to identified names/roles`;
 }
 
 function buildUserPrompt(
@@ -291,12 +291,11 @@ GENERAL RULES (ALL RECORDING TYPES)
 ==============================
 
 **Name assignment rules:**
-- Only assign a name when you are at least 75% confident in the identification
-- If you cannot confidently identify a speaker, keep their generic label (e.g. "Speaker 1")
-- Use the most formal/complete version of the name when possible (e.g. "Barry Porter" not just "Barry")
-- For roles without names, use the role (e.g. "Court Reporter", "Videographer", "Detective")
-- It is perfectly fine to leave some or all speakers unnamed — only name those you are confident about
-- For multiple unidentified speakers of the same type, number them (e.g. "Bystander 1", "Bystander 2")
+- Always identify every speaker — never leave a speaker as a generic label like "Speaker 1" or "Speaker 2"
+- Use the speaker's full name when it can be determined from context (e.g. "Barry Porter" not just "Barry")
+- When a name is not available, always assign a descriptive role label (e.g. "Videographer", "Court Reporter", "Examining Attorney", "Detective", "Claimant")
+- Every speaker must end up with either a name or a role — generic numbered labels are not acceptable output
+- For multiple speakers with the same role, number them (e.g. "Bystander 1", "Bystander 2", "Officer 1", "Officer 2")
 
 **Cross-type identification cues:**
 - Self-introductions: "My name is...", "I'm...", "This is..."
@@ -409,7 +408,7 @@ export async function refineSpeakersWithGPT(
       if (idEntries.length > 0) {
         console.log(`[Speaker Refinement] Identified speakers: ${idEntries.map(([from, to]) => `${from} → ${to}`).join(', ')}`);
       } else {
-        console.log('[Speaker Refinement] No speakers could be confidently identified by name');
+        console.log('[Speaker Refinement] No name-based identifications returned (role labels may still have been assigned)');
       }
 
       const refined = segments.map((seg, i) => {
