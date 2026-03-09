@@ -11,16 +11,20 @@ const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
 });
 
-const SINGLE_CALL_LIMIT = 5000;
-const BATCH_SIZE = 4000;
+const SINGLE_CALL_LIMIT = 500;
+const BATCH_SIZE = 400;
 const OVERLAP_CONTEXT = 20;
 
 function buildSystemPrompt(): string {
   return `You are an expert legal transcript analyst with deep expertise in speaker identification across all types of legal recordings — depositions, court hearings, recorded statements, police interrogations, and informal recordings. You understand the structure, roles, and conversational patterns unique to each type of legal proceeding.
 
-Your response must be valid JSON with two fields:
-- "labels": an array of speaker labels (one per segment, in order)
-- "identifications": an object mapping generic labels to identified names/roles`;
+IMPORTANT: Your response must contain ONLY valid JSON and nothing else. No explanations, no commentary, no markdown — just raw JSON.
+
+The JSON must have exactly two fields:
+- "labels": an array of speaker labels (one per segment, in order, exactly matching the number of input segments)
+- "identifications": an object mapping generic labels to identified names/roles
+
+Do NOT include any text before or after the JSON object.`;
 }
 
 const RECORDING_TYPE_SECTIONS: Record<string, string> = {
@@ -29,6 +33,20 @@ DEPOSITION
 ==============================
 Depositions typically have a formal opening/closing by a videographer and/or court reporter, with structured Q&A between attorneys and a witness.
 
+**CRITICAL: Extract names from the transcript text itself.**
+Search the transcript for these name-revealing patterns:
+- The videographer's opening: "This begins the video deposition of [DEPONENT NAME]" — this names the witness/deponent
+- Attorney appearances: "[NAME], here for the plaintiff" or "[NAME], for defendant" or "[NAME] on behalf of [party]" — these name the attorneys
+- The deponent stating their name: "I'm [NAME]" or "My name is [NAME]" or "State your full name" followed by "[NAME]"
+- Direct address by name: "Mr./Ms. [NAME]", "[First name], have you ever..."
+Map these discovered names back to the correct speaker labels. Do NOT leave speakers as "Speaker 1", "Speaker 2", etc. when names are clearly stated in the text.
+
+**Typical speaker order in depositions:**
+- The FIRST speaker is usually the Videographer (opens the record)
+- Attorneys state appearances after the videographer's opening — match each appearance to the correct speaker label
+- The Videographer or Court Reporter administers the oath
+- After the oath, the structured Q&A begins between the Examining Attorney and the Deponent
+
 **Potential speakers & identification patterns:**
 
 **Videographer:**
@@ -36,6 +54,7 @@ Depositions typically have a formal opening/closing by a videographer and/or cou
 - Closes with "This concludes the video deposition of [deponent name]..." or "We are now off the record..."
 - Announces time, date, and location at the start
 - May call for breaks: "Going off the record at [time]"
+- Often asks counsel to identify themselves and state whom they represent
 - Label as "Videographer" or by name if identifiable
 
 **Court Reporter:**
@@ -47,24 +66,24 @@ Depositions typically have a formal opening/closing by a videographer and/or cou
 
 **Examining Attorney (Questioning Attorney):**
 - Asks most of the questions during the deposition
-- May introduce themselves: "My name is..." or "[Name] on behalf of [party]..."
+- States appearance early: "[Name], here for the plaintiff" or similar
 - Directs the witness: "Could you state your name for the record?"
 - Uses formal question patterns: "Isn't it true that...", "Would you agree that..."
-- Label by name if identifiable (e.g. "Attorney Smith"), otherwise "Examining Attorney"
+- Label by full name (e.g. "Alexander Kirkland"), or "Examining Attorney" if name truly cannot be determined
 
 **Deponent/Witness:**
 - The person being questioned — provides answers
-- Often named in the videographer's opening: "video deposition of [name]"
-- Named during the oath: "Do you, [name], swear to..."
+- Named in the videographer's opening: "video deposition of [name]"
+- States their own name when asked: "I'm [name]" or "My name is [name]"
 - Answers tend to be responsive to questions
-- Label by name if identifiable (e.g. "Barry Porter"), otherwise "The Witness"
+- Label by full name (e.g. "Barry Porter"), or "The Witness" if name truly cannot be determined
 
 **Defending Attorney:**
 - Makes objections: "Objection", "Objection, form", "Objection, leading", "Objection, asked and answered"
 - May instruct the witness not to answer
-- May introduce themselves: "on behalf of the defendant" or "representing [party]"
+- States appearance: "[Name], for defendant" or "representing [party]"
 - Speaks less frequently, primarily during objections or cross-examination
-- Label by name if identifiable, otherwise "Defending Attorney"
+- Label by full name if identifiable, otherwise "Defending Attorney"
 
 **Other Attorneys:**
 - Additional counsel may be present for other parties
@@ -340,13 +359,17 @@ ${JSON.stringify(segmentData)}`;
 
 function parseResponse(content: string, expectedCount: number): { labels: string[]; identifications: Record<string, string> } | null {
   const jsonMatch = content.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) return null;
+  if (!jsonMatch) {
+    console.log(`[Speaker Refinement] No JSON object found in response (${content.length} chars). First 200 chars: ${content.substring(0, 200)}`);
+    return null;
+  }
 
   let parsed: any;
   try {
     parsed = JSON.parse(jsonMatch[0]);
-  } catch {
-    console.log('[Speaker Refinement] Failed to parse JSON from response');
+  } catch (e: any) {
+    console.log(`[Speaker Refinement] Failed to parse JSON from response: ${e.message}`);
+    console.log(`[Speaker Refinement] JSON string length: ${jsonMatch[0].length}, first 200 chars: ${jsonMatch[0].substring(0, 200)}`);
     return null;
   }
   let labels: string[];
@@ -362,11 +385,31 @@ function parseResponse(content: string, expectedCount: number): { labels: string
     if (firstArrayKey) {
       labels = parsed[firstArrayKey];
     } else {
+      console.log(`[Speaker Refinement] No labels array found in parsed response. Keys: ${Object.keys(parsed).join(', ')}`);
       return null;
     }
   }
 
-  if (labels.length !== expectedCount) return null;
+  console.log(`[Speaker Refinement] Got ${labels.length} labels, expected ${expectedCount}`);
+
+  if (labels.length !== expectedCount) {
+    if (labels.length > 0 && labels.length >= expectedCount * 0.9) {
+      console.log(`[Speaker Refinement] Label count mismatch (${labels.length} vs ${expectedCount}) — trimming/padding to match`);
+      if (labels.length > expectedCount) {
+        labels = labels.slice(0, expectedCount);
+      }
+    } else {
+      console.log(`[Speaker Refinement] Label count mismatch too large (${labels.length} vs ${expectedCount}) — using identifications map to apply labels`);
+      const identifications: Record<string, string> = {};
+      if (parsed.identifications && typeof parsed.identifications === 'object') {
+        Object.assign(identifications, parsed.identifications);
+      }
+      if (Object.keys(identifications).length > 0) {
+        return { labels: [], identifications };
+      }
+      return null;
+    }
+  }
 
   const identifications: Record<string, string> = {};
   if (parsed.identifications && typeof parsed.identifications === 'object') {
@@ -394,7 +437,8 @@ async function refineBatch(
   const maxTokens = Math.min(32000, Math.max(8192, segments.length * 20 + 2000));
   console.log(`[Speaker Refinement] Using max_tokens: ${maxTokens} for ${segments.length} segments`);
 
-  const response = await anthropic.messages.create({
+  let content = '';
+  const stream = anthropic.messages.stream({
     model: 'claude-opus-4-20250514',
     max_tokens: maxTokens,
     temperature: 0.1,
@@ -402,8 +446,12 @@ async function refineBatch(
     messages: [{ role: 'user', content: userPrompt }],
   });
 
-  const textBlock = response.content.find(b => b.type === 'text');
-  const content = textBlock?.text;
+  for await (const event of stream) {
+    if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
+      content += event.delta.text;
+    }
+  }
+
   if (!content) return null;
 
   return parseResponse(content, segments.length);
@@ -444,13 +492,29 @@ export async function refineSpeakersWithGPT(
         console.log('[Speaker Refinement] No name-based identifications returned (role labels may still have been assigned)');
       }
 
-      const refined = segments.map((seg, i) => {
-        const label = result.labels[i];
-        if (typeof label === 'string' && label.trim().length > 0) {
-          return { ...seg, speaker: label.trim() };
-        }
-        return seg;
-      });
+      let refined: Segment[];
+      if (result.labels.length === 0 && idEntries.length > 0) {
+        console.log(`[Speaker Refinement] No per-segment labels — applying identifications map to original labels`);
+        refined = segments.map((seg) => {
+          const mapped = result.identifications[seg.speaker];
+          if (mapped && mapped.trim().length > 0) {
+            return { ...seg, speaker: mapped.trim() };
+          }
+          return seg;
+        });
+      } else {
+        refined = segments.map((seg, i) => {
+          const label = result.labels[i];
+          if (typeof label === 'string' && label.trim().length > 0) {
+            return { ...seg, speaker: label.trim() };
+          }
+          const mapped = result.identifications[seg.speaker];
+          if (mapped && mapped.trim().length > 0) {
+            return { ...seg, speaker: mapped.trim() };
+          }
+          return seg;
+        });
+      }
 
       const uniqueSpeakers = new Set(refined.map(s => s.speaker));
       console.log(`[Speaker Refinement] Refined to ${uniqueSpeakers.size} speaker(s): ${[...uniqueSpeakers].join(', ')}`);
@@ -496,25 +560,48 @@ export async function refineSpeakersWithGPT(
     try {
       const result = await refineBatch(batchSegments, speakerHint, systemPrompt, recordingType, batchContext);
       if (!result) {
-        console.log(`[Speaker Refinement] Batch ${batchNum + 1} failed to parse, keeping original labels for this batch`);
+        console.log(`[Speaker Refinement] Batch ${batchNum + 1} failed to parse — applying cumulative identifications as fallback`);
         for (let i = batchStart; i < batchEnd; i++) {
-          allLabels[i] = segments[i].speaker;
+          const originalLabel = segments[i].speaker;
+          const mapped = cumulativeIdentifications[originalLabel];
+          allLabels[i] = (mapped && mapped.trim().length > 0) ? mapped.trim() : originalLabel;
         }
       } else {
-        for (let i = 0; i < result.labels.length; i++) {
-          const label = result.labels[i];
-          allLabels[batchStart + i] = (typeof label === 'string' && label.trim().length > 0) ? label.trim() : segments[batchStart + i].speaker;
-        }
         Object.assign(cumulativeIdentifications, result.identifications);
 
-        const batchSpeakers = new Set(result.labels.map(l => l.trim()).filter(l => l.length > 0));
-        console.log(`[Speaker Refinement] Batch ${batchNum + 1} speakers: ${[...batchSpeakers].join(', ')}`);
+        if (result.labels.length === 0 && Object.keys(result.identifications).length > 0) {
+          console.log(`[Speaker Refinement] Batch ${batchNum + 1}: no per-segment labels — applying identifications map`);
+          for (let i = batchStart; i < batchEnd; i++) {
+            const originalLabel = segments[i].speaker;
+            const mapped = result.identifications[originalLabel] || cumulativeIdentifications[originalLabel];
+            allLabels[i] = (mapped && mapped.trim().length > 0) ? mapped.trim() : originalLabel;
+          }
+        } else {
+          for (let i = 0; i < result.labels.length; i++) {
+            const label = result.labels[i];
+            if (typeof label === 'string' && label.trim().length > 0) {
+              allLabels[batchStart + i] = label.trim();
+            } else {
+              const originalLabel = segments[batchStart + i].speaker;
+              const mapped = cumulativeIdentifications[originalLabel];
+              allLabels[batchStart + i] = (mapped && mapped.trim().length > 0) ? mapped.trim() : originalLabel;
+            }
+          }
+        }
+
+        const batchLabels = new Set<string>();
+        for (let i = batchStart; i < batchEnd; i++) {
+          if (allLabels[i]) batchLabels.add(allLabels[i]);
+        }
+        console.log(`[Speaker Refinement] Batch ${batchNum + 1} speakers: ${[...batchLabels].join(', ')}`);
       }
       processedUpTo = batchEnd;
     } catch (err: any) {
       console.error(`[Speaker Refinement] Batch ${batchNum + 1} failed:`, err.message);
       for (let i = batchStart; i < batchEnd; i++) {
-        allLabels[i] = segments[i].speaker;
+        const originalLabel = segments[i].speaker;
+        const mapped = cumulativeIdentifications[originalLabel];
+        allLabels[i] = (mapped && mapped.trim().length > 0) ? mapped.trim() : originalLabel;
       }
       processedUpTo = batchEnd;
     }

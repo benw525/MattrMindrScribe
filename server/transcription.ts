@@ -187,6 +187,9 @@ function deduplicateSegments(segments: TranscriptSegment[]): TranscriptSegment[]
     if (Math.abs(seg.startTime - prev.startTime) < 1.5 && textSimilarity(seg.text, prev.text) > 0.7) continue;
     if (seg.startTime < prev.endTime - 0.5 && textSimilarity(seg.text, prev.text) > 0.7) continue;
 
+    const wordCount = seg.text.trim().split(/\s+/).length;
+    if (wordCount <= 3 && Math.abs(seg.startTime - prev.startTime) < 5 && textSimilarity(seg.text, prev.text) > 0.9) continue;
+
     if (seg.startTime < prev.endTime) {
       seg.startTime = prev.endTime;
     }
@@ -195,6 +198,67 @@ function deduplicateSegments(segments: TranscriptSegment[]): TranscriptSegment[]
   }
 
   return deduped;
+}
+
+function removeHallucinatedSegments(segments: TranscriptSegment[]): TranscriptSegment[] {
+  if (segments.length < 3) return segments;
+
+  const result: TranscriptSegment[] = [];
+  let i = 0;
+  let totalRemoved = 0;
+
+  while (i < segments.length) {
+    const current = segments[i];
+    const currentText = current.text.trim().toLowerCase();
+    const currentWordCount = currentText.split(/\s+/).length;
+
+    if (currentWordCount > 3) {
+      result.push(current);
+      i++;
+      continue;
+    }
+
+    let runEnd = i + 1;
+    while (runEnd < segments.length) {
+      const next = segments[runEnd];
+      const nextText = next.text.trim().toLowerCase();
+      if (nextText !== currentText) break;
+      runEnd++;
+    }
+
+    const runLength = runEnd - i;
+
+    if (runLength >= 3) {
+      let isUniformSpacing = true;
+      if (runLength >= 3) {
+        const gaps: number[] = [];
+        for (let j = i; j < runEnd - 1; j++) {
+          gaps.push(segments[j + 1].startTime - segments[j].startTime);
+        }
+        const avgGap = gaps.reduce((a, b) => a + b, 0) / gaps.length;
+        const maxDeviation = Math.max(...gaps.map(g => Math.abs(g - avgGap)));
+        isUniformSpacing = avgGap > 0 && maxDeviation <= 0.5;
+      }
+
+      if (isUniformSpacing) {
+        result.push(current);
+        totalRemoved += runLength - 1;
+        i = runEnd;
+        continue;
+      }
+    }
+
+    for (let j = i; j < runEnd; j++) {
+      result.push(segments[j]);
+    }
+    i = runEnd;
+  }
+
+  if (totalRemoved > 0) {
+    console.log(`[Transcription] Removed ${totalRemoved} hallucinated repeat segments`);
+  }
+
+  return result;
 }
 
 function assignSpeakers(segments: TranscriptSegment[]): TranscriptSegment[] {
@@ -249,6 +313,7 @@ export async function deduplicateExistingSegments(transcriptId: string): Promise
 
   const originalCount = segments.length;
   let deduped = deduplicateSegments(segments);
+  deduped = removeHallucinatedSegments(deduped);
   deduped = assignSpeakers(deduped);
 
   if (deduped.length === originalCount) return 0;
@@ -425,7 +490,7 @@ export async function processTranscription(transcriptId: string): Promise<void> 
 
       chunkResults.sort((a, b) => a.index - b.index);
       const allSegments = chunkResults.flatMap(r => r.segments);
-      return { segments: deduplicateSegments(allSegments), chunks: chunks.length };
+      return { segments: removeHallucinatedSegments(deduplicateSegments(allSegments)), chunks: chunks.length };
     })();
 
     let whisperSegments: TranscriptSegment[];

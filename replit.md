@@ -52,9 +52,9 @@ A full-stack application for managing legal case recordings/transcripts. Feature
 - `server/middleware/auth.ts` - JWT authentication middleware
 - `server/routes/auth.ts` - Auth endpoints (register, login, me, change-password)
 - `server/routes/transcripts.ts` - Transcript CRUD + file upload (R2 or local) + status/retranscribe endpoints
-- `server/transcription.ts` - AI transcription pipeline (ffmpeg conversion, chunking, Whisper API, 3-step diarization, R2 download support)
+- `server/transcription.ts` - AI transcription pipeline (ffmpeg conversion, chunking, Whisper API, 3-step diarization, R2 download support); includes deduplication with short-segment proximity check and hallucination detection (removes consecutive identical short-phrase runs with uniform spacing)
 - `server/diarization.ts` - AssemblyAI speaker diarization (upload audio, get speaker labels, map onto Whisper segments)
-- `server/speakerRefinement.ts` - Claude Opus 4.6 speaker refinement via Anthropic API (always identifies every speaker by name or role with legal domain knowledge — videographer, court reporter, attorneys, deponent patterns); conditionally sends only the matching recording-type section to Claude based on user selection at upload (deposition, court_hearing, recorded_statement, police_interrogation, other)
+- `server/speakerRefinement.ts` - Claude Opus 4.6 speaker refinement via Anthropic streaming API (batches of 400 segments for reliable labeling); conditionally sends only the matching recording-type section to Claude; fallback applies identifications map when per-segment labels fail; deposition prompt includes explicit name extraction from transcript text
 - `server/routes/folders.ts` - Folder CRUD + move transcripts + MattrMindr case linking
 - `server/routes/mattrmindr.ts` - MattrMindr integration API (connect, disconnect, status, case search proxy, send files)
 - `server/routes/external.ts` - External API for inbound integrations (auth, receive files for transcription, transcription status)
