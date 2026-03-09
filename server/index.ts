@@ -222,6 +222,24 @@ server.requestTimeout = 30 * 60 * 1000;
 
 setTimeout(async () => {
   try {
+    const thirtyMinAgo = new Date(Date.now() - 30 * 60 * 1000).toISOString();
+    const { rows: stuck } = await pool.query(
+      `UPDATE transcripts SET status = 'error', error_message = 'Processing was interrupted by a server restart. Please re-transcribe.', updated_at = NOW()
+       WHERE status = 'processing' AND updated_at < $1
+       RETURNING id, filename`,
+      [thirtyMinAgo]
+    );
+    if (stuck.length > 0) {
+      for (const t of stuck) {
+        console.log(`[Startup Recovery] Reset stuck transcript: "${t.filename}" (${t.id})`);
+      }
+      console.log(`[Startup Recovery] Reset ${stuck.length} stuck transcript(s)`);
+    }
+  } catch (err: any) {
+    console.error('[Startup Recovery] Error:', err.message);
+  }
+
+  try {
     await pool.query(`CREATE TABLE IF NOT EXISTS _migrations (key VARCHAR(100) PRIMARY KEY, ran_at TIMESTAMP DEFAULT NOW())`);
     const { rows: done } = await pool.query(`SELECT 1 FROM _migrations WHERE key = 'dedup_segments_v1'`);
     if (done.length > 0) return;

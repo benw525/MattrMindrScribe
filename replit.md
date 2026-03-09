@@ -158,10 +158,11 @@ A full-stack application for managing legal case recordings/transcripts. Feature
 
 ## Deployment
 
-- Target: autoscale
+- Target: vm (always-on) — required because transcription pipelines run 20-30+ minutes; autoscale would kill them via SIGTERM
 - Build: `npm run build`
-- Run: `NODE_ENV=production npx tsx server/index.ts`
+- Run: `npm run start`
 - In production, server runs on port 5000, serves static dist/ files
+- Startup recovery: on boot, any transcripts stuck in "processing" for 30+ minutes are reset to "error" so users can retry
 
 ## Admin Accounts
 
