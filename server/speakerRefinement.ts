@@ -11,8 +11,8 @@ const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
 });
 
-const SINGLE_CALL_LIMIT = 800;
-const BATCH_SIZE = 600;
+const SINGLE_CALL_LIMIT = 2000;
+const BATCH_SIZE = 1500;
 const OVERLAP_CONTEXT = 20;
 
 function buildSystemPrompt(): string {
@@ -149,10 +149,7 @@ function parseResponse(content: string, expectedCount: number): { segments: Pars
     const segs: ParsedSegment[] = parsed.segments;
     console.log(`[Speaker Refinement] Got ${segs.length} segment objects, expected ${expectedCount}`);
 
-    const namedLabels = segs.filter(s => s.label && !/^Speaker\s*\d+$/i.test(s.label));
-    console.log(`[Speaker Refinement] Named labels: ${namedLabels.length}/${segs.length} (${new Set(namedLabels.map(s => s.label)).size} unique names)`);
-
-    if (segs.length === expectedCount || (segs.length >= expectedCount * 0.8 && segs.length <= expectedCount * 1.1)) {
+    if (segs.length === expectedCount || (segs.length >= expectedCount * 0.9 && segs.length <= expectedCount * 1.1)) {
       const labels = segs.map(s => s.label || '');
       if (segs.length > expectedCount) {
         return { segments: segs.slice(0, expectedCount), labels: labels.slice(0, expectedCount), identifications };
@@ -222,7 +219,7 @@ async function refineBatch(
 
   const userPrompt = buildUserPrompt(segmentData, speakerHint, recordingType, batchContext, knownRoster);
 
-  const maxTokens = Math.min(128000, Math.max(16000, segments.length * 80 + 4000));
+  const maxTokens = Math.min(64000, Math.max(8192, segments.length * 40 + 2000));
   console.log(`[Speaker Refinement] Using max_tokens: ${maxTokens} for ${segments.length} segments`);
 
   let content = '';
@@ -241,12 +238,6 @@ async function refineBatch(
   }
 
   if (!content) return null;
-
-  console.log(`[Speaker Refinement] Claude response length: ${content.length} chars`);
-  const firstSegMatch = content.match(/"label"\s*:\s*"([^"]+)"/);
-  if (firstSegMatch) {
-    console.log(`[Speaker Refinement] First label in response: "${firstSegMatch[1]}"`);
-  }
 
   return parseResponse(content, segments.length);
 }
@@ -396,53 +387,6 @@ function applyDepositionQAPostProcessing(segments: Segment[], knownRoster?: { na
   return result;
 }
 
-function resolveGenericLabels(
-  segments: Segment[],
-  identifications: Record<string, string>,
-  knownRoster?: { name: string; role: string }[] | null
-): Segment[] {
-  const idMap: Record<string, string> = { ...identifications };
-
-  if (knownRoster) {
-    for (let i = 1; i <= 10; i++) {
-      const genericLabel = `Speaker ${i}`;
-      if (!idMap[genericLabel]) {
-        const rosterEntry = knownRoster[i - 1];
-        if (rosterEntry) {
-          idMap[genericLabel] = rosterEntry.name;
-        }
-      }
-    }
-  }
-
-  if (Object.keys(idMap).length === 0) return segments;
-
-  let resolved = 0;
-  const result = segments.map(seg => {
-    if (/^Speaker\s*\d+$/i.test(seg.speaker)) {
-      const normalized = seg.speaker.replace(/\s+/g, ' ').trim();
-      const mapped = idMap[normalized] || idMap[seg.speaker];
-      if (mapped && mapped.trim().length > 0) {
-        resolved++;
-        return { ...seg, speaker: mapped.trim() };
-      }
-      for (const [key, value] of Object.entries(idMap)) {
-        if (key.replace(/\s+/g, '').toLowerCase() === normalized.replace(/\s+/g, '').toLowerCase()) {
-          resolved++;
-          return { ...seg, speaker: value.trim() };
-        }
-      }
-    }
-    return seg;
-  });
-
-  if (resolved > 0) {
-    console.log(`[Speaker Refinement] Resolved ${resolved} remaining generic label(s) via identifications map`);
-  }
-
-  return result;
-}
-
 export async function refineSpeakersWithGPT(
   segments: Segment[],
   expectedSpeakers?: number | null,
@@ -516,8 +460,6 @@ export async function refineSpeakersWithGPT(
           return seg;
         });
       }
-
-      refined = resolveGenericLabels(refined, result.identifications, knownRoster);
 
       const uniqueSpeakers = new Set(refined.map(s => s.speaker));
       console.log(`[Speaker Refinement] Refined to ${uniqueSpeakers.size} speaker(s): ${[...uniqueSpeakers].join(', ')}`);
@@ -676,8 +618,6 @@ export async function refineSpeakersWithGPT(
     speaker: allLabels[i] || seg.speaker,
     text: allTexts[i] || seg.text,
   }));
-
-  refined = resolveGenericLabels(refined, cumulativeIdentifications, knownRoster);
 
   const uniqueSpeakers = new Set(refined.map(s => s.speaker));
   console.log(`[Speaker Refinement] Refined to ${uniqueSpeakers.size} speaker(s) across ${totalBatches} batches: ${[...uniqueSpeakers].join(', ')}`);
