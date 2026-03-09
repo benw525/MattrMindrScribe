@@ -16,327 +16,54 @@ const BATCH_SIZE = 1500;
 const OVERLAP_CONTEXT = 20;
 
 function buildSystemPrompt(): string {
-  return `You are an expert legal transcript analyst with deep expertise in speaker identification across all types of legal recordings — depositions, court hearings, recorded statements, police interrogations, and informal recordings. You understand the structure, roles, and conversational patterns unique to each type of legal proceeding.
+  return `You are an expert legal transcript analyst. You will receive a transcript with preliminary speaker labels that are often wrong. Your job is to:
 
-IMPORTANT: Your response must contain ONLY valid JSON and nothing else. No explanations, no commentary, no markdown — just raw JSON.
+1. **Identify every speaker by name or role.** Extract names from the text itself — attorney appearances, introductions, the deponent stating their name, etc. Never leave a speaker as "Speaker 1" or "Speaker 2". Use full names when available, or role labels (e.g. "Videographer", "Court Reporter") when names cannot be determined.
 
-The JSON must have exactly two fields:
-- "segments": an array of objects, one per input segment, each with "label" (corrected speaker name) and "text" (cleaned-up text). The array length MUST exactly match the number of input segments.
-- "identifications": an object mapping generic labels (e.g. "Speaker 1") to identified names/roles
+2. **Correct speaker misattributions.** The preliminary labels from automated diarization are frequently wrong. Use conversational logic — questions come from one speaker, answers from another. The same person does not ask and answer their own question.
 
-**Text cleanup rules (apply to every segment's text):**
-- ADD proper punctuation: periods at the end of statements, question marks for questions, commas for natural pauses and lists
-- ADD colons when times are mentioned (e.g. "1.33 p.m." → "1:33 p.m.", "at 2.15" → "at 2:15")
-- FIX capitalization at the start of sentences
-- PRESERVE all filler words exactly as they appear: uh, um, mm-hmm, ah, uh-huh, hmm — these are legally significant
-- PRESERVE all spoken content verbatim — do NOT paraphrase, summarize, reword, or omit any words the speaker actually said
-- PRESERVE false starts, stutters, self-corrections, and incomplete thoughts exactly as spoken
-- Do NOT add words that were not spoken
-- Do NOT combine or split segments — return exactly one output per input segment
+3. **Clean up text formatting.** Add proper punctuation (periods, question marks, commas). Format times with colons (e.g. "1.33 p.m." becomes "1:33 p.m."). Fix capitalization. But PRESERVE all filler words (uh, um, mm-hmm) and all spoken content exactly as said — do not add, remove, or rephrase words. Do not combine or split segments.
 
-Do NOT include any text before or after the JSON object.
-
-**Example response:**
-{
-  "segments": [
-    {"label": "Videographer", "text": "This begins the video deposition of Barry Porter."},
-    {"label": "Alexander Kirkland", "text": "Alexander Kirkland, here for the plaintiff."},
-    {"label": "Barry Porter", "text": "Uh, I was at the intersection at about 2:15 p.m."}
-  ],
-  "identifications": {"Speaker 1": "Videographer", "Speaker 2": "Alexander Kirkland", "Speaker 3": "Barry Porter"}
-}`;
+Your response must be ONLY valid JSON with no other text. The JSON has two fields:
+- "segments": array of objects with "label" and "text", one per input segment, in order. Length MUST match input.
+- "identifications": object mapping original generic labels to identified names/roles.`;
 }
 
 const RECORDING_TYPE_SECTIONS: Record<string, string> = {
-  deposition: `==============================
-DEPOSITION
-==============================
-Depositions have structured Q&A between attorneys and a witness, with an oath administered by a court reporter. Some depositions also have a videographer who opens/closes the record — but not all depositions are videotaped.
+  deposition: `This is a deposition. Key structural knowledge:
 
-**How to tell if a Videographer is present:**
-A videographer is present ONLY if there is an opening like "This begins the video deposition of [name]", "in the matter of [case name]", "the time is [time]", "would counsel please state their names for the record" — or similar language. The exact wording varies but always follows this pattern of announcing the video deposition, identifying the case, stating the time/date, and asking attorneys to identify themselves. If no such opening exists, there is no videographer — do NOT create a Videographer label.
+- **Videographer**: Opens the record with a phrase like "This begins the video deposition of [name]..." and closes it similarly. States the time, date, and asks counsel to identify themselves. Not all depositions have a videographer — only video depositions do.
+- **Court Reporter**: Administers the oath ("Do you swear or affirm..."). This is ALWAYS a different person from the videographer. May ask "usual stipulations?" and may interject to request spelling or repetition during testimony.
+- **Attorneys**: State their appearances near the start ("[Name], here for the plaintiff", "[Name], for defendant"). The examining attorney asks the questions. The defending attorney speaks rarely, mainly for objections.
+- **Deponent/Witness**: The person being questioned. Named in the videographer's opening and states their own name when asked. Provides answers.
 
-**CRITICAL: Extract names from the transcript text itself.**
-Search the transcript for these name-revealing patterns:
-- Videographer's opening (if present): "This begins the video deposition of [DEPONENT NAME]" — this names the witness/deponent
-- Attorney appearances: "[NAME], here for the plaintiff" or "[NAME], for defendant" or "[NAME] on behalf of [party]" — these name the attorneys
-- The deponent stating their name: "I'm [NAME]" or "My name is [NAME]" or "State your full name" followed by "[NAME]"
-- Direct address by name: "Mr./Ms. [NAME]", "[First name], have you ever..."
-Map these discovered names back to the correct speaker labels. Do NOT leave speakers as "Speaker 1", "Speaker 2", etc. when names are clearly stated in the text.
+After the opening formalities, depositions follow strict Q&A alternation: the examining attorney asks a question, the deponent answers. They alternate. If the same speaker appears to both ask and answer, one attribution is wrong. Short responses like "Yes", "Sure", "Okay", "I do", "Mm-hmm" after a question are almost always the deponent answering. Short transitional phrases like "Okay", "All right" after an answer are almost always the attorney moving to the next question.`,
 
-**Typical speaker order in video depositions (when a videographer is present):**
-1. **Videographer** opens the record: "This begins the video deposition of..."
-2. **Videographer** asks counsel to identify themselves: "Would counsel please identify yourself..."
-3. **Attorneys** state their appearances in response (each is a different speaker)
-4. **Court Reporter** administers the oath — this is ALWAYS a DIFFERENT speaker from the Videographer. The oath-giver is never the same person who opened the record. Look for "raise your right hand", "Do you swear or affirm..."
-5. **Examining Attorney** begins Q&A with the **Deponent**
+  court_hearing: `This is a court hearing. Key roles:
 
-**Typical speaker order in non-video depositions (no videographer):**
-1. **Examining Attorney** or **Court Reporter** opens the record
-2. **Attorneys** may state appearances
-3. **Court Reporter** administers the oath
-4. **Examining Attorney** begins Q&A with the **Deponent**
+- **Judge**: Presides, rules on motions ("Sustained", "Overruled"), directs proceedings.
+- **Clerk/Bailiff**: Calls court to order ("All rise"), may administer oaths, announces the judge.
+- **Attorneys**: Present arguments, examine witnesses. Identify by name from appearances.
+- **Witness**: Testifies under examination. Named when called to the stand.
+- **Defendant**: Enters pleas, may make statements when addressed by the judge.
+- **Court Reporter**: Rarely speaks, may ask for clarification.`,
 
-**Minimum distinct roles when present in the transcript:** Court Reporter, at least one Attorney, and the Deponent are always present. Videographer is only present when the opening announces a video deposition. When these roles appear, they are ALWAYS separate people — never merge any two into the same speaker label.
+  recorded_statement: `This is a recorded statement. Key roles:
 
-**CRITICAL: Q&A Attribution Rules for Depositions**
-After the opening formalities, depositions follow a strict question-and-answer pattern:
-- The **Examining Attorney** asks questions. The **Deponent** answers them.
-- Questions are followed by answers from a DIFFERENT speaker. If the same speaker appears to ask AND answer, one of those attributions is wrong.
-- Short affirmative/negative responses ("Yes", "No", "Okay", "Sure", "Correct", "I do", "Mm-hmm", "Uh-huh") following a question are almost always the **Deponent** answering.
-- Short transitional phrases ("Okay", "All right", "Let me ask you this") following an answer are almost always the **Examining Attorney** moving to the next question.
-- The Defending Attorney speaks rarely — primarily for objections ("Objection", "Objection, form") or brief exchanges.
-- When in doubt about a short utterance, use the Q&A alternation pattern: attorney question → deponent answer → attorney question → deponent answer.
+- **Adjuster/Investigator**: Opens with a preamble identifying themselves and the subject, states date/time, asks for consent to record, then asks structured questions.
+- **Claimant/Subject**: The person giving the statement, often named in the opening preamble.
+- **Attorney**: If present, may advise the claimant or interject.
+- **Interpreter**: If present, translates questions and answers.`,
 
-**Potential speakers & identification patterns:**
+  police_interrogation: `This is a police interrogation. Key roles:
 
-**Videographer (only present in video depositions — see detection rules above):**
-- Opens with "This begins the video deposition of [deponent name]..." or "We are now on the record..." or similar
-- Closes with "This concludes the video deposition of [deponent name]..." or "We are now off the record..."
-- Announces time, date, and location at the start
-- May call for breaks: "Going off the record at [time]"
-- Often asks counsel to identify themselves and state whom they represent
-- Does NOT administer the oath — that is the Court Reporter's role (a different person)
-- Only label a speaker as "Videographer" if the video deposition opening pattern is present
-- Label as "Videographer" or by name if identifiable
+- **Lead Detective**: Conducts questioning, may read Miranda rights, identifies themselves by name and department.
+- **Second Detective/Officer**: May be present to assist or ask follow-up questions.
+- **Suspect/Subject**: The person being questioned, responds to Miranda warnings.
+- **Attorney**: If present, advises the suspect, may terminate the interrogation.`,
 
-**Court Reporter:**
-- ALWAYS a different person/speaker from the Videographer — never the same label
-- Administers the oath: "Do you solemnly swear...", "Do you swear or affirm...", "Do you, [name], swear to tell the truth..."
-- Often begins with "Would you raise your right hand?" or "Raise your right hand, please" before the oath
-- Speaks AFTER attorneys state appearances and BEFORE the examining attorney begins questioning
-- May ask about "usual stipulations" or "standard stipulations"
-- May interject during testimony: "Could you spell that?", "I'm sorry, could you repeat that?", "One at a time, please", "Can you speak up?"
-- May request spelling of names or technical terms during testimony
-- If you see a speaker administer an oath, that speaker MUST be labeled "Court Reporter" (not Videographer, not an attorney)
-- Label as "Court Reporter" or by name if identifiable
-
-**Examining Attorney (Questioning Attorney):**
-- Asks most of the questions during the deposition
-- States appearance early: "[Name], here for the plaintiff" or similar
-- Directs the witness: "Could you state your name for the record?"
-- Uses formal question patterns: "Isn't it true that...", "Would you agree that..."
-- Label by full name (e.g. "Alexander Kirkland"), or "Examining Attorney" if name truly cannot be determined
-
-**Deponent/Witness:**
-- The person being questioned — provides answers
-- Named in the videographer's opening: "video deposition of [name]"
-- States their own name when asked: "I'm [name]" or "My name is [name]"
-- Answers tend to be responsive to questions
-- Label by full name (e.g. "Barry Porter"), or "The Witness" if name truly cannot be determined
-
-**Defending Attorney:**
-- Makes objections: "Objection", "Objection, form", "Objection, leading", "Objection, asked and answered"
-- May instruct the witness not to answer
-- States appearance: "[Name], for defendant" or "representing [party]"
-- Speaks less frequently, primarily during objections or cross-examination
-- Label by full name if identifiable, otherwise "Defending Attorney"
-
-**Other Attorneys:**
-- Additional counsel may be present for other parties
-- May state appearances at the beginning
-- May make their own objections
-- Label by name and party if identifiable`,
-
-  court_hearing: `==============================
-COURT HEARING
-==============================
-Court hearings have a judge presiding, with attorneys arguing motions or presenting cases. The tone is more formal with judicial authority directing proceedings.
-
-**Potential speakers & identification patterns:**
-
-**Judge:**
-- Presides over the hearing — directs proceedings, rules on motions and objections
-- Opens with "This court is now in session" or "We're on the record in the matter of..."
-- Calls cases: "Calling case number..." or "Next on the docket..."
-- Rules: "Sustained", "Overruled", "Motion granted", "Motion denied"
-- Addresses attorneys: "Counsel", "Mr./Ms. [Name]"
-- Gives jury instructions or addresses the jury
-- Label as "Judge [Name]" or "The Court"
-
-**Clerk/Bailiff:**
-- Calls the court to order: "All rise", "Court is now in session"
-- Calls cases from the docket
-- Administers oaths to witnesses
-- May announce the judge: "The Honorable [Name] presiding"
-- Label as "Clerk" or "Bailiff"
-
-**Plaintiff's Attorney / Prosecutor:**
-- Presents arguments on behalf of the plaintiff or the state/people
-- "Your Honor, on behalf of the plaintiff...", "The State calls...", "The People submit..."
-- Conducts direct examination of their witnesses
-- Label by name if identifiable, otherwise "Plaintiff's Attorney" or "Prosecutor"
-
-**Defense Attorney:**
-- Represents the defendant
-- "Your Honor, on behalf of the defendant...", "My client..."
-- Conducts cross-examination, makes objections
-- Label by name if identifiable, otherwise "Defense Attorney"
-
-**Witness:**
-- Called to testify: "Please state your name for the record"
-- Sworn in by clerk or judge
-- Provides testimony under direct and cross-examination
-- Label by name if identifiable, otherwise "The Witness"
-
-**Defendant:**
-- May speak when addressed directly by the judge
-- Enters pleas: "Guilty", "Not guilty", "No contest"
-- May make allocution statements
-- Label by name if identifiable, otherwise "The Defendant"
-
-**Court Reporter:**
-- Rarely speaks but may ask for clarification or repetition
-- "Could you repeat that?" or "Could counsel speak up?"
-- Label as "Court Reporter"`,
-
-  recorded_statement: `==============================
-RECORDED STATEMENT
-==============================
-Recorded statements are typically taken by insurance adjusters, investigators, or attorneys from claimants, witnesses, or parties. They are less formal than depositions but still structured.
-
-**Potential speakers & identification patterns:**
-
-**Adjuster/Investigator (Interviewer):**
-- Opens with a recording preamble: "This is a recorded statement of [name]..." or "My name is [name], I'm a claims adjuster with [company]..."
-- States the date, time, and purpose of the recording
-- Asks the subject to confirm they consent to being recorded
-- Asks structured questions about the incident, injuries, or claim
-- May reference a claim number or file number
-- Label by name and role if identifiable (e.g. "Adjuster Johnson"), otherwise "Interviewer"
-
-**Claimant/Subject:**
-- The person giving the statement
-- Often named in the interviewer's opening preamble
-- Confirms identity and consent to recording
-- Provides narrative answers about the incident
-- Label by name if identifiable, otherwise "Claimant" or "Subject"
-
-**Attorney (if present):**
-- May be present to advise the claimant
-- May interject: "I'm going to advise my client not to answer that" or "Can we go off the record?"
-- May introduce themselves at the start
-- Label by name if identifiable, otherwise "Claimant's Attorney"
-
-**Interpreter:**
-- Translates questions and answers
-- May introduce themselves and their language
-- Label as "Interpreter"`,
-
-  police_interrogation: `==============================
-POLICE INTERROGATION
-==============================
-Police interrogations involve law enforcement questioning a suspect, witness, or person of interest. They have distinctive legal formalities and conversational dynamics.
-
-**Potential speakers & identification patterns:**
-
-**Lead Detective/Interrogator:**
-- Conducts primary questioning
-- May introduce themselves: "I'm Detective [Name] with the [Department]..."
-- Reads Miranda rights: "You have the right to remain silent...", "Do you understand these rights?"
-- Uses interrogation techniques: building rapport, confrontation, presenting evidence
-- May reference case numbers or incident reports
-- Label by name and rank if identifiable (e.g. "Detective Rodriguez"), otherwise "Lead Detective"
-
-**Second Detective/Officer:**
-- Often present as a witness or to assist
-- May ask follow-up questions or take a different approach
-- Sometimes plays a different role in questioning strategy
-- Label by name and rank if identifiable, otherwise "Second Detective" or "Officer"
-
-**Suspect/Subject:**
-- The person being interrogated
-- Responds to Miranda warnings: "Yes, I understand" or invokes rights
-- May provide statements, confessions, or denials
-- May ask for a lawyer: "I want a lawyer" or "I'm not saying anything without my attorney"
-- Label by name if identifiable, otherwise "Suspect" or "Subject"
-
-**Attorney (if present):**
-- Defense attorney advising the suspect
-- May interject to protect client's rights
-- May terminate the interrogation: "This interview is over" or "My client is invoking their right to remain silent"
-- Label by name if identifiable, otherwise "Defense Attorney"
-
-**Interpreter:**
-- Translates if the subject does not speak English
-- Label as "Interpreter"`,
-
-  other: `==============================
-OTHER RECORDINGS
-==============================
-This section covers informal or situational recordings that don't fit neatly into formal legal proceeding categories. These may include witness statements, settlement negotiations, client communications, body camera footage, scene recordings, voice memos, and other field recordings. The structure may be loose or nonexistent.
-
-**Types and identification patterns:**
-
-**Witness Statements (Field):**
-- An officer or investigator interviews a witness at or near a scene
-- Opens informally: "Can you tell me what you saw?" or "I'm Officer [Name], can you describe what happened?"
-- The witness provides a narrative account
-- Potential speakers: Officer/Investigator, Witness, Bystanders
-- Label by name/role if identifiable
-
-**Settlement Negotiations:**
-- Attorneys or parties discuss settlement terms
-- May reference demand amounts, policy limits, or offers
-- More conversational, back-and-forth discussion
-- Potential speakers: Plaintiff's Attorney, Defense Attorney, Mediator, Insurance Representative, Parties
-- Label by name/role if identifiable
-
-**Client Communications:**
-- Attorney-client conversations about case strategy or facts
-- May reference privileged information
-- Informal tone, first-name basis common
-- Potential speakers: Attorney, Client, Paralegal, Legal Assistant
-- Label by name/role if identifiable
-
-**Body Camera / Dash Camera Footage:**
-- Law enforcement recordings from the field
-- Officer may narrate: "Responding to a call at [location]..."
-- Interactions with civilians, suspects, witnesses at the scene
-- May include radio communications
-- Often chaotic with overlapping speech, background noise, multiple bystanders
-- Potential speakers: Officer(s), Suspect, Witness(es), Bystander(s), Dispatch (radio)
-- Label by name/role if identifiable; use "Officer 1", "Bystander 1" etc. for unidentified
-
-**Scene / Accident Recordings:**
-- Video or audio recorded at the scene of an accident or incident
-- May be recorded by a party, witness, or passerby
-- Often informal narration: "Oh my God, did you see that?" or describing what they're witnessing
-- Potential speakers: Recorder/Narrator, Other Parties, Witnesses, Emergency Responders
-- Label by name/role if identifiable; use "Narrator", "Bystander 1" etc. for unidentified
-
-**Voice Memos / Personal Recordings:**
-- Someone recording their own thoughts or a moment they deem important
-- May be a single speaker narrating events
-- Could capture a conversation the recorder is participating in
-- Often informal with personal context
-- Potential speakers: Recorder, Other Participants
-- Label by name if identifiable; use "Narrator" for a solo recorder
-
-**General identification cues for informal recordings:**
-- Listen for self-introductions or name usage in conversation
-- Badge numbers, ranks, or department names for law enforcement
-- Professional titles or company names for business contexts
-- Relationship references ("my attorney", "my client", "officer")
-- Environmental cues (radio chatter = law enforcement, medical terminology = healthcare setting)`,
+  other: `This is an informal or miscellaneous recording. Identify speakers by name or role based on context clues — self-introductions, how they address each other, professional titles, relationship references. Use descriptive labels like "Officer", "Witness", "Narrator", "Interviewer", etc. when names are not available.`,
 };
-
-const GENERAL_RULES = `==============================
-GENERAL RULES
-==============================
-
-**Name assignment rules:**
-- Always identify every speaker — never leave a speaker as a generic label like "Speaker 1" or "Speaker 2"
-- Use the speaker's full name when it can be determined from context (e.g. "Barry Porter" not just "Barry")
-- When a name is not available, always assign a descriptive role label (e.g. "Videographer", "Court Reporter", "Examining Attorney", "Detective", "Claimant")
-- Every speaker must end up with either a name or a role — generic numbered labels are not acceptable output
-- For multiple speakers with the same role, number them (e.g. "Bystander 1", "Bystander 2", "Officer 1", "Officer 2")
-
-**Cross-type identification cues:**
-- Self-introductions: "My name is...", "I'm...", "This is..."
-- Direct address: "Mr. Smith", "Ms. Johnson", "Your Honor", "Detective", "Officer"
-- Role references: "counsel for the plaintiff", "the witness", "my client"
-- Institutional phrases: "for the record", "let the record reflect", "on the record"`;
 
 function getRecordingTypeLabel(recordingType: string | null): string {
   const labels: Record<string, string> = {
@@ -356,65 +83,37 @@ function buildUserPrompt(
   batchContext?: { batchNumber: number; totalBatches: number; contextSegments?: { i: number; s: string; t: string }[]; priorIdentifications?: Record<string, string> },
   knownRoster?: { name: string; role: string }[] | null
 ): string {
-  let batchPreamble = '';
+  let preamble = '';
+
   if (batchContext && batchContext.totalBatches > 1) {
-    batchPreamble = `**IMPORTANT: This is batch ${batchContext.batchNumber} of ${batchContext.totalBatches} from a longer transcript.**\n`;
+    preamble += `This is batch ${batchContext.batchNumber} of ${batchContext.totalBatches} from a longer transcript.\n`;
     if (batchContext.priorIdentifications && Object.keys(batchContext.priorIdentifications).length > 0) {
       const identifiedNames = [...new Set(Object.values(batchContext.priorIdentifications))];
-      batchPreamble += `The speakers identified so far are: ${identifiedNames.join(', ')}.\n`;
-      batchPreamble += `Use these speaker names in your "label" fields. Do NOT use generic labels like "Speaker 1", "Speaker 2", etc. If you detect a genuinely new speaker not listed above, you may introduce a new name, but strongly prefer matching to the existing speakers.\n`;
-      batchPreamble += `\nSpeaker mapping from previous batches:\n`;
-      for (const [generic, identified] of Object.entries(batchContext.priorIdentifications)) {
-        batchPreamble += `- ${generic} = ${identified}\n`;
-      }
-      batchPreamble += `\n`;
+      preamble += `Speakers identified so far: ${identifiedNames.join(', ')}. Use these exact names. Do not revert to generic labels.\n`;
+      preamble += `Speaker mapping: ${JSON.stringify(batchContext.priorIdentifications)}\n`;
     }
     if (batchContext.contextSegments && batchContext.contextSegments.length > 0) {
-      batchPreamble += `The following segments are CONTEXT from the end of the previous batch (do NOT include entries for these in your "segments" array — only process the segments in the main "Transcript segments" section below):\n`;
-      batchPreamble += `${JSON.stringify(batchContext.contextSegments)}\n\n`;
+      preamble += `Context from previous batch (do NOT include these in your output):\n${JSON.stringify(batchContext.contextSegments)}\n`;
     }
+    preamble += '\n';
   }
 
-  let rosterPreamble = '';
   if (knownRoster && knownRoster.length > 0) {
-    rosterPreamble = `**SPEAKER ROSTER (identified from the opening of this transcript):**\n`;
+    preamble += `SPEAKER ROSTER (identified from the opening):\n`;
     for (const { name, role } of knownRoster) {
-      rosterPreamble += `- ${name} (${role})\n`;
+      preamble += `- ${name} (${role})\n`;
     }
-    rosterPreamble += `\nYou MUST use ONLY these speaker names in your "label" fields. Do NOT use generic labels like "Speaker 1". Do NOT introduce new speaker names unless you find clear evidence of a speaker not in this roster.\n\n`;
+    preamble += `Use ONLY these names in your "label" fields. Do not use generic labels.\n\n`;
   }
 
   const typeKey = recordingType && RECORDING_TYPE_SECTIONS[recordingType] ? recordingType : null;
   const section = typeKey ? RECORDING_TYPE_SECTIONS[typeKey] : Object.values(RECORDING_TYPE_SECTIONS).join('\n\n');
 
-  const typeInstruction = typeKey
-    ? `The user has identified this recording as **${getRecordingTypeLabel(typeKey)}**. Use the section below to identify speakers.`
-    : `Determine what type of recording this is from contextual clues, then use the appropriate section below to identify speakers.`;
-
-  return `${batchPreamble}${rosterPreamble}Below is a transcript with preliminary speaker labels. You have three tasks:
-
-**Task 1: Correct speaker labels**
-Review the conversational flow and correct any speaker misattributions. ${speakerHint}
-- The preliminary speaker labels from diarization are often WRONG — do not trust them blindly
-- Use conversational logic: questions are followed by answers from a DIFFERENT speaker
-- Short responses ("Okay", "Sure", "Yes", "No", "I do") following a question belong to the person answering, not the questioner
-- Do NOT merge speakers that are clearly different people
-- Do NOT split a single speaker into multiple speakers unless there's strong evidence
-
-**Task 2: Identify speaker names and roles**
-${typeInstruction}
-
-**Task 3: Clean up text formatting**
-For each segment, clean up the text:
-- Add proper punctuation (periods, commas, question marks)
-- Format times with colons (e.g. "1.33 p.m." → "1:33 p.m.")
-- Fix capitalization at the start of sentences
-- PRESERVE all filler words (uh, um, mm-hmm, ah) — they are legally significant
-- PRESERVE all spoken content exactly — do not add, remove, or rephrase any words
+  return `${preamble}${speakerHint}
 
 ${section}
 
-${GENERAL_RULES}
+The preliminary speaker labels below are from automated diarization and are often WRONG. Re-assign speakers based on who is actually speaking, using conversational context and the structural knowledge above. Identify each speaker by their real name or role — never use generic labels like "Speaker 1".
 
 Transcript segments:
 ${JSON.stringify(segmentData)}`;
@@ -556,28 +255,10 @@ async function identifySpeakersFromOpening(
     t: s.text,
   }));
 
-  const systemPrompt = `You are an expert legal transcript analyst. Your task is to identify all speakers from the opening of a legal proceeding.
-
-IMPORTANT: Your response must contain ONLY valid JSON and nothing else.
-
-The JSON must have exactly one field:
-- "roster": an array of objects, each with "name" (the speaker's full name or role label) and "role" (their role in the proceeding)
-
-Example for a deposition:
-{
-  "roster": [
-    {"name": "Videographer", "role": "Videographer"},
-    {"name": "Court Reporter", "role": "Court Reporter"},
-    {"name": "Alexander Kirkland", "role": "Examining Attorney (Plaintiff)"},
-    {"name": "Ben Warren", "role": "Defending Attorney (Defendant)"},
-    {"name": "Barry Porter", "role": "Deponent"}
-  ]
-}
-
-Use full names when stated in the text. Use role labels only when names cannot be determined.`;
-
   const typeKey = recordingType && RECORDING_TYPE_SECTIONS[recordingType] ? recordingType : null;
   const section = typeKey ? RECORDING_TYPE_SECTIONS[typeKey] : '';
+
+  const systemPrompt = `You are an expert legal transcript analyst. Identify all speakers from the opening of this proceeding. Return ONLY valid JSON with one field: "roster" — an array of {"name", "role"} objects. Use full names when stated in the text, role labels otherwise.`;
 
   const userPrompt = `Analyze the opening of this ${getRecordingTypeLabel(recordingType)} and identify every speaker by name and role.
 
@@ -720,9 +401,9 @@ export async function refineSpeakersWithGPT(
   const systemPrompt = buildSystemPrompt();
 
   if (recordingType) {
-    console.log(`[Speaker Refinement] Recording type: ${recordingType} — sending only ${recordingType} section to Claude`);
+    console.log(`[Speaker Refinement] Recording type: ${recordingType}`);
   } else {
-    console.log(`[Speaker Refinement] No recording type specified — sending all sections to Claude`);
+    console.log(`[Speaker Refinement] No recording type specified — sending all sections`);
   }
 
   let knownRoster: { name: string; role: string }[] | null = null;
