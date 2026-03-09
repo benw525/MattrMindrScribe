@@ -10,7 +10,7 @@ interface TranscriptContextType {
   activeUploads: UploadEntry[];
   addTranscript: (transcript: Transcript) => void;
   uploadFile: (file: File, description?: string, folderId?: string, onProgress?: (percent: number) => void, expectedSpeakers?: number | null) => Promise<void>;
-  startBackgroundUpload: (file: File, description?: string, folderId?: string, expectedSpeakers?: number | null) => void;
+  startBackgroundUpload: (file: File, description?: string, folderId?: string, expectedSpeakers?: number | null, recordingType?: string, practiceArea?: string) => void;
   dismissUpload: (id: string) => void;
   updateTranscript: (id: string, updates: Partial<Transcript>) => void;
   deleteTranscripts: (ids: string[]) => void;
@@ -57,12 +57,12 @@ export function TranscriptProvider({ children }: { children: ReactNode }) {
     setTranscripts((prev) => [transcript, ...prev]);
   }, []);
 
-  const uploadFile = useCallback(async (file: File, description?: string, folderId?: string, onProgress?: (percent: number) => void, expectedSpeakers?: number | null) => {
-    const newTranscript = await api.transcripts.upload(file, description, folderId, onProgress, expectedSpeakers);
+  const uploadFile = useCallback(async (file: File, description?: string, folderId?: string, onProgress?: (percent: number) => void, expectedSpeakers?: number | null, recordingType?: string, practiceArea?: string) => {
+    const newTranscript = await api.transcripts.upload(file, description, folderId, onProgress, expectedSpeakers, recordingType, practiceArea);
     setTranscripts((prev) => [newTranscript, ...prev]);
   }, []);
 
-  const startBackgroundUpload = useCallback((file: File, description?: string, folderId?: string, expectedSpeakers?: number | null) => {
+  const startBackgroundUpload = useCallback((file: File, description?: string, folderId?: string, expectedSpeakers?: number | null, recordingType?: string, practiceArea?: string) => {
     const uploadId = `upload-${++uploadIdCounter.current}-${Date.now()}`;
     const entry: UploadEntry = {
       id: uploadId,
@@ -76,7 +76,7 @@ export function TranscriptProvider({ children }: { children: ReactNode }) {
       setActiveUploads((prev) =>
         prev.map((u) => u.id === uploadId ? { ...u, progress: percent } : u)
       );
-    }, expectedSpeakers).then((newTranscript) => {
+    }, expectedSpeakers, recordingType, practiceArea).then((newTranscript) => {
       setActiveUploads((prev) =>
         prev.map((u) => u.id === uploadId ? { ...u, progress: 100, status: 'complete' as const } : u)
       );

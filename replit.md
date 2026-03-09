@@ -9,7 +9,7 @@ A full-stack application for managing legal case recordings/transcripts. Feature
 - User authentication (register, login, JWT-based)
 - Transcript listing with status indicators (Completed, Processing, Pending, Error)
 - Case and folder organization
-- Audio/video file upload with background upload (non-blocking progress indicator) and 3-step AI transcription pipeline: (1) OpenAI Whisper for text+timestamps, (2) AssemblyAI for speaker diarization, (3) GPT-4o for speaker refinement; optional expected speaker count at upload; supports extensive audio/video formats (mp3, wav, m4a, ogg, flac, aac, wma, amr, opus, aiff, mp4, mov, avi, mkv, wmv, flv, 3gp, mpg, etc.)
+- Audio/video file upload with background upload (non-blocking progress indicator) and 3-step AI transcription pipeline: (1) OpenAI Whisper for text+timestamps, (2) AssemblyAI for speaker diarization, (3) Claude Opus 4.6 for speaker refinement; optional expected speaker count at upload; recording type selector (Deposition, Court Hearing, Recorded Statement, Police Interrogation, Other) + area of law dropdown (10 practice areas); supports extensive audio/video formats (mp3, wav, m4a, ogg, flac, aac, wma, amr, opus, aiff, mp4, mov, avi, mkv, wmv, flv, 3gp, mpg, etc.)
 - AI Summarize: practice-area-specific transcript analysis via 10 legal agent bots (Personal Injury, Family Law, Criminal Defense, Workers' Comp, Insurance Defense, Employment Law, Medical Malpractice, Real Estate, Immigration, General Litigation); streams response in real-time via SSE
 - Synced audio player for recordings
 - Version history for transcripts (persisted to DB, loaded on page open)
@@ -54,7 +54,7 @@ A full-stack application for managing legal case recordings/transcripts. Feature
 - `server/routes/transcripts.ts` - Transcript CRUD + file upload (R2 or local) + status/retranscribe endpoints
 - `server/transcription.ts` - AI transcription pipeline (ffmpeg conversion, chunking, Whisper API, 3-step diarization, R2 download support)
 - `server/diarization.ts` - AssemblyAI speaker diarization (upload audio, get speaker labels, map onto Whisper segments)
-- `server/speakerRefinement.ts` - Claude Opus 4.6 speaker refinement via Anthropic API (always identifies every speaker by name or role with legal domain knowledge — videographer, court reporter, attorneys, deponent patterns)
+- `server/speakerRefinement.ts` - Claude Opus 4.6 speaker refinement via Anthropic API (always identifies every speaker by name or role with legal domain knowledge — videographer, court reporter, attorneys, deponent patterns); conditionally sends only the matching recording-type section to Claude based on user selection at upload (deposition, court_hearing, recorded_statement, police_interrogation, other)
 - `server/routes/folders.ts` - Folder CRUD + move transcripts + MattrMindr case linking
 - `server/routes/mattrmindr.ts` - MattrMindr integration API (connect, disconnect, status, case search proxy, send files)
 - `server/routes/external.ts` - External API for inbound integrations (auth, receive files for transcription, transcription status)

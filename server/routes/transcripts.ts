@@ -81,6 +81,8 @@ router.get('/', async (req: AuthRequest, res: Response) => {
       fileSize: row.file_size,
       fileUrl: row.file_url,
       folderId: row.folder_id,
+      recordingType: row.recording_type,
+      practiceArea: row.practice_area,
       errorMessage: row.error_message,
       pipelineLog: row.pipeline_log,
       segments: row.segments,
@@ -141,7 +143,7 @@ router.post('/presigned-upload', authenticateToken, async (req: AuthRequest, res
 
 router.post('/confirm-upload', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
-    const { uploadToken, description, folderId, expectedSpeakers } = req.body;
+    const { uploadToken, description, folderId, expectedSpeakers, recordingType, practiceArea } = req.body;
     if (!uploadToken) {
       return res.status(400).json({ error: 'uploadToken is required' });
     }
@@ -165,9 +167,12 @@ router.post('/confirm-upload', authenticateToken, async (req: AuthRequest, res: 
     const fileUrl = `r2://${pending.r2Key}`;
     const fileType = pending.contentType.startsWith('video/') ? 'video' : 'audio';
 
+    const validRecordingTypes = ['deposition', 'court_hearing', 'recorded_statement', 'police_interrogation', 'other'];
+    const validPracticeAreas = ['personal_injury', 'family_law', 'criminal_defense', 'workers_comp', 'insurance_defense', 'employment_law', 'medical_malpractice', 'real_estate', 'immigration', 'general_litigation'];
+
     const result = await pool.query(
-      `INSERT INTO transcripts (filename, description, status, type, file_size, file_url, folder_id, user_id, expected_speakers)
-       VALUES ($1, $2, 'pending', $3, $4, $5, $6, $7, $8)
+      `INSERT INTO transcripts (filename, description, status, type, file_size, file_url, folder_id, user_id, expected_speakers, recording_type, practice_area)
+       VALUES ($1, $2, 'pending', $3, $4, $5, $6, $7, $8, $9, $10)
        RETURNING *`,
       [
         pending.filename,
@@ -178,6 +183,8 @@ router.post('/confirm-upload', authenticateToken, async (req: AuthRequest, res: 
         folderId || null,
         req.userId,
         expectedSpeakers && parseInt(expectedSpeakers) >= 2 && parseInt(expectedSpeakers) <= 10 ? parseInt(expectedSpeakers) : null,
+        recordingType && validRecordingTypes.includes(recordingType) ? recordingType : null,
+        practiceArea && validPracticeAreas.includes(practiceArea) ? practiceArea : null,
       ]
     );
 
@@ -197,6 +204,8 @@ router.post('/confirm-upload', authenticateToken, async (req: AuthRequest, res: 
       fileSize: t.file_size,
       fileUrl: t.file_url,
       folderId: t.folder_id,
+      recordingType: t.recording_type,
+      practiceArea: t.practice_area,
       createdAt: t.created_at,
       updatedAt: t.updated_at,
     });
@@ -227,7 +236,7 @@ router.post('/upload', (req, res: Response, next) => {
     }
     console.log('[Upload] File received:', req.file.originalname, req.file.size, 'bytes');
 
-    const { description, folderId } = req.body;
+    const { description, folderId, expectedSpeakers, recordingType, practiceArea } = req.body;
     const fileType = req.file.mimetype.startsWith('video/') ? 'video' : 'audio';
 
     let fileUrl: string;
@@ -246,8 +255,8 @@ router.post('/upload', (req, res: Response, next) => {
     }
 
     const result = await pool.query(
-      `INSERT INTO transcripts (filename, description, status, type, file_size, file_url, folder_id, user_id)
-       VALUES ($1, $2, 'pending', $3, $4, $5, $6, $7)
+      `INSERT INTO transcripts (filename, description, status, type, file_size, file_url, folder_id, user_id, expected_speakers, recording_type, practice_area)
+       VALUES ($1, $2, 'pending', $3, $4, $5, $6, $7, $8, $9, $10)
        RETURNING *`,
       [
         req.file.originalname,
@@ -257,6 +266,9 @@ router.post('/upload', (req, res: Response, next) => {
         fileUrl,
         folderId || null,
         req.userId,
+        expectedSpeakers ? parseInt(expectedSpeakers, 10) : null,
+        recordingType || null,
+        practiceArea || null,
       ]
     );
 
@@ -276,6 +288,8 @@ router.post('/upload', (req, res: Response, next) => {
       fileSize: t.file_size,
       fileUrl: t.file_url,
       folderId: t.folder_id,
+      recordingType: t.recording_type,
+      practiceArea: t.practice_area,
       errorMessage: t.error_message,
       segments: [],
       createdAt: t.created_at,
@@ -362,6 +376,8 @@ router.patch('/:id', async (req: AuthRequest, res: Response) => {
       fileSize: t.file_size,
       fileUrl: t.file_url,
       folderId: t.folder_id,
+      recordingType: t.recording_type,
+      practiceArea: t.practice_area,
       errorMessage: t.error_message,
       segments: t.segments,
       createdAt: t.created_at,
@@ -462,6 +478,8 @@ router.post('/:id/deduplicate', async (req: AuthRequest, res: Response) => {
         fileSize: t.file_size,
         fileUrl: t.file_url,
         folderId: t.folder_id,
+        recordingType: t.recording_type,
+        practiceArea: t.practice_area,
         errorMessage: t.error_message,
         segments: t.segments,
         createdAt: t.created_at,

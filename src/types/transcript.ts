@@ -30,6 +30,8 @@ export interface Transcript {
   createdAt: string;
   updatedAt: string;
   folderId: string | null;
+  recordingType?: string | null;
+  practiceArea?: string | null;
   segments: TranscriptSegment[];
   versions: TranscriptVersion[];
   pipelineLog?: PipelineLog | null;

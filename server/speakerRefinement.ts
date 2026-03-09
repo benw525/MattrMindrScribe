@@ -23,41 +23,9 @@ Your response must be valid JSON with two fields:
 - "identifications": an object mapping generic labels to identified names/roles`;
 }
 
-function buildUserPrompt(
-  segmentData: { i: number; s: string; t: string }[],
-  speakerHint: string,
-  batchContext?: { batchNumber: number; totalBatches: number; contextSegments?: { i: number; s: string; t: string }[]; priorIdentifications?: Record<string, string> }
-): string {
-  let batchPreamble = '';
-  if (batchContext && batchContext.totalBatches > 1) {
-    batchPreamble = `**IMPORTANT: This is batch ${batchContext.batchNumber} of ${batchContext.totalBatches} from a longer transcript.**\n`;
-    if (batchContext.priorIdentifications && Object.keys(batchContext.priorIdentifications).length > 0) {
-      batchPreamble += `Speaker identifications from previous batches (use these to maintain consistency):\n`;
-      for (const [generic, identified] of Object.entries(batchContext.priorIdentifications)) {
-        batchPreamble += `- ${generic} = ${identified}\n`;
-      }
-      batchPreamble += `\n`;
-    }
-    if (batchContext.contextSegments && batchContext.contextSegments.length > 0) {
-      batchPreamble += `The following segments are CONTEXT from the end of the previous batch (do NOT include labels for these — only label the segments in the main "Transcript segments" section below):\n`;
-      batchPreamble += `${JSON.stringify(batchContext.contextSegments)}\n\n`;
-    }
-  }
-
-  return `${batchPreamble}Below is a transcript with preliminary speaker labels. You have two tasks:
-
-**Task 1: Correct speaker labels**
-Review the conversational flow and correct any speaker misattributions. ${speakerHint}
-- Preserve the original speaker label if it seems correct
-- Look for conversational cues: questions followed by answers likely indicate speaker changes
-- Do NOT merge speakers that are clearly different people
-- Do NOT split a single speaker into multiple speakers unless there's strong evidence
-
-**Task 2: Identify speaker names and roles**
-First, determine what type of recording this is from contextual clues, then use the appropriate section below to identify speakers. If the type is unclear, consider all sections.
-
-==============================
-SECTION A: DEPOSITION
+const RECORDING_TYPE_SECTIONS: Record<string, string> = {
+  deposition: `==============================
+DEPOSITION
 ==============================
 Depositions typically have a formal opening/closing by a videographer and/or court reporter, with structured Q&A between attorneys and a witness.
 
@@ -102,10 +70,10 @@ Depositions typically have a formal opening/closing by a videographer and/or cou
 - Additional counsel may be present for other parties
 - May state appearances at the beginning
 - May make their own objections
-- Label by name and party if identifiable
+- Label by name and party if identifiable`,
 
-==============================
-SECTION B: COURT HEARING
+  court_hearing: `==============================
+COURT HEARING
 ==============================
 Court hearings have a judge presiding, with attorneys arguing motions or presenting cases. The tone is more formal with judicial authority directing proceedings.
 
@@ -154,10 +122,10 @@ Court hearings have a judge presiding, with attorneys arguing motions or present
 **Court Reporter:**
 - Rarely speaks but may ask for clarification or repetition
 - "Could you repeat that?" or "Could counsel speak up?"
-- Label as "Court Reporter"
+- Label as "Court Reporter"`,
 
-==============================
-SECTION C: RECORDED STATEMENT
+  recorded_statement: `==============================
+RECORDED STATEMENT
 ==============================
 Recorded statements are typically taken by insurance adjusters, investigators, or attorneys from claimants, witnesses, or parties. They are less formal than depositions but still structured.
 
@@ -187,10 +155,10 @@ Recorded statements are typically taken by insurance adjusters, investigators, o
 **Interpreter:**
 - Translates questions and answers
 - May introduce themselves and their language
-- Label as "Interpreter"
+- Label as "Interpreter"`,
 
-==============================
-SECTION D: POLICE INTERROGATION
+  police_interrogation: `==============================
+POLICE INTERROGATION
 ==============================
 Police interrogations involve law enforcement questioning a suspect, witness, or person of interest. They have distinctive legal formalities and conversational dynamics.
 
@@ -225,12 +193,12 @@ Police interrogations involve law enforcement questioning a suspect, witness, or
 
 **Interpreter:**
 - Translates if the subject does not speak English
-- Label as "Interpreter"
+- Label as "Interpreter"`,
 
+  other: `==============================
+OTHER RECORDINGS
 ==============================
-SECTION E: OTHER RECORDINGS
-==============================
-This section covers informal or situational recordings that don't fit neatly into the above categories. These may include witness statements, settlement negotiations, client communications, body camera footage, scene recordings, voice memos, and other field recordings. The structure may be loose or nonexistent.
+This section covers informal or situational recordings that don't fit neatly into formal legal proceeding categories. These may include witness statements, settlement negotiations, client communications, body camera footage, scene recordings, voice memos, and other field recordings. The structure may be loose or nonexistent.
 
 **Types and identification patterns:**
 
@@ -284,10 +252,11 @@ This section covers informal or situational recordings that don't fit neatly int
 - Badge numbers, ranks, or department names for law enforcement
 - Professional titles or company names for business contexts
 - Relationship references ("my attorney", "my client", "officer")
-- Environmental cues (radio chatter = law enforcement, medical terminology = healthcare setting)
+- Environmental cues (radio chatter = law enforcement, medical terminology = healthcare setting)`,
+};
 
-==============================
-GENERAL RULES (ALL RECORDING TYPES)
+const GENERAL_RULES = `==============================
+GENERAL RULES
 ==============================
 
 **Name assignment rules:**
@@ -307,7 +276,63 @@ GENERAL RULES (ALL RECORDING TYPES)
 {
   "labels": ["Videographer", "Court Reporter", "Attorney Smith", "Barry Porter", "Attorney Smith", "Barry Porter"],
   "identifications": {"Speaker 1": "Videographer", "Speaker 2": "Court Reporter", "Speaker 3": "Attorney Smith", "Speaker 4": "Barry Porter"}
+}`;
+
+function getRecordingTypeLabel(recordingType: string | null): string {
+  const labels: Record<string, string> = {
+    deposition: 'a deposition',
+    court_hearing: 'a court hearing',
+    recorded_statement: 'a recorded statement',
+    police_interrogation: 'a police interrogation',
+    other: 'an informal/other recording',
+  };
+  return recordingType && labels[recordingType] ? labels[recordingType] : 'unknown';
 }
+
+function buildUserPrompt(
+  segmentData: { i: number; s: string; t: string }[],
+  speakerHint: string,
+  recordingType?: string | null,
+  batchContext?: { batchNumber: number; totalBatches: number; contextSegments?: { i: number; s: string; t: string }[]; priorIdentifications?: Record<string, string> }
+): string {
+  let batchPreamble = '';
+  if (batchContext && batchContext.totalBatches > 1) {
+    batchPreamble = `**IMPORTANT: This is batch ${batchContext.batchNumber} of ${batchContext.totalBatches} from a longer transcript.**\n`;
+    if (batchContext.priorIdentifications && Object.keys(batchContext.priorIdentifications).length > 0) {
+      batchPreamble += `Speaker identifications from previous batches (use these to maintain consistency):\n`;
+      for (const [generic, identified] of Object.entries(batchContext.priorIdentifications)) {
+        batchPreamble += `- ${generic} = ${identified}\n`;
+      }
+      batchPreamble += `\n`;
+    }
+    if (batchContext.contextSegments && batchContext.contextSegments.length > 0) {
+      batchPreamble += `The following segments are CONTEXT from the end of the previous batch (do NOT include labels for these — only label the segments in the main "Transcript segments" section below):\n`;
+      batchPreamble += `${JSON.stringify(batchContext.contextSegments)}\n\n`;
+    }
+  }
+
+  const typeKey = recordingType && RECORDING_TYPE_SECTIONS[recordingType] ? recordingType : null;
+  const section = typeKey ? RECORDING_TYPE_SECTIONS[typeKey] : Object.values(RECORDING_TYPE_SECTIONS).join('\n\n');
+
+  const typeInstruction = typeKey
+    ? `The user has identified this recording as **${getRecordingTypeLabel(typeKey)}**. Use the section below to identify speakers.`
+    : `Determine what type of recording this is from contextual clues, then use the appropriate section below to identify speakers.`;
+
+  return `${batchPreamble}Below is a transcript with preliminary speaker labels. You have two tasks:
+
+**Task 1: Correct speaker labels**
+Review the conversational flow and correct any speaker misattributions. ${speakerHint}
+- Preserve the original speaker label if it seems correct
+- Look for conversational cues: questions followed by answers likely indicate speaker changes
+- Do NOT merge speakers that are clearly different people
+- Do NOT split a single speaker into multiple speakers unless there's strong evidence
+
+**Task 2: Identify speaker names and roles**
+${typeInstruction}
+
+${section}
+
+${GENERAL_RULES}
 
 Transcript segments:
 ${JSON.stringify(segmentData)}`;
@@ -355,6 +380,7 @@ async function refineBatch(
   segments: Segment[],
   speakerHint: string,
   systemPrompt: string,
+  recordingType?: string | null,
   batchContext?: { batchNumber: number; totalBatches: number; contextSegments?: { i: number; s: string; t: string }[]; priorIdentifications?: Record<string, string> }
 ): Promise<{ labels: string[]; identifications: Record<string, string> } | null> {
   const segmentData = segments.map((s, i) => ({
@@ -363,7 +389,7 @@ async function refineBatch(
     t: s.text,
   }));
 
-  const userPrompt = buildUserPrompt(segmentData, speakerHint, batchContext);
+  const userPrompt = buildUserPrompt(segmentData, speakerHint, recordingType, batchContext);
 
   const maxTokens = Math.min(32000, Math.max(8192, segments.length * 20 + 2000));
   console.log(`[Speaker Refinement] Using max_tokens: ${maxTokens} for ${segments.length} segments`);
@@ -385,7 +411,8 @@ async function refineBatch(
 
 export async function refineSpeakersWithGPT(
   segments: Segment[],
-  expectedSpeakers?: number | null
+  expectedSpeakers?: number | null,
+  recordingType?: string | null
 ): Promise<Segment[]> {
   if (segments.length === 0) return segments;
 
@@ -395,10 +422,16 @@ export async function refineSpeakersWithGPT(
 
   const systemPrompt = buildSystemPrompt();
 
+  if (recordingType) {
+    console.log(`[Speaker Refinement] Recording type: ${recordingType} — sending only ${recordingType} section to Claude`);
+  } else {
+    console.log(`[Speaker Refinement] No recording type specified — sending all sections to Claude`);
+  }
+
   if (segments.length <= SINGLE_CALL_LIMIT) {
     console.log(`[Speaker Refinement] Sending ${segments.length} segments to Claude Opus 4.6 (single call)...`);
     try {
-      const result = await refineBatch(segments, speakerHint, systemPrompt);
+      const result = await refineBatch(segments, speakerHint, systemPrompt, recordingType);
       if (!result) {
         console.log('[Speaker Refinement] Failed to parse response, keeping original labels');
         return segments;
@@ -461,7 +494,7 @@ export async function refineSpeakersWithGPT(
     console.log(`[Speaker Refinement] Batch ${batchNum + 1}/${totalBatches}: segments ${batchStart}-${batchEnd - 1} (${batchSegments.length} segments)...`);
 
     try {
-      const result = await refineBatch(batchSegments, speakerHint, systemPrompt, batchContext);
+      const result = await refineBatch(batchSegments, speakerHint, systemPrompt, recordingType, batchContext);
       if (!result) {
         console.log(`[Speaker Refinement] Batch ${batchNum + 1} failed to parse, keeping original labels for this batch`);
         for (let i = batchStart; i < batchEnd; i++) {

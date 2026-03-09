@@ -335,14 +335,15 @@ export async function processTranscription(transcriptId: string): Promise<void> 
     );
 
     const { rows } = await pool.query(
-      'SELECT file_url, type, filename, expected_speakers FROM transcripts WHERE id = $1',
+      'SELECT file_url, type, filename, expected_speakers, recording_type FROM transcripts WHERE id = $1',
       [transcriptId]
     );
 
     if (rows.length === 0) throw new Error('Transcript not found');
 
-    const { file_url, filename, expected_speakers } = rows[0];
+    const { file_url, filename, expected_speakers, recording_type } = rows[0];
     const expectedSpeakers = expected_speakers ? parseInt(expected_speakers) : null;
+    const recordingType: string | null = recording_type || null;
     let sourcePath: string;
 
     await checkCancelled();
@@ -476,7 +477,7 @@ export async function processTranscription(transcriptId: string): Promise<void> 
 
     try {
       console.log(`[Transcription] Step 3: Claude Opus 4.6 speaker refinement...`);
-      allSegments = await refineSpeakersWithGPT(allSegments, expectedSpeakers);
+      allSegments = await refineSpeakersWithGPT(allSegments, expectedSpeakers, recordingType);
       const uniqueSpeakers = new Set(allSegments.map(s => s.speaker));
       pipelineLog.refinement = {
         status: 'success',

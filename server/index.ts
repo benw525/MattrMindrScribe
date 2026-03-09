@@ -185,6 +185,13 @@ pool.query(`
   if (!err.message.includes('already exists')) console.error('Migration error (folders mattrmindr):', err.message);
 });
 
+pool.query(`
+  ALTER TABLE transcripts ADD COLUMN IF NOT EXISTS recording_type VARCHAR(50) DEFAULT NULL;
+  ALTER TABLE transcripts ADD COLUMN IF NOT EXISTS practice_area VARCHAR(100) DEFAULT NULL;
+`).catch((err: any) => {
+  if (!err.message.includes('already exists')) console.error('Migration error (transcripts recording_type/practice_area):', err.message);
+});
+
 async function seedAdminAccounts() {
   const raw = process.env.ADMIN_ACCOUNTS;
   if (!raw) return;

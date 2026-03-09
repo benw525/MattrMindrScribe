@@ -72,6 +72,10 @@ Source: server/speakerRefinement.ts — refineSpeakersWithGPT()
             with 20 segments of overlap context at boundaries for speaker continuity;
             speaker identifications from earlier batches are passed forward to maintain
             consistent naming across the full transcript
+  Parameters:  recordingType (from user input at upload) — controls which prompt section is sent
+               If recordingType is provided, only the matching section is included in the prompt
+               If not provided, all 5 sections are included (legacy/fallback behavior)
+  Recording types: deposition, court_hearing, recorded_statement, police_interrogation, other
 
 --- SYSTEM PROMPT (sent as "system" parameter) ---
 
@@ -82,6 +86,10 @@ Your response must be valid JSON with two fields:
 - "identifications": an object mapping generic labels to identified names/roles
 
 --- USER PROMPT (sent as messages[0].content) ---
+
+NOTE: The user prompt now conditionally includes only ONE recording type section
+(based on the user's selection at upload), instead of all 5 sections.
+If no recording type was selected, all 5 sections are included as a fallback.
 
 Below is a transcript with preliminary speaker labels. You have two tasks:
 
