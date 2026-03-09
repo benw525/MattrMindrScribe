@@ -31,34 +31,44 @@ const RECORDING_TYPE_SECTIONS: Record<string, string> = {
   deposition: `==============================
 DEPOSITION
 ==============================
-Depositions typically have a formal opening/closing by a videographer, an oath administered by a court reporter (a separate person from the videographer), and structured Q&A between attorneys and a witness.
+Depositions have structured Q&A between attorneys and a witness, with an oath administered by a court reporter. Some depositions also have a videographer who opens/closes the record — but not all depositions are videotaped.
+
+**How to tell if a Videographer is present:**
+A videographer is present ONLY if there is an opening like "This begins the video deposition of [name]", "in the matter of [case name]", "the time is [time]", "would counsel please state their names for the record" — or similar language. The exact wording varies but always follows this pattern of announcing the video deposition, identifying the case, stating the time/date, and asking attorneys to identify themselves. If no such opening exists, there is no videographer — do NOT create a Videographer label.
 
 **CRITICAL: Extract names from the transcript text itself.**
 Search the transcript for these name-revealing patterns:
-- The videographer's opening: "This begins the video deposition of [DEPONENT NAME]" — this names the witness/deponent
+- Videographer's opening (if present): "This begins the video deposition of [DEPONENT NAME]" — this names the witness/deponent
 - Attorney appearances: "[NAME], here for the plaintiff" or "[NAME], for defendant" or "[NAME] on behalf of [party]" — these name the attorneys
 - The deponent stating their name: "I'm [NAME]" or "My name is [NAME]" or "State your full name" followed by "[NAME]"
 - Direct address by name: "Mr./Ms. [NAME]", "[First name], have you ever..."
 Map these discovered names back to the correct speaker labels. Do NOT leave speakers as "Speaker 1", "Speaker 2", etc. when names are clearly stated in the text.
 
-**Typical speaker order in depositions (use this to distinguish roles):**
+**Typical speaker order in video depositions (when a videographer is present):**
 1. **Videographer** opens the record: "This begins the video deposition of..."
 2. **Videographer** asks counsel to identify themselves: "Would counsel please identify yourself..."
 3. **Attorneys** state their appearances in response (each is a different speaker)
 4. **Court Reporter** administers the oath — this is ALWAYS a DIFFERENT speaker from the Videographer. The oath-giver is never the same person who opened the record. Look for "raise your right hand", "Do you swear or affirm..."
 5. **Examining Attorney** begins Q&A with the **Deponent**
 
-**Minimum distinct roles when present in the transcript:** Videographer, Court Reporter, at least one Attorney, and the Deponent. When these roles appear, they are ALWAYS separate people — never merge any two of these into the same speaker label.
+**Typical speaker order in non-video depositions (no videographer):**
+1. **Examining Attorney** or **Court Reporter** opens the record
+2. **Attorneys** may state appearances
+3. **Court Reporter** administers the oath
+4. **Examining Attorney** begins Q&A with the **Deponent**
+
+**Minimum distinct roles when present in the transcript:** Court Reporter, at least one Attorney, and the Deponent are always present. Videographer is only present when the opening announces a video deposition. When these roles appear, they are ALWAYS separate people — never merge any two into the same speaker label.
 
 **Potential speakers & identification patterns:**
 
-**Videographer:**
-- Opens with "This begins the video deposition of [deponent name]..." or "We are now on the record..."
+**Videographer (only present in video depositions — see detection rules above):**
+- Opens with "This begins the video deposition of [deponent name]..." or "We are now on the record..." or similar
 - Closes with "This concludes the video deposition of [deponent name]..." or "We are now off the record..."
 - Announces time, date, and location at the start
 - May call for breaks: "Going off the record at [time]"
 - Often asks counsel to identify themselves and state whom they represent
 - Does NOT administer the oath — that is the Court Reporter's role (a different person)
+- Only label a speaker as "Videographer" if the video deposition opening pattern is present
 - Label as "Videographer" or by name if identifiable
 
 **Court Reporter:**
