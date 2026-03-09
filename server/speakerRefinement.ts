@@ -31,7 +31,7 @@ const RECORDING_TYPE_SECTIONS: Record<string, string> = {
   deposition: `==============================
 DEPOSITION
 ==============================
-Depositions typically have a formal opening/closing by a videographer and/or court reporter, with structured Q&A between attorneys and a witness.
+Depositions typically have a formal opening/closing by a videographer, an oath administered by a court reporter (a separate person from the videographer), and structured Q&A between attorneys and a witness.
 
 **CRITICAL: Extract names from the transcript text itself.**
 Search the transcript for these name-revealing patterns:
@@ -41,11 +41,14 @@ Search the transcript for these name-revealing patterns:
 - Direct address by name: "Mr./Ms. [NAME]", "[First name], have you ever..."
 Map these discovered names back to the correct speaker labels. Do NOT leave speakers as "Speaker 1", "Speaker 2", etc. when names are clearly stated in the text.
 
-**Typical speaker order in depositions:**
-- The FIRST speaker is usually the Videographer (opens the record)
-- Attorneys state appearances after the videographer's opening — match each appearance to the correct speaker label
-- The Videographer or Court Reporter administers the oath
-- After the oath, the structured Q&A begins between the Examining Attorney and the Deponent
+**Typical speaker order in depositions (use this to distinguish roles):**
+1. **Videographer** opens the record: "This begins the video deposition of..."
+2. **Videographer** asks counsel to identify themselves: "Would counsel please identify yourself..."
+3. **Attorneys** state their appearances in response (each is a different speaker)
+4. **Court Reporter** administers the oath — this is ALWAYS a DIFFERENT speaker from the Videographer. The oath-giver is never the same person who opened the record. Look for "raise your right hand", "Do you swear or affirm..."
+5. **Examining Attorney** begins Q&A with the **Deponent**
+
+**Minimum distinct roles when present in the transcript:** Videographer, Court Reporter, at least one Attorney, and the Deponent. When these roles appear, they are ALWAYS separate people — never merge any two of these into the same speaker label.
 
 **Potential speakers & identification patterns:**
 
@@ -55,13 +58,18 @@ Map these discovered names back to the correct speaker labels. Do NOT leave spea
 - Announces time, date, and location at the start
 - May call for breaks: "Going off the record at [time]"
 - Often asks counsel to identify themselves and state whom they represent
+- Does NOT administer the oath — that is the Court Reporter's role (a different person)
 - Label as "Videographer" or by name if identifiable
 
 **Court Reporter:**
-- Administers the oath: "Do you solemnly swear..." or "Do you, [name], swear to tell the truth..."
-- Asks about "usual stipulations" or "standard stipulations"
-- May ask speakers to slow down or speak up for the record
-- May request spelling of names or technical terms
+- ALWAYS a different person/speaker from the Videographer — never the same label
+- Administers the oath: "Do you solemnly swear...", "Do you swear or affirm...", "Do you, [name], swear to tell the truth..."
+- Often begins with "Would you raise your right hand?" or "Raise your right hand, please" before the oath
+- Speaks AFTER attorneys state appearances and BEFORE the examining attorney begins questioning
+- May ask about "usual stipulations" or "standard stipulations"
+- May interject during testimony: "Could you spell that?", "I'm sorry, could you repeat that?", "One at a time, please", "Can you speak up?"
+- May request spelling of names or technical terms during testimony
+- If you see a speaker administer an oath, that speaker MUST be labeled "Court Reporter" (not Videographer, not an attorney)
 - Label as "Court Reporter" or by name if identifiable
 
 **Examining Attorney (Questioning Attorney):**
