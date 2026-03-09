@@ -389,6 +389,102 @@ router.patch('/:id', async (req: AuthRequest, res: Response) => {
   }
 });
 
+router.post('/:id/merge-speaker', async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { fromSpeaker, toSpeaker } = req.body;
+
+    if (!fromSpeaker || !toSpeaker) {
+      return res.status(400).json({ error: 'Both fromSpeaker and toSpeaker are required' });
+    }
+    if (fromSpeaker === toSpeaker) {
+      return res.status(400).json({ error: 'fromSpeaker and toSpeaker must be different' });
+    }
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      const existing = await client.query(
+        'SELECT id FROM transcripts WHERE id = $1 AND user_id = $2',
+        [id, req.userId]
+      );
+      if (existing.rows.length === 0) {
+        await client.query('ROLLBACK');
+        return res.status(404).json({ error: 'Transcript not found' });
+      }
+
+      const segmentsResult = await client.query(
+        `SELECT id, start_time as "startTime", end_time as "endTime", speaker, text
+         FROM transcript_segments WHERE transcript_id = $1 ORDER BY segment_order`,
+        [id]
+      );
+
+      const fromExists = segmentsResult.rows.some((s: any) => s.speaker === fromSpeaker);
+      if (!fromExists) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ error: `Speaker "${fromSpeaker}" not found in transcript segments` });
+      }
+
+      await client.query(
+        `INSERT INTO transcript_versions (transcript_id, segments, change_description)
+         VALUES ($1, $2, $3)`,
+        [id, JSON.stringify(segmentsResult.rows), `Merged speaker "${fromSpeaker}" into "${toSpeaker}"`]
+      );
+
+      const updateResult = await client.query(
+        'UPDATE transcript_segments SET speaker = $1 WHERE transcript_id = $2 AND speaker = $3',
+        [toSpeaker, id, fromSpeaker]
+      );
+
+      await client.query('UPDATE transcripts SET updated_at = NOW() WHERE id = $1', [id]);
+
+      await client.query('COMMIT');
+
+      const result = await pool.query(
+        `SELECT t.*,
+          COALESCE(json_agg(
+            json_build_object('id', s.id, 'startTime', s.start_time, 'endTime', s.end_time, 'speaker', s.speaker, 'text', s.text)
+            ORDER BY s.segment_order
+          ) FILTER (WHERE s.id IS NOT NULL), '[]') as segments
+        FROM transcripts t
+        LEFT JOIN transcript_segments s ON s.transcript_id = t.id
+        WHERE t.id = $1
+        GROUP BY t.id`,
+        [id]
+      );
+
+      const t = result.rows[0];
+      res.json({
+        id: t.id,
+        filename: t.filename,
+        description: t.description,
+        status: t.status,
+        type: t.type,
+        duration: t.duration,
+        fileSize: t.file_size,
+        fileUrl: t.file_url,
+        folderId: t.folder_id,
+        recordingType: t.recording_type,
+        practiceArea: t.practice_area,
+        errorMessage: t.error_message,
+        segments: t.segments,
+        mergedCount: updateResult.rowCount,
+        createdAt: t.created_at,
+        updatedAt: t.updated_at,
+      });
+    } catch (txErr) {
+      await client.query('ROLLBACK');
+      throw txErr;
+    } finally {
+      client.release();
+    }
+  } catch (err) {
+    console.error('Merge speaker error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 router.get('/:id/status', async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;

@@ -336,7 +336,10 @@ function buildUserPrompt(
   if (batchContext && batchContext.totalBatches > 1) {
     batchPreamble = `**IMPORTANT: This is batch ${batchContext.batchNumber} of ${batchContext.totalBatches} from a longer transcript.**\n`;
     if (batchContext.priorIdentifications && Object.keys(batchContext.priorIdentifications).length > 0) {
-      batchPreamble += `Speaker identifications from previous batches (use these to maintain consistency):\n`;
+      const identifiedNames = [...new Set(Object.values(batchContext.priorIdentifications))];
+      batchPreamble += `The speakers identified so far are: ${identifiedNames.join(', ')}.\n`;
+      batchPreamble += `Use these speaker names in your "labels" array. Do NOT use generic labels like "Speaker 1", "Speaker 2", etc. If you detect a genuinely new speaker not listed above, you may introduce a new name, but strongly prefer matching to the existing speakers.\n`;
+      batchPreamble += `\nSpeaker mapping from previous batches:\n`;
       for (const [generic, identified] of Object.entries(batchContext.priorIdentifications)) {
         batchPreamble += `- ${generic} = ${identified}\n`;
       }
@@ -634,10 +637,36 @@ export async function refineSpeakersWithGPT(
       reverseMap[generic] = identified;
     }
 
+    let normalizedCount = 0;
     for (let i = 0; i < allLabels.length; i++) {
-      if (reverseMap[allLabels[i]]) {
-        allLabels[i] = reverseMap[allLabels[i]];
+      const label = allLabels[i];
+      if (!label) continue;
+      if (reverseMap[label]) {
+        allLabels[i] = reverseMap[label];
+        normalizedCount++;
+      } else if (/^Speaker\s*\d+$/i.test(label)) {
+        const bestMatch = Object.keys(reverseMap).find(k =>
+          k.replace(/\s+/g, '').toLowerCase() === label.replace(/\s+/g, '').toLowerCase()
+        );
+        if (bestMatch) {
+          allLabels[i] = reverseMap[bestMatch];
+          normalizedCount++;
+        } else {
+          const mostCommonIdentified = Object.values(reverseMap);
+          if (mostCommonIdentified.length > 0) {
+            const originalSpeaker = segments[i].speaker;
+            const mapped = reverseMap[originalSpeaker];
+            if (mapped) {
+              allLabels[i] = mapped;
+              normalizedCount++;
+            }
+          }
+        }
       }
+    }
+
+    if (normalizedCount > 0) {
+      console.log(`[Speaker Refinement] Post-batch normalization: resolved ${normalizedCount} generic labels`);
     }
   }
 

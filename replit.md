@@ -54,7 +54,7 @@ A full-stack application for managing legal case recordings/transcripts. Feature
 - `server/routes/transcripts.ts` - Transcript CRUD + file upload (R2 or local) + status/retranscribe endpoints
 - `server/transcription.ts` - AI transcription pipeline (ffmpeg conversion, chunking, Whisper API, 3-step diarization, R2 download support); includes deduplication with short-segment proximity check and hallucination detection (removes consecutive identical short-phrase runs with uniform spacing)
 - `server/diarization.ts` - AssemblyAI speaker diarization (upload audio, get speaker labels, map onto Whisper segments)
-- `server/speakerRefinement.ts` - Claude Opus 4.6 speaker refinement via Anthropic streaming API (batches of 400 segments for reliable labeling); conditionally sends only the matching recording-type section to Claude; fallback applies identifications map when per-segment labels fail; deposition prompt includes explicit name extraction from transcript text
+- `server/speakerRefinement.ts` - Claude Opus 4.6 speaker refinement via Anthropic streaming API (batches of 400 segments for reliable labeling); conditionally sends only the matching recording-type section to Claude; fallback applies identifications map when per-segment labels fail; deposition prompt includes explicit name extraction from transcript text; post-batch normalization pass eliminates generic "Speaker N" leakage by mapping through cumulative identifications
 - `server/routes/folders.ts` - Folder CRUD + move transcripts + MattrMindr case linking
 - `server/routes/mattrmindr.ts` - MattrMindr integration API (connect, disconnect, status, case search proxy, send files)
 - `server/routes/external.ts` - External API for inbound integrations (auth, receive files for transcription, transcription status)
@@ -87,6 +87,7 @@ A full-stack application for managing legal case recordings/transcripts. Feature
 - `GET /api/transcripts/:id/versions` - List versions
 - `GET /api/transcripts/agents` - List available AI legal summary agents
 - `POST /api/transcripts/:id/summarize` - Generate AI summary (SSE streaming, body: {agentType})
+- `POST /api/transcripts/:id/merge-speaker` - Merge one speaker into another (body: {fromSpeaker, toSpeaker}); creates version snapshot, transactional
 - `GET /api/transcripts/:id/summaries` - List past summaries for a transcript
 - `GET /api/folders` - List folders
 - `POST /api/folders` - Create folder

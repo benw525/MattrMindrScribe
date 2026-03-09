@@ -155,6 +155,8 @@ export const api = {
     },
     getSummaries: (id: string) => request(`/transcripts/${id}/summaries`),
     retranscribe: (id: string) => request(`/transcripts/${id}/retranscribe`, { method: 'POST' }),
+    mergeSpeaker: (id: string, fromSpeaker: string, toSpeaker: string) =>
+      request(`/transcripts/${id}/merge-speaker`, { method: 'POST', body: JSON.stringify({ fromSpeaker, toSpeaker }) }),
     getStatus: (id: string) => request(`/transcripts/${id}/status`),
   },
   folders: {

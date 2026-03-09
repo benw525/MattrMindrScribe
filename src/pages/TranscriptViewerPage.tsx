@@ -5,7 +5,7 @@ import {
   Link,
   useOutletContext } from
 'react-router-dom';
-import { ChevronLeftIcon, EditIcon, CheckIcon, XIcon, PlusIcon, Trash2Icon, PaletteIcon, UsersIcon } from 'lucide-react';
+import { ChevronLeftIcon, EditIcon, CheckIcon, XIcon, PlusIcon, Trash2Icon, PaletteIcon, UsersIcon, MergeIcon } from 'lucide-react';
 import { AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
 import { useTranscripts } from '../hooks/useTranscripts';
@@ -79,6 +79,8 @@ export function TranscriptViewerPage() {
   const [speakerColors, setSpeakerColors] = useState<Record<string, string>>({});
   const [showSpeakerManager, setShowSpeakerManager] = useState(false);
   const [colorPickerSpeaker, setColorPickerSpeaker] = useState<string | null>(null);
+  const [mergingSpeaker, setMergingSpeaker] = useState<string | null>(null);
+  const [mergeLoading, setMergeLoading] = useState(false);
   const speakerManagerRef = useRef<HTMLDivElement>(null);
   const [mobileShowVideo, setMobileShowVideo] = useState(false);
   const [showSummarizeModal, setShowSummarizeModal] = useState(false);
@@ -324,7 +326,9 @@ export function TranscriptViewerPage() {
   const handleRemoveSpeaker = (speaker: string) => {
     const isUsedInSegments = segmentSpeakers.includes(speaker);
     if (isUsedInSegments) {
-      toast.error(`Cannot remove "${speaker}" — it is assigned to segments`);
+      setMergingSpeaker(speaker);
+      setColorPickerSpeaker(null);
+      setEditingSpeaker(null);
       return;
     }
     setCustomSpeakers(prev => prev.filter(s => s !== speaker));
@@ -334,6 +338,27 @@ export function TranscriptViewerPage() {
       return next;
     });
     toast.success(`Removed speaker "${speaker}"`);
+  };
+
+  const handleMergeSpeaker = async (fromSpeaker: string, toSpeaker: string) => {
+    if (!id || !fromSpeaker || !toSpeaker || fromSpeaker === toSpeaker) return;
+    setMergeLoading(true);
+    try {
+      const result = await api.transcripts.mergeSpeaker(id, fromSpeaker, toSpeaker);
+      await refreshData();
+      setMergingSpeaker(null);
+      setSpeakerColors(prev => {
+        const next = { ...prev };
+        delete next[fromSpeaker];
+        return next;
+      });
+      setCustomSpeakers(prev => prev.filter(s => s !== fromSpeaker));
+      toast.success(`Merged "${fromSpeaker}" into "${toSpeaker}" (${result.mergedCount} segments)`);
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to merge speaker');
+    } finally {
+      setMergeLoading(false);
+    }
   };
 
   const handleRenameSpeaker = (oldName: string, newName: string) => {
@@ -576,17 +601,18 @@ export function TranscriptViewerPage() {
                 </button>
               );
             })}
-            <div className="relative flex-shrink-0 md:hidden">
+            <div className="relative flex-shrink-0">
               <button
                 onClick={() => {
                   setShowSpeakerManager(!showSpeakerManager);
                   setEditingSpeaker(null);
                   setColorPickerSpeaker(null);
+                  setMergingSpeaker(null);
                 }}
                 className="flex items-center gap-1 bg-white dark:bg-slate-800 border border-dashed border-slate-300 dark:border-slate-600 rounded-full px-2.5 py-1 text-xs font-medium text-slate-500 dark:text-slate-400 hover:border-indigo-400 dark:hover:border-indigo-600 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors whitespace-nowrap"
                 title="Manage speakers">
                 <UsersIcon className="h-3 w-3" />
-                <span className="hidden sm:inline">Edit Speakers</span>
+                <span className="hidden sm:inline">Manage</span>
               </button>
 
               {showSpeakerManager &&
@@ -615,7 +641,8 @@ export function TranscriptViewerPage() {
                       const colorObj = getSpeakerColorObj(speaker, speakerColors);
                       const isEditing = editingSpeaker === speaker;
                       const isColorPicking = colorPickerSpeaker === speaker;
-                      const canRemove = !segmentSpeakers.includes(speaker);
+                      const hasSegments = segmentSpeakers.includes(speaker);
+                      const isMerging = mergingSpeaker === speaker;
                       return (
                         <div key={speaker} className="px-3 py-2 hover:bg-slate-50 dark:hover:bg-slate-750">
                           <div className="flex items-center gap-2">
@@ -661,20 +688,29 @@ export function TranscriptViewerPage() {
                                     setEditingSpeaker(speaker);
                                     setSpeakerEditValue(speaker);
                                     setColorPickerSpeaker(null);
+                                    setMergingSpeaker(null);
                                   }}
                                   className="p-1 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-950/30 rounded transition-colors"
                                   title="Rename"
                                 >
                                   <EditIcon className="h-3.5 w-3.5" />
                                 </button>
-                                <button
-                                  onClick={() => handleRemoveSpeaker(speaker)}
-                                  className={`p-1 rounded transition-colors ${canRemove ? 'text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30' : 'text-slate-200 dark:text-slate-600 cursor-not-allowed'}`}
-                                  title={canRemove ? 'Remove speaker' : 'Cannot remove — assigned to segments'}
-                                  disabled={!canRemove}
-                                >
-                                  <Trash2Icon className="h-3.5 w-3.5" />
-                                </button>
+                                {hasSegments ?
+                                  <button
+                                    onClick={() => handleRemoveSpeaker(speaker)}
+                                    className="p-1 text-slate-400 hover:text-orange-600 hover:bg-orange-50 dark:hover:bg-orange-950/30 rounded transition-colors"
+                                    title="Merge into another speaker"
+                                  >
+                                    <MergeIcon className="h-3.5 w-3.5" />
+                                  </button> :
+                                  <button
+                                    onClick={() => handleRemoveSpeaker(speaker)}
+                                    className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 rounded transition-colors"
+                                    title="Remove speaker"
+                                  >
+                                    <Trash2Icon className="h-3.5 w-3.5" />
+                                  </button>
+                                }
                               </>
                             }
                           </div>
@@ -688,6 +724,30 @@ export function TranscriptViewerPage() {
                                   title={c.name}
                                 />
                               ))}
+                            </div>
+                          }
+                          {isMerging &&
+                            <div className="mt-2 ml-6 p-2 bg-orange-50 dark:bg-orange-950/20 border border-orange-200 dark:border-orange-800 rounded-lg">
+                              <p className="text-xs text-orange-700 dark:text-orange-400 mb-2">Merge all segments from "{speaker}" into:</p>
+                              <div className="flex flex-col gap-1">
+                                {uniqueSpeakers.filter(s => s !== speaker).map(target => (
+                                  <button
+                                    key={target}
+                                    onClick={() => handleMergeSpeaker(speaker, target)}
+                                    disabled={mergeLoading}
+                                    className="flex items-center gap-2 px-2 py-1.5 text-left text-sm rounded-md hover:bg-orange-100 dark:hover:bg-orange-900/30 transition-colors disabled:opacity-50"
+                                  >
+                                    <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${getSpeakerColorObj(target, speakerColors).bg}`} />
+                                    <span className="text-slate-700 dark:text-slate-300">{target}</span>
+                                  </button>
+                                ))}
+                              </div>
+                              <button
+                                onClick={() => setMergingSpeaker(null)}
+                                className="mt-2 text-xs text-slate-500 hover:text-slate-700 dark:hover:text-slate-400"
+                              >
+                                Cancel
+                              </button>
                             </div>
                           }
                         </div>
