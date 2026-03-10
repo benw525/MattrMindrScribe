@@ -509,28 +509,8 @@ export function TranscriptViewerPage() {
               <StatusBadge status={transcript.status} />
             </div>
           </div>
-          <div className="flex md:hidden items-center gap-1 flex-shrink-0">
-            <TranscriptToolbar
-              transcriptId={transcript.id}
-              onToggleHistory={() => setShowHistory(!showHistory)}
-              onSave={handleSave}
-              onUndo={handleUndo}
-              canUndo={undoStack.length > 0}
-              sidebarHidden={sidebarHidden}
-              onToggleSidebar={() => setSidebarHidden(!sidebarHidden)}
-              onAISummarize={() => setShowSummarizeModal(true)}
-              onShowPipeline={() => setShowPipeline(true)}
-              hasPipelineIssue={!!(transcript.pipelineLog && (
-                transcript.pipelineLog.whisper?.status === 'error' ||
-                transcript.pipelineLog.diarization?.status === 'error' ||
-                transcript.pipelineLog.refinement?.status === 'error' ||
-                transcript.pipelineLog.fatalError
-              ))}
-              onShowSummaries={() => setShowSummaryPanel(true)}
-              summaryCount={summaries.length} />
-          </div>
         </div>
-        <div className="hidden md:flex items-center px-3 sm:px-6 pb-2 overflow-x-auto no-scrollbar">
+        <div className="flex items-center px-3 sm:px-6 pb-2 overflow-x-auto no-scrollbar">
           <TranscriptToolbar
             transcriptId={transcript.id}
             onToggleHistory={() => setShowHistory(!showHistory)}

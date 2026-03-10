@@ -67,7 +67,7 @@ export function MetadataEditor({ transcript, onUpdate }: MetadataEditorProps) {
         </div> :
 
       <div className="flex items-center gap-2 group min-w-0">
-          <h1 className="text-base sm:text-xl font-bold text-slate-900 dark:text-white truncate max-w-[200px] sm:max-w-md">
+          <h1 className="text-base sm:text-xl font-bold text-slate-900 dark:text-white truncate max-w-[70vw] sm:max-w-md">
             {transcript.filename}
           </h1>
           <button
