@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect, useCallback } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { TrashIcon, FileIcon, FolderInputIcon } from 'lucide-react';
@@ -6,6 +6,94 @@ import { useTranscripts } from '../hooks/useTranscripts';
 import { TranscriptCard } from '../components/transcripts/TranscriptCard';
 import { SearchBar } from '../components/transcripts/SearchBar';
 import { toast } from 'sonner';
+
+interface SelectionBarProps {
+  selectedCount: number;
+  showMoveMenu: boolean;
+  onToggleMoveMenu: () => void;
+  onBatchMove: (folderId: string | null) => void;
+  onBatchDelete: () => void;
+  onCancel: () => void;
+  folders: { id: string; name: string }[];
+}
+
+function SelectionBar({ selectedCount, showMoveMenu, onToggleMoveMenu, onBatchMove, onBatchDelete, onCancel, folders }: SelectionBarProps) {
+  const [bottomOffset, setBottomOffset] = useState(8);
+
+  const updatePosition = useCallback(() => {
+    if (window.visualViewport) {
+      const vvHeight = window.visualViewport.height;
+      const windowHeight = window.innerHeight;
+      const diff = windowHeight - vvHeight;
+      setBottomOffset(diff > 0 ? diff + 8 : 8);
+    }
+  }, []);
+
+  useEffect(() => {
+    updatePosition();
+    const vv = window.visualViewport;
+    if (vv) {
+      vv.addEventListener('resize', updatePosition);
+      vv.addEventListener('scroll', updatePosition);
+      return () => {
+        vv.removeEventListener('resize', updatePosition);
+        vv.removeEventListener('scroll', updatePosition);
+      };
+    }
+  }, [updatePosition]);
+
+  return (
+    <motion.div
+      initial={{ y: 100, opacity: 0 }}
+      animate={{ y: 0, opacity: 1 }}
+      exit={{ y: 100, opacity: 0 }}
+      style={{ bottom: `${bottomOffset}px` }}
+      className="fixed left-4 right-4 sm:left-1/2 sm:right-auto sm:-translate-x-1/2 md:ml-32 bg-slate-900 dark:bg-slate-800 text-white px-4 sm:px-6 py-3 sm:py-4 rounded-xl shadow-2xl flex items-center justify-center gap-3 sm:gap-6 z-20 sm:w-auto">
+      <span className="font-medium text-sm sm:text-base whitespace-nowrap">
+        {selectedCount} selected
+      </span>
+      <div className="h-6 w-px bg-slate-700" />
+      <div className="relative">
+        <button
+          onClick={onToggleMoveMenu}
+          className="flex items-center gap-2 text-slate-300 hover:text-white font-medium transition-colors text-sm">
+          <FolderInputIcon className="h-4 w-4" />
+          Move
+        </button>
+        {showMoveMenu &&
+          <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-slate-800 dark:bg-slate-700 border border-slate-700 dark:border-slate-600 rounded-lg shadow-xl py-1 min-w-[200px]">
+            <button
+              onClick={() => onBatchMove(null)}
+              className="w-full text-left px-4 py-2 text-sm text-slate-300 hover:bg-slate-700 dark:hover:bg-slate-600 hover:text-white transition-colors">
+              Unfiled (No Folder)
+            </button>
+            <div className="h-px bg-slate-700 dark:bg-slate-600 my-1" />
+            {folders.map((folder) =>
+              <button
+                key={folder.id}
+                onClick={() => onBatchMove(folder.id)}
+                className="w-full text-left px-4 py-2 text-sm text-slate-300 hover:bg-slate-700 dark:hover:bg-slate-600 hover:text-white transition-colors">
+                {folder.name}
+              </button>
+            )}
+          </div>
+        }
+      </div>
+      <button
+        onClick={onBatchDelete}
+        className="flex items-center gap-2 text-red-400 hover:text-red-300 font-medium transition-colors text-sm">
+        <TrashIcon className="h-4 w-4" />
+        Delete
+      </button>
+      <button
+        onClick={onCancel}
+        className="text-slate-400 hover:text-white text-xs sm:text-sm font-medium ml-2 sm:ml-4 transition-colors">
+        Cancel
+      </button>
+    </motion.div>
+  );
+}
+
 export function DashboardPage() {
   const { transcripts, folders, deleteTranscripts, moveTranscripts } =
   useTranscripts();
@@ -94,80 +182,20 @@ export function DashboardPage() {
             </p>
           </div>
         }
+      </div>
 
       <AnimatePresence>
         {selectionMode &&
-        <motion.div
-          initial={{
-            y: 100,
-            opacity: 0
-          }}
-          animate={{
-            y: 0,
-            opacity: 1
-          }}
-          exit={{
-            y: 100,
-            opacity: 0
-          }}
-          className="sticky bottom-0 sm:fixed sm:bottom-8 sm:left-1/2 sm:-translate-x-1/2 md:ml-32 bg-slate-900 dark:bg-slate-800 text-white px-4 sm:px-6 py-3 sm:py-4 rounded-t-xl sm:rounded-xl shadow-2xl flex items-center justify-center gap-3 sm:gap-6 z-20 sm:max-w-[calc(100vw-2rem)]">
-
-            <span className="font-medium text-sm sm:text-base">
-              {selectedIds.size} selected
-            </span>
-            <div className="h-6 w-px bg-slate-700" />
-
-            <div className="relative">
-              <button
-              onClick={() => setShowMoveMenu(!showMoveMenu)}
-              className="flex items-center gap-2 text-slate-300 hover:text-white font-medium transition-colors text-sm">
-
-                <FolderInputIcon className="h-4 w-4" />
-                Move
-              </button>
-              {showMoveMenu &&
-            <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-slate-800 dark:bg-slate-700 border border-slate-700 dark:border-slate-600 rounded-lg shadow-xl py-1 min-w-[200px]">
-                  <button
-                onClick={() => handleBatchMove(null)}
-                className="w-full text-left px-4 py-2 text-sm text-slate-300 hover:bg-slate-700 dark:hover:bg-slate-600 hover:text-white transition-colors">
-
-                    Unfiled (No Folder)
-                  </button>
-                  <div className="h-px bg-slate-700 dark:bg-slate-600 my-1" />
-                  {folders.map((folder) =>
-              <button
-                key={folder.id}
-                onClick={() => handleBatchMove(folder.id)}
-                className="w-full text-left px-4 py-2 text-sm text-slate-300 hover:bg-slate-700 dark:hover:bg-slate-600 hover:text-white transition-colors">
-
-                      {folder.name}
-                    </button>
-              )}
-                </div>
-            }
-            </div>
-
-            <button
-            onClick={handleBatchDelete}
-            className="flex items-center gap-2 text-red-400 hover:text-red-300 font-medium transition-colors text-sm">
-
-              <TrashIcon className="h-4 w-4" />
-              Delete
-            </button>
-
-            <button
-            onClick={() => {
-              setSelectedIds(new Set());
-              setShowMoveMenu(false);
-            }}
-            className="text-slate-400 hover:text-white text-xs sm:text-sm font-medium ml-2 sm:ml-4 transition-colors">
-
-              Cancel
-            </button>
-          </motion.div>
+        <SelectionBar
+          selectedCount={selectedIds.size}
+          showMoveMenu={showMoveMenu}
+          onToggleMoveMenu={() => setShowMoveMenu(!showMoveMenu)}
+          onBatchMove={handleBatchMove}
+          onBatchDelete={handleBatchDelete}
+          onCancel={() => { setSelectedIds(new Set()); setShowMoveMenu(false); }}
+          folders={folders} />
         }
       </AnimatePresence>
-      </div>
     </div>);
 
 }
