@@ -149,6 +149,8 @@ A full-stack application for managing legal case recordings/transcripts. Feature
 
 ## Mobile Responsiveness
 
+- Resume handler: `MobileResumeHandler` in App.tsx forces DOM repaint on `visibilitychange` (fixes blank screen when switching apps on mobile); reloads page if hidden >30s; reloads on `pageshow` with `e.persisted` (BFCache restore)
+- Auth flow: 401/403 responses clear token + dispatch `auth_token_cleared` custom event (no hard redirect); `AuthContext` listens for event and nulls user; React Router `<Navigate>` handles redirect
 - Global: `touch-action: manipulation` on buttons/links to prevent double-tap zoom; `-webkit-tap-highlight-color: transparent` for clean taps
 - AudioPlayer: Pointer events for drag-to-scrub on progress bar; speed is a dropdown menu on mobile (all 8 options), inline buttons on desktop; compact padding for mobile
 - TranscriptText: Checkbox-based merge on mobile (select 2+ segments, merge bar appears at top); inline merge buttons only on desktop; split button always visible; `overscroll-contain` for smooth scroll; touchstart detection pauses auto-scroll

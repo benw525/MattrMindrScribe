@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'sonner';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
@@ -10,6 +10,48 @@ import { TranscriptViewerPage } from './pages/TranscriptViewerPage';
 import { PresentModePage } from './pages/PresentModePage';
 import { AuthPage } from './pages/AuthPage';
 import { LandingPage } from './pages/LandingPage';
+
+function MobileResumeHandler() {
+  const hiddenAt = useRef<number | null>(null);
+
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.visibilityState === 'hidden') {
+        hiddenAt.current = Date.now();
+      } else if (document.visibilityState === 'visible') {
+        const root = document.getElementById('root');
+        if (root) {
+          root.style.display = 'none';
+          root.offsetHeight;
+          root.style.display = '';
+        }
+
+        if (hiddenAt.current) {
+          const elapsed = Date.now() - hiddenAt.current;
+          if (elapsed > 30000) {
+            window.location.reload();
+          }
+          hiddenAt.current = null;
+        }
+      }
+    };
+
+    const handlePageShow = (e: PageTransitionEvent) => {
+      if (e.persisted) {
+        window.location.reload();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibility);
+    window.addEventListener('pageshow', handlePageShow);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibility);
+      window.removeEventListener('pageshow', handlePageShow);
+    };
+  }, []);
+
+  return null;
+}
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isLoggedIn, loading } = useAuth();
@@ -32,6 +74,7 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 export function App() {
   return (
     <ThemeProvider>
+      <MobileResumeHandler />
       <AuthProvider>
         <TranscriptProvider>
           <BrowserRouter>

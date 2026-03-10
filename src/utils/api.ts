@@ -142,9 +142,9 @@ export const api = {
       request(`/transcripts/${id}/versions`, { method: 'POST', body: JSON.stringify({ changeDescription }) }),
     getVersions: (id: string) => request(`/transcripts/${id}/versions`),
     getAgents: () => request('/transcripts/agents'),
-    summarize: (id: string, agentType: string) => {
+    summarize: async (id: string, agentType: string) => {
       const token = getToken();
-      return fetch(`${API_BASE}/transcripts/${id}/summarize`, {
+      const res = await fetch(`${API_BASE}/transcripts/${id}/summarize`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -152,6 +152,11 @@ export const api = {
         },
         body: JSON.stringify({ agentType }),
       });
+      if (res.status === 401 || res.status === 403) {
+        clearToken();
+        throw new Error('Authentication required');
+      }
+      return res;
     },
     getSummaries: (id: string) => request(`/transcripts/${id}/summaries`),
     retranscribe: (id: string) => request(`/transcripts/${id}/retranscribe`, { method: 'POST' }),
