@@ -142,7 +142,7 @@ export const api = {
       request(`/transcripts/${id}/versions`, { method: 'POST', body: JSON.stringify({ changeDescription }) }),
     getVersions: (id: string) => request(`/transcripts/${id}/versions`),
     getAgents: () => request('/transcripts/agents'),
-    summarize: async (id: string, agentType: string) => {
+    summarize: async (id: string, agentType: string, subType?: string) => {
       const token = getToken();
       const res = await fetch(`${API_BASE}/transcripts/${id}/summarize`, {
         method: 'POST',
@@ -150,7 +150,7 @@ export const api = {
           'Content-Type': 'application/json',
           ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
         },
-        body: JSON.stringify({ agentType }),
+        body: JSON.stringify({ agentType, subType }),
       });
       if (res.status === 401 || res.status === 403) {
         clearToken();

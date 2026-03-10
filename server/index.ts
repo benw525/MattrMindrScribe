@@ -151,12 +151,17 @@ pool.query(`
     transcript_id UUID NOT NULL REFERENCES transcripts(id) ON DELETE CASCADE,
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     agent_type VARCHAR(100) NOT NULL,
+    sub_type VARCHAR(100) DEFAULT NULL,
     summary TEXT NOT NULL,
     model_used VARCHAR(100) DEFAULT 'gpt-4o-mini',
     created_at TIMESTAMP DEFAULT NOW()
   );
   CREATE INDEX IF NOT EXISTS idx_summaries_transcript ON transcript_summaries(transcript_id);
 `).catch((err: any) => console.error('Migration error:', err.message));
+
+pool.query(`
+  ALTER TABLE transcript_summaries ADD COLUMN IF NOT EXISTS sub_type VARCHAR(100) DEFAULT NULL;
+`).catch((err: any) => {});
 
 pool.query(`
   ALTER TABLE transcripts ADD COLUMN IF NOT EXISTS expected_speakers INTEGER DEFAULT NULL;

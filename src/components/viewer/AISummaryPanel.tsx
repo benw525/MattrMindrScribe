@@ -6,6 +6,8 @@ import { formatRelativeDate } from '../../utils/formatters';
 interface Summary {
   id: string;
   agentType: string;
+  subType: string | null;
+  subTypeName: string | null;
   summary: string;
   modelUsed: string;
   createdAt: string;
@@ -70,6 +72,12 @@ function renderMarkdown(text: string) {
     }
   }
   return elements;
+}
+
+function getSummaryLabel(summary: Summary, agentNames: Record<string, string>) {
+  const agentLabel = agentNames[summary.agentType] || AGENT_LABELS[summary.agentType] || summary.agentType;
+  const subTypeLabel = summary.subTypeName || null;
+  return { agentLabel, subTypeLabel };
 }
 
 export function AISummaryPanel({ summaries, streamingContent, streamingAgentType, isStreaming, onClose, agentNames, onGenerateNew }: AISummaryPanelProps) {
@@ -138,6 +146,7 @@ export function AISummaryPanel({ summaries, streamingContent, streamingAgentType
 
         {summaries.map((summary) => {
           const isExpanded = expandedId === summary.id;
+          const { agentLabel, subTypeLabel } = getSummaryLabel(summary, agentNames);
           return (
             <div
               key={summary.id}
@@ -149,9 +158,14 @@ export function AISummaryPanel({ summaries, streamingContent, streamingAgentType
               >
                 <div>
                   <h4 className="text-sm font-semibold text-slate-900 dark:text-white">
-                    {agentNames[summary.agentType] || AGENT_LABELS[summary.agentType] || summary.agentType}
+                    {agentLabel}
                   </h4>
-                  <span className="text-xs text-slate-500 dark:text-slate-400">
+                  {subTypeLabel && (
+                    <span className="text-xs text-indigo-600 dark:text-indigo-400 font-medium">
+                      {subTypeLabel}
+                    </span>
+                  )}
+                  <span className="text-xs text-slate-500 dark:text-slate-400 block mt-0.5">
                     {formatRelativeDate(summary.createdAt)}
                   </span>
                 </div>

@@ -86,8 +86,8 @@ export function TranscriptViewerPage() {
   const [showSummarizeModal, setShowSummarizeModal] = useState(false);
   const [showPipeline, setShowPipeline] = useState(false);
   const [showSummaryPanel, setShowSummaryPanel] = useState(false);
-  const [agents, setAgents] = useState<{ id: string; name: string; icon: string; description: string }[]>([]);
-  const [summaries, setSummaries] = useState<{ id: string; agentType: string; summary: string; modelUsed: string; createdAt: string }[]>([]);
+  const [agents, setAgents] = useState<{ id: string; name: string; icon: string; description: string; subTypes: { id: string; name: string; description: string }[] }[]>([]);
+  const [summaries, setSummaries] = useState<{ id: string; agentType: string; subType: string | null; subTypeName: string | null; summary: string; modelUsed: string; createdAt: string }[]>([]);
   const [loadingAgentId, setLoadingAgentId] = useState<string | null>(null);
   const [streamingContent, setStreamingContent] = useState('');
   const [streamingAgentType, setStreamingAgentType] = useState<string | null>(null);
@@ -418,7 +418,7 @@ export function TranscriptViewerPage() {
   const getSpeakerBorderColor = (speaker: string) => {
     return getSpeakerColorObj(speaker, speakerColors).border;
   };
-  const handleSelectAgent = async (agentId: string) => {
+  const handleSelectAgent = async (agentId: string, subTypeId: string) => {
     if (!transcript) return;
     setLoadingAgentId(agentId);
     setStreamingContent('');
@@ -429,7 +429,7 @@ export function TranscriptViewerPage() {
     setShowHistory(false);
 
     try {
-      const response = await api.transcripts.summarize(transcript.id, agentId);
+      const response = await api.transcripts.summarize(transcript.id, agentId, subTypeId);
       if (!response.ok) {
         const err = await response.json();
         throw new Error(err.error || 'Summary failed');

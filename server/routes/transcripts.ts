@@ -6,7 +6,7 @@ import pool from '../db.js';
 import { authenticateToken, AuthRequest } from '../middleware/auth.js';
 import { processTranscription, deduplicateExistingSegments } from '../transcription.js';
 import { r2Configured, uploadFileToR2, deleteFromR2, isR2Url, getR2KeyFromUrl, getPresignedUploadUrl } from '../r2.js';
-import { LEGAL_AGENTS, getAgentById } from '../legalAgents.js';
+import { LEGAL_AGENTS, getAgentById, RecordingSubType } from '../legalAgents.js';
 import OpenAI from 'openai';
 import fs from 'fs/promises';
 import { mkdirSync } from 'fs';
@@ -701,14 +701,20 @@ const aiClient = new OpenAI({
 });
 
 router.get('/agents', (_req: AuthRequest, res: Response) => {
-  const agents = LEGAL_AGENTS.map(({ id, name, icon, description }) => ({ id, name, icon, description }));
+  const agents = LEGAL_AGENTS.map(({ id, name, icon, description, subTypes }) => ({
+    id,
+    name,
+    icon,
+    description,
+    subTypes: subTypes.map(({ id, name, description }) => ({ id, name, description })),
+  }));
   res.json(agents);
 });
 
 router.post('/:id/summarize', async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
-    const { agentType } = req.body;
+    const { agentType, subType } = req.body;
 
     if (!agentType) {
       return res.status(400).json({ error: 'agentType is required' });
@@ -717,6 +723,15 @@ router.post('/:id/summarize', async (req: AuthRequest, res: Response) => {
     const agent = getAgentById(agentType);
     if (!agent) {
       return res.status(400).json({ error: 'Invalid agent type' });
+    }
+
+    if (!subType) {
+      return res.status(400).json({ error: 'subType is required' });
+    }
+
+    const subTypeInfo = agent.subTypes.find(st => st.id === subType);
+    if (!subTypeInfo) {
+      return res.status(400).json({ error: 'Invalid sub-type for this practice area' });
     }
 
     const existing = await pool.query(
@@ -763,10 +778,12 @@ router.post('/:id/summarize', async (req: AuthRequest, res: Response) => {
       abortController.abort();
     });
 
+    const systemPrompt = agent.systemPrompt + `\n\nIMPORTANT CONTEXT: ${subTypeInfo.promptModifier}`;
+
     const stream = await aiClient.chat.completions.create({
       model,
       messages: [
-        { role: 'system', content: agent.systemPrompt },
+        { role: 'system', content: systemPrompt },
         { role: 'user', content: `Please analyze and summarize the following legal transcript:\n\n${transcriptText}` },
       ],
       stream: true,
@@ -788,14 +805,14 @@ router.post('/:id/summarize', async (req: AuthRequest, res: Response) => {
 
     if (!clientDisconnected && fullResponse) {
       const summaryResult = await pool.query(
-        `INSERT INTO transcript_summaries (transcript_id, user_id, agent_type, summary, model_used)
-         VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-        [id, req.userId, agentType, fullResponse, model]
+        `INSERT INTO transcript_summaries (transcript_id, user_id, agent_type, sub_type, summary, model_used)
+         VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+        [id, req.userId, agentType, subType, fullResponse, model]
       );
 
       const s = summaryResult.rows[0];
       try {
-        res.write(`data: ${JSON.stringify({ done: true, summary: { id: s.id, agentType: s.agent_type, summary: s.summary, modelUsed: s.model_used, createdAt: s.created_at } })}\n\n`);
+        res.write(`data: ${JSON.stringify({ done: true, summary: { id: s.id, agentType: s.agent_type, subType: s.sub_type, subTypeName: subTypeInfo.name, summary: s.summary, modelUsed: s.model_used, createdAt: s.created_at } })}\n\n`);
       } catch {}
     }
     res.end();
@@ -827,13 +844,23 @@ router.get('/:id/summaries', async (req: AuthRequest, res: Response) => {
       [id]
     );
 
-    const summaries = result.rows.map(s => ({
-      id: s.id,
-      agentType: s.agent_type,
-      summary: s.summary,
-      modelUsed: s.model_used,
-      createdAt: s.created_at,
-    }));
+    const summaries = result.rows.map(s => {
+      let subTypeName: string | null = null;
+      if (s.sub_type && s.agent_type) {
+        const agentDef = getAgentById(s.agent_type);
+        const stDef = agentDef?.subTypes.find(st => st.id === s.sub_type);
+        subTypeName = stDef?.name || s.sub_type;
+      }
+      return {
+        id: s.id,
+        agentType: s.agent_type,
+        subType: s.sub_type || null,
+        subTypeName,
+        summary: s.summary,
+        modelUsed: s.model_used,
+        createdAt: s.created_at,
+      };
+    });
 
     res.json(summaries);
   } catch (err) {

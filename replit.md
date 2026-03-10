@@ -10,7 +10,7 @@ A full-stack application for managing legal case recordings/transcripts. Feature
 - Transcript listing with status indicators (Completed, Processing, Pending, Error)
 - Case and folder organization
 - Audio/video file upload with background upload (non-blocking progress indicator) and 3-step AI transcription pipeline: (1) OpenAI Whisper for text+timestamps, (2) AssemblyAI for speaker diarization, (3) Claude Opus 4.6 for speaker refinement; optional expected speaker count at upload; recording type selector (Deposition, Court Hearing, Recorded Statement, Police Interrogation, Other) + area of law dropdown (10 practice areas); supports extensive audio/video formats (mp3, wav, m4a, ogg, flac, aac, wma, amr, opus, aiff, mp4, mov, avi, mkv, wmv, flv, 3gp, mpg, etc.)
-- AI Summarize: practice-area-specific transcript analysis via 10 legal agent bots (Personal Injury, Family Law, Criminal Defense, Workers' Comp, Insurance Defense, Employment Law, Medical Malpractice, Real Estate, Immigration, General Litigation); streams response in real-time via SSE
+- AI Summarize: two-step practice-area-specific transcript analysis via 10 legal agent bots (Personal Injury, Family Law, Criminal Defense, Workers' Comp, Insurance Defense, Employment Law, Medical Malpractice, Real Estate, Immigration, General Litigation); each area has 7-9 recording sub-types (e.g., Plaintiff's Deposition, Body Camera Footage, Custody Evaluation) that modify the AI prompt for targeted analysis; streams response in real-time via SSE; sub-type stored in `transcript_summaries.sub_type` column
 - Synced audio player for recordings
 - Version history for transcripts (persisted to DB, loaded on page open)
 - Per-segment speaker reassignment (click speaker name to change via dropdown)
