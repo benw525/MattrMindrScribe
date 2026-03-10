@@ -787,7 +787,7 @@ router.post('/:id/summarize', async (req: AuthRequest, res: Response) => {
         { role: 'user', content: `Please analyze and summarize the following legal transcript:\n\n${transcriptText}` },
       ],
       stream: true,
-      max_completion_tokens: 4096,
+      max_completion_tokens: 16384,
     });
 
     let fullResponse = '';
