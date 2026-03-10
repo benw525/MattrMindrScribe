@@ -94,7 +94,6 @@ export function DashboardPage() {
             </p>
           </div>
         }
-      </div>
 
       <AnimatePresence>
         {selectionMode &&
@@ -111,7 +110,7 @@ export function DashboardPage() {
             y: 100,
             opacity: 0
           }}
-          className="fixed bottom-20 sm:bottom-8 left-4 right-4 sm:left-1/2 sm:right-auto sm:-translate-x-1/2 md:ml-32 bg-slate-900 dark:bg-slate-800 text-white px-4 sm:px-6 py-3 sm:py-4 rounded-xl shadow-2xl flex items-center justify-center gap-3 sm:gap-6 z-20 sm:max-w-[calc(100vw-2rem)]">
+          className="sticky bottom-0 sm:fixed sm:bottom-8 sm:left-1/2 sm:-translate-x-1/2 md:ml-32 bg-slate-900 dark:bg-slate-800 text-white px-4 sm:px-6 py-3 sm:py-4 rounded-t-xl sm:rounded-xl shadow-2xl flex items-center justify-center gap-3 sm:gap-6 z-20 sm:max-w-[calc(100vw-2rem)]">
 
             <span className="font-medium text-sm sm:text-base">
               {selectedIds.size} selected
@@ -168,6 +167,7 @@ export function DashboardPage() {
           </motion.div>
         }
       </AnimatePresence>
+      </div>
     </div>);
 
 }
