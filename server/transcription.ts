@@ -602,12 +602,7 @@ export async function processTranscription(transcriptId: string): Promise<void> 
         }
         await client.query(
           `INSERT INTO transcript_segments (transcript_id, start_time, end_time, speaker, text, segment_order)
-           VALUES ${placeholders.join(', ')}
-           ON CONFLICT (transcript_id, segment_order) DO UPDATE SET
-             start_time = EXCLUDED.start_time,
-             end_time = EXCLUDED.end_time,
-             speaker = EXCLUDED.speaker,
-             text = EXCLUDED.text`,
+           VALUES ${placeholders.join(', ')}`,
           values
         );
       }

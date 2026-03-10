@@ -170,61 +170,6 @@ pool.query(`
   if (!err.message.includes('already exists')) console.error('Migration error:', err.message);
 });
 
-(async () => {
-  try {
-    const { rows: idxCheck } = await pool.query(`
-      SELECT 1 FROM pg_indexes
-      WHERE tablename = 'transcript_segments' AND indexname = 'idx_segments_unique_order'
-    `);
-    if (idxCheck.length > 0) return;
-
-    const { rows: dupCheck } = await pool.query(`
-      SELECT transcript_id, segment_order, COUNT(*) as cnt
-      FROM transcript_segments
-      GROUP BY transcript_id, segment_order
-      HAVING COUNT(*) > 1
-      LIMIT 1
-    `);
-
-    if (dupCheck.length > 0) {
-      console.log('[Segment Index] Duplicate segment_order rows found — cleaning up...');
-      let totalDeleted = 0;
-      const { rows: transcriptsWithDups } = await pool.query(`
-        SELECT DISTINCT transcript_id FROM (
-          SELECT transcript_id, segment_order
-          FROM transcript_segments
-          GROUP BY transcript_id, segment_order
-          HAVING COUNT(*) > 1
-        ) d
-      `);
-      for (const row of transcriptsWithDups) {
-        const delResult = await pool.query(`
-          DELETE FROM transcript_segments
-          WHERE id IN (
-            SELECT id FROM (
-              SELECT id, ROW_NUMBER() OVER (PARTITION BY segment_order ORDER BY id) as rn
-              FROM transcript_segments
-              WHERE transcript_id = $1
-            ) ranked WHERE rn > 1
-          )
-        `, [row.transcript_id]);
-        totalDeleted += delResult.rowCount || 0;
-      }
-      console.log(`[Segment Index] Removed ${totalDeleted} duplicate rows from ${transcriptsWithDups.length} transcript(s)`);
-    }
-
-    await pool.query(`
-      CREATE UNIQUE INDEX IF NOT EXISTS idx_segments_unique_order
-      ON transcript_segments (transcript_id, segment_order)
-    `);
-    console.log('[Segment Index] Unique index created successfully');
-  } catch (err: any) {
-    if (!err.message.includes('already exists')) {
-      console.error('[Segment Index] Error:', err.message);
-    }
-  }
-})();
-
 pool.query(`
   CREATE TABLE IF NOT EXISTS mattrmindr_connections (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
