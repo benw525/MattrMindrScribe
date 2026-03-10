@@ -548,10 +548,14 @@ export async function processTranscription(transcriptId: string): Promise<void> 
     try {
       console.log(`[Transcription] Step 3: Claude Opus 4.6 speaker refinement...`);
       allSegments = await refineSpeakersWithGPT(allSegments, expectedSpeakers, recordingType);
-      const uniqueSpeakers = new Set(allSegments.map(s => s.speaker));
+      const uniqueSpeakers = [...new Set(allSegments.map(s => s.speaker))];
+      const hasGenericLabels = uniqueSpeakers.some(s => /^Speaker\s*\d+$/i.test(s));
+      console.log(`[Transcription] Refinement complete: ${uniqueSpeakers.length} speakers: ${uniqueSpeakers.join(', ')}${hasGenericLabels ? ' [WARNING: generic labels remain]' : ''}`);
       pipelineLog.refinement = {
         status: 'success',
-        speakersAfterRefinement: uniqueSpeakers.size,
+        speakersAfterRefinement: uniqueSpeakers.length,
+        speakerNames: uniqueSpeakers,
+        hasGenericLabels,
       };
     } catch (err: any) {
       console.error(`[Transcription] GPT refinement failed (non-fatal):`, err.message);

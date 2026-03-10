@@ -11,8 +11,8 @@ const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
 });
 
-const SINGLE_CALL_LIMIT = 2000;
-const BATCH_SIZE = 1500;
+const SINGLE_CALL_LIMIT = 800;
+const BATCH_SIZE = 700;
 const OVERLAP_CONTEXT = 20;
 
 function buildSystemPrompt(): string {
@@ -144,10 +144,13 @@ function parseResponse(content: string, expectedCount: number): { segments: Pars
   if (parsed.identifications && typeof parsed.identifications === 'object') {
     Object.assign(identifications, parsed.identifications);
   }
+  console.log(`[Speaker Refinement] Identifications map: ${JSON.stringify(identifications)}`);
 
   if (parsed.segments && Array.isArray(parsed.segments) && parsed.segments.length > 0) {
     const segs: ParsedSegment[] = parsed.segments;
+    const sampleLabels = segs.slice(0, 10).map(s => s.label);
     console.log(`[Speaker Refinement] Got ${segs.length} segment objects, expected ${expectedCount}`);
+    console.log(`[Speaker Refinement] First 10 segment labels: ${JSON.stringify(sampleLabels)}`);
 
     if (segs.length === expectedCount || (segs.length >= expectedCount * 0.9 && segs.length <= expectedCount * 1.1)) {
       const labels = segs.map(s => s.label || '');
@@ -204,7 +207,13 @@ function parseResponse(content: string, expectedCount: number): { segments: Pars
 }
 
 function applyIdentificationsToGenericLabels(refined: Segment[], identifications: Record<string, string>): Segment[] {
-  if (Object.keys(identifications).length === 0) return refined;
+  if (Object.keys(identifications).length === 0) {
+    console.log(`[Speaker Refinement] applyIdentifications: identifications map is empty — skipping`);
+    return refined;
+  }
+
+  const genericCount = refined.filter(s => /^Speaker\s*\d+$/i.test(s.speaker)).length;
+  console.log(`[Speaker Refinement] applyIdentifications: ${genericCount} generic labels found, identifications map has ${Object.keys(identifications).length} entries`);
 
   let replaced = 0;
   const result = refined.map(seg => {
@@ -248,7 +257,7 @@ async function refineBatch(
 
   const userPrompt = buildUserPrompt(segmentData, speakerHint, recordingType, batchContext, knownRoster);
 
-  const maxTokens = Math.min(64000, Math.max(8192, segments.length * 40 + 2000));
+  const maxTokens = Math.min(32000, Math.max(8192, segments.length * 40 + 2000));
   console.log(`[Speaker Refinement] Using max_tokens: ${maxTokens} for ${segments.length} segments`);
 
   let content = '';
@@ -267,6 +276,8 @@ async function refineBatch(
   }
 
   if (!content) return null;
+
+  console.log(`[Speaker Refinement] Claude response length: ${content.length} chars`);
 
   return parseResponse(content, segments.length);
 }
@@ -438,6 +449,11 @@ export async function refineSpeakersWithGPT(
   let knownRoster: { name: string; role: string }[] | null = null;
   if (recordingType === 'deposition' && segments.length > 30) {
     knownRoster = await identifySpeakersFromOpening(segments, recordingType);
+    if (knownRoster) {
+      console.log(`[Speaker Refinement] Roster from Pass 1: ${JSON.stringify(knownRoster)}`);
+    } else {
+      console.log(`[Speaker Refinement] Pass 1 returned no roster`);
+    }
   }
 
   if (segments.length <= SINGLE_CALL_LIMIT) {
