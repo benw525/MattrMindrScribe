@@ -28,11 +28,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (isAuthenticated()) {
       api.auth.me()
         .then(userData => setUser(userData))
-        .catch(() => clearToken())
+        .catch(() => {
+          clearToken();
+          setUser(null);
+        })
         .finally(() => setLoading(false));
     } else {
       setLoading(false);
     }
+  }, []);
+
+  useEffect(() => {
+    const handleTokenCleared = () => setUser(null);
+    window.addEventListener('auth_token_cleared', handleTokenCleared);
+    return () => window.removeEventListener('auth_token_cleared', handleTokenCleared);
   }, []);
 
   const login = useCallback(async (email: string, password: string) => {

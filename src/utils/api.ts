@@ -10,6 +10,7 @@ export function setToken(token: string) {
 
 export function clearToken() {
   localStorage.removeItem('auth_token');
+  window.dispatchEvent(new CustomEvent('auth_token_cleared'));
 }
 
 export function isAuthenticated(): boolean {
@@ -42,7 +43,6 @@ async function request(endpoint: string, options: RequestInit = {}) {
 
   if (res.status === 401 || res.status === 403) {
     clearToken();
-    window.location.href = '/login';
     throw new Error('Authentication required');
   }
 
