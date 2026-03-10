@@ -134,6 +134,7 @@ export const api = {
       if (onProgress) onProgress(100);
       return confirmRes;
     },
+    get: (id: string) => request(`/transcripts/${id}/detail`),
     update: (id: string, updates: Record<string, any>) =>
       request(`/transcripts/${id}`, { method: 'PATCH', body: JSON.stringify(updates) }),
     delete: (ids: string[]) =>

@@ -75,6 +75,7 @@ A full-stack application for managing legal case recordings/transcripts. Feature
 - `GET /api/auth/me` - Get current user
 - `PUT /api/auth/change-password` - Change password (authenticated)
 - `GET /api/transcripts` - List user transcripts
+- `GET /api/transcripts/:id/detail` - Get single transcript with segments (fallback for page reload)
 - `POST /api/transcripts/presigned-upload` - Get presigned R2 URL for direct browser upload
 - `POST /api/transcripts/confirm-upload` - Confirm upload completion, create transcript record, start transcription
 - `POST /api/transcripts/upload` - Legacy upload via server (fallback, limited by proxy body size)

@@ -20,7 +20,7 @@ import { VersionHistory } from '../components/viewer/VersionHistory';
 import { AISummarizeModal } from '../components/viewer/AISummarizeModal';
 import { AISummaryPanel } from '../components/viewer/AISummaryPanel';
 import { PipelineSummary } from '../components/viewer/PipelineSummary';
-import { TranscriptSegment, TranscriptVersion } from '../types/transcript';
+import { Transcript, TranscriptSegment, TranscriptVersion } from '../types/transcript';
 import { api } from '../utils/api';
 interface UndoEntry {
   segments: TranscriptSegment[];
@@ -92,7 +92,28 @@ export function TranscriptViewerPage() {
   const [streamingContent, setStreamingContent] = useState('');
   const [streamingAgentType, setStreamingAgentType] = useState<string | null>(null);
   const [isStreaming, setIsStreaming] = useState(false);
-  const transcript = transcripts.find((t) => t.id === id);
+  const [directTranscript, setDirectTranscript] = useState<Transcript | null>(null);
+  const [directLoading, setDirectLoading] = useState(false);
+  const [directFetchedId, setDirectFetchedId] = useState<string | null>(null);
+  const contextTranscript = transcripts.find((t) => t.id === id);
+  const transcript = contextTranscript || (directTranscript && directTranscript.id === id ? directTranscript : null);
+
+  useEffect(() => {
+    setDirectTranscript(null);
+    setDirectFetchedId(null);
+  }, [id]);
+
+  useEffect(() => {
+    if (!id || contextTranscript || transcriptsLoading || directLoading || directFetchedId === id) return;
+    setDirectLoading(true);
+    setDirectFetchedId(id);
+    api.transcripts.get(id)
+      .then((t: Transcript) => {
+        setDirectTranscript(t);
+      })
+      .catch(() => {})
+      .finally(() => setDirectLoading(false));
+  }, [id, contextTranscript, transcriptsLoading, directLoading, directFetchedId]);
 
   useEffect(() => {
     if (!id) return;
@@ -162,7 +183,7 @@ export function TranscriptViewerPage() {
     };
   }, []);
   if (!transcript) {
-    if (transcriptsLoading) {
+    if (transcriptsLoading || directLoading) {
       return (
         <div className="flex-1 flex items-center justify-center bg-slate-50 dark:bg-slate-950">
           <div className="h-8 w-8 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />

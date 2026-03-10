@@ -97,6 +97,51 @@ router.get('/', async (req: AuthRequest, res: Response) => {
   }
 });
 
+router.get('/:id/detail', async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const result = await pool.query(
+      `SELECT t.*, 
+        COALESCE(json_agg(
+          json_build_object('id', s.id, 'startTime', s.start_time, 'endTime', s.end_time, 'speaker', s.speaker, 'text', s.text)
+          ORDER BY s.segment_order
+        ) FILTER (WHERE s.id IS NOT NULL), '[]') as segments
+      FROM transcripts t
+      LEFT JOIN transcript_segments s ON s.transcript_id = t.id
+      WHERE t.id = $1 AND t.user_id = $2
+      GROUP BY t.id`,
+      [id, req.userId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Transcript not found' });
+    }
+
+    const row = result.rows[0];
+    res.json({
+      id: row.id,
+      filename: row.filename,
+      description: row.description,
+      status: row.status,
+      type: row.type,
+      duration: row.duration,
+      fileSize: row.file_size,
+      fileUrl: row.file_url,
+      folderId: row.folder_id,
+      recordingType: row.recording_type,
+      practiceArea: row.practice_area,
+      errorMessage: row.error_message,
+      pipelineLog: row.pipeline_log,
+      segments: row.segments,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    });
+  } catch (err) {
+    console.error('Get transcript detail error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 const MAX_FILE_SIZE = 2 * 1024 * 1024 * 1024;
 const pendingUploads = new Map<string, { userId: string; r2Key: string; filename: string; contentType: string; fileSize: number; expires: number }>();
 
