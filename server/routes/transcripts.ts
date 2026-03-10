@@ -764,7 +764,7 @@ router.post('/:id/summarize', async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ error: `Transcript is too long for summarization (${Math.round(transcriptText.length / 1000)}k chars). Maximum is ${MAX_CHARS / 1000}k characters.` });
     }
 
-    const model = 'gpt-4o-mini';
+    const model = 'gpt-5-mini';
 
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');

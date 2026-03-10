@@ -153,7 +153,7 @@ pool.query(`
     agent_type VARCHAR(100) NOT NULL,
     sub_type VARCHAR(100) DEFAULT NULL,
     summary TEXT NOT NULL,
-    model_used VARCHAR(100) DEFAULT 'gpt-4o-mini',
+    model_used VARCHAR(100) DEFAULT 'gpt-5-mini',
     created_at TIMESTAMP DEFAULT NOW()
   );
   CREATE INDEX IF NOT EXISTS idx_summaries_transcript ON transcript_summaries(transcript_id);
