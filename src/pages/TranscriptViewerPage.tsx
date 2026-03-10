@@ -61,7 +61,7 @@ export function TranscriptViewerPage() {
     id: string;
   }>();
   const navigate = useNavigate();
-  const { transcripts, updateTranscript, refreshData } = useTranscripts();
+  const { transcripts, updateTranscript, refreshData, loading: transcriptsLoading } = useTranscripts();
   const { sidebarHidden, setSidebarHidden } = useOutletContext<{
     selectedFolderId: string | null;
     sidebarHidden: boolean;
@@ -162,6 +162,12 @@ export function TranscriptViewerPage() {
     };
   }, []);
   if (!transcript) {
+    if (transcriptsLoading) {
+      return (
+        <div className="flex-1 flex items-center justify-center bg-slate-50 dark:bg-slate-950">
+          <div className="h-8 w-8 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+        </div>);
+    }
     return (
       <div className="flex-1 flex flex-col items-center justify-center bg-slate-50 dark:bg-slate-950">
         <h2 className="text-xl font-semibold text-slate-900 dark:text-white mb-2">
@@ -170,11 +176,9 @@ export function TranscriptViewerPage() {
         <button
           onClick={() => navigate('/app')}
           className="text-indigo-600 dark:text-indigo-400 hover:underline">
-
           Return to Dashboard
         </button>
       </div>);
-
   }
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingDescriptionRef = useRef<string | null>(null);

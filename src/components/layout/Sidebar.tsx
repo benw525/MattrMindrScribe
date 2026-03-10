@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef, useCallback, Children } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { AnimatePresence } from 'framer-motion';
 import {
   FolderIcon,
@@ -58,7 +58,8 @@ export function Sidebar({
   useTranscripts();
   const { user } = useAuth();
   const location = useLocation();
-  const isDashboard = location.pathname.startsWith('/app');
+  const navigate = useNavigate();
+  const isDashboard = location.pathname === '/app' || location.pathname === '/app/';
   const [isCreatingFolder, setIsCreatingFolder] = useState(false);
   const [creatingParentId, setCreatingParentId] = useState<string | null>(null);
   const [newFolderName, setNewFolderName] = useState('');
@@ -171,8 +172,8 @@ export function Sidebar({
     if (e.key === 'Escape') setRenamingFolderId(null);
   };
   const handleNavClick = (folderId: string | null) => {
-    if (!isDashboard) window.location.href = '/app';
     onSelectFolder(folderId);
+    if (!isDashboard) navigate('/app');
     if (isMobile && onClose) onClose();
   };
   const toggleExpand = (folderId: string) => {
