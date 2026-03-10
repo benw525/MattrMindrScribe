@@ -170,6 +170,28 @@ pool.query(`
   if (!err.message.includes('already exists')) console.error('Migration error:', err.message);
 });
 
+(async () => {
+  try {
+    await pool.query(`
+      DELETE FROM transcript_segments
+      WHERE id IN (
+        SELECT id FROM (
+          SELECT id, ROW_NUMBER() OVER (PARTITION BY transcript_id, segment_order ORDER BY id) as rn
+          FROM transcript_segments
+        ) ranked WHERE rn > 1
+      )
+    `);
+    await pool.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_segments_unique_order
+      ON transcript_segments (transcript_id, segment_order)
+    `);
+  } catch (err: any) {
+    if (!err.message.includes('already exists')) {
+      console.error('[Segment Index] Error:', err.message);
+    }
+  }
+})();
+
 pool.query(`
   CREATE TABLE IF NOT EXISTS mattrmindr_connections (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -254,26 +276,50 @@ setTimeout(async () => {
   try {
     await pool.query(`CREATE TABLE IF NOT EXISTS _migrations (key VARCHAR(100) PRIMARY KEY, ran_at TIMESTAMP DEFAULT NOW())`);
     const { rows: done } = await pool.query(`SELECT 1 FROM _migrations WHERE key = 'dedup_segments_v1'`);
-    if (done.length > 0) return;
-
-    const { rows } = await pool.query(
-      `SELECT t.id, t.filename, 
-        (SELECT COUNT(*) FROM transcript_segments s WHERE s.transcript_id = t.id) as seg_count
-       FROM transcripts t WHERE t.status = 'completed'`
-    );
-    let fixed = 0;
-    for (const row of rows) {
-      if (parseInt(row.seg_count) > 200) {
-        const removed = await deduplicateExistingSegments(row.id);
-        if (removed > 0) {
-          console.log(`[Startup Dedup] "${row.filename}": removed ${removed} duplicate segments`);
-          fixed++;
+    if (done.length === 0) {
+      const { rows } = await pool.query(
+        `SELECT t.id, t.filename, 
+          (SELECT COUNT(*) FROM transcript_segments s WHERE s.transcript_id = t.id) as seg_count
+         FROM transcripts t WHERE t.status = 'completed'`
+      );
+      let fixed = 0;
+      for (const row of rows) {
+        if (parseInt(row.seg_count) > 200) {
+          const removed = await deduplicateExistingSegments(row.id);
+          if (removed > 0) {
+            console.log(`[Startup Dedup] "${row.filename}": removed ${removed} duplicate segments`);
+            fixed++;
+          }
         }
       }
+      await pool.query(`INSERT INTO _migrations (key) VALUES ('dedup_segments_v1')`);
+      if (fixed > 0) console.log(`[Startup Dedup] Completed — fixed ${fixed} transcript(s)`);
     }
-    await pool.query(`INSERT INTO _migrations (key) VALUES ('dedup_segments_v1')`);
-    if (fixed > 0) console.log(`[Startup Dedup] Completed — fixed ${fixed} transcript(s)`);
   } catch (err: any) {
     console.error('[Startup Dedup] Error:', err.message);
+  }
+
+  try {
+    const { rows: done2 } = await pool.query(`SELECT 1 FROM _migrations WHERE key = 'dedup_segments_v2'`);
+    if (done2.length === 0) {
+      console.log('[Startup Dedup v2] Cleaning duplicate segment_order rows...');
+      await pool.query(`
+        DELETE FROM transcript_segments
+        WHERE id IN (
+          SELECT id FROM (
+            SELECT id, ROW_NUMBER() OVER (PARTITION BY transcript_id, segment_order ORDER BY id) as rn
+            FROM transcript_segments
+          ) ranked WHERE rn > 1
+        )
+      `);
+      await pool.query(`
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_segments_unique_order
+        ON transcript_segments (transcript_id, segment_order)
+      `);
+      await pool.query(`INSERT INTO _migrations (key) VALUES ('dedup_segments_v2')`);
+      console.log('[Startup Dedup v2] Done — duplicate rows removed and unique index added');
+    }
+  } catch (err: any) {
+    console.error('[Startup Dedup v2] Error:', err.message);
   }
 }, 2000);

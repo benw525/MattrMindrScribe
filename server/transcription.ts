@@ -190,6 +190,21 @@ function deduplicateSegments(segments: TranscriptSegment[]): TranscriptSegment[]
     const wordCount = seg.text.trim().split(/\s+/).length;
     if (wordCount <= 3 && Math.abs(seg.startTime - prev.startTime) < 5 && textSimilarity(seg.text, prev.text) > 0.9) continue;
 
+    let isDuplicateOfRecent = false;
+    const lookback = Math.min(10, deduped.length);
+    for (let j = deduped.length - 1; j >= deduped.length - lookback; j--) {
+      const recent = deduped[j];
+      if (
+        Math.abs(seg.startTime - recent.startTime) < 2 &&
+        Math.abs(seg.endTime - recent.endTime) < 2 &&
+        textSimilarity(seg.text, recent.text) > 0.85
+      ) {
+        isDuplicateOfRecent = true;
+        break;
+      }
+    }
+    if (isDuplicateOfRecent) continue;
+
     if (seg.startTime < prev.endTime) {
       seg.startTime = prev.endTime;
     }
@@ -569,31 +584,46 @@ export async function processTranscription(transcriptId: string): Promise<void> 
 
     pipelineLog.completedAt = new Date().toISOString();
 
-    await pool.query('DELETE FROM transcript_segments WHERE transcript_id = $1', [transcriptId]);
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query('DELETE FROM transcript_segments WHERE transcript_id = $1', [transcriptId]);
 
-    const BATCH_SIZE = 200;
-    for (let b = 0; b < allSegments.length; b += BATCH_SIZE) {
-      const batch = allSegments.slice(b, b + BATCH_SIZE);
-      const values: any[] = [];
-      const placeholders: string[] = [];
-      for (let i = 0; i < batch.length; i++) {
-        const seg = batch[i];
-        const offset = i * 6;
-        placeholders.push(`($${offset+1}, $${offset+2}, $${offset+3}, $${offset+4}, $${offset+5}, $${offset+6})`);
-        values.push(transcriptId, seg.startTime, seg.endTime, seg.speaker, seg.text, b + i);
+      const BATCH_SIZE = 200;
+      for (let b = 0; b < allSegments.length; b += BATCH_SIZE) {
+        const batch = allSegments.slice(b, b + BATCH_SIZE);
+        const values: any[] = [];
+        const placeholders: string[] = [];
+        for (let i = 0; i < batch.length; i++) {
+          const seg = batch[i];
+          const offset = i * 6;
+          placeholders.push(`($${offset+1}, $${offset+2}, $${offset+3}, $${offset+4}, $${offset+5}, $${offset+6})`);
+          values.push(transcriptId, seg.startTime, seg.endTime, seg.speaker, seg.text, b + i);
+        }
+        await client.query(
+          `INSERT INTO transcript_segments (transcript_id, start_time, end_time, speaker, text, segment_order)
+           VALUES ${placeholders.join(', ')}
+           ON CONFLICT (transcript_id, segment_order) DO UPDATE SET
+             start_time = EXCLUDED.start_time,
+             end_time = EXCLUDED.end_time,
+             speaker = EXCLUDED.speaker,
+             text = EXCLUDED.text`,
+          values
+        );
       }
-      await pool.query(
-        `INSERT INTO transcript_segments (transcript_id, start_time, end_time, speaker, text, segment_order)
-         VALUES ${placeholders.join(', ')}`,
-        values
-      );
-    }
 
-    await pool.query(
-      `UPDATE transcripts SET status = 'completed', duration = $1, error_message = NULL, pipeline_log = $2::jsonb, updated_at = NOW()
-       WHERE id = $3`,
-      [duration, JSON.stringify(pipelineLog), transcriptId]
-    );
+      await client.query(
+        `UPDATE transcripts SET status = 'completed', duration = $1, error_message = NULL, pipeline_log = $2::jsonb, updated_at = NOW()
+         WHERE id = $3`,
+        [duration, JSON.stringify(pipelineLog), transcriptId]
+      );
+      await client.query('COMMIT');
+    } catch (txErr) {
+      await client.query('ROLLBACK');
+      throw txErr;
+    } finally {
+      client.release();
+    }
 
     console.log(`[Transcription] Completed for "${filename}" — ${allSegments.length} segment(s)`);
   } catch (err: any) {
