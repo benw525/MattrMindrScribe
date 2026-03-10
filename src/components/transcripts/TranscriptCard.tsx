@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FileAudioIcon, FileVideoIcon, ClockIcon } from 'lucide-react';
 import { Transcript } from '../../types/transcript';
@@ -22,8 +22,42 @@ export function TranscriptCard({
 }: TranscriptCardProps) {
   const navigate = useNavigate();
   const Icon = transcript.type === 'video' ? FileVideoIcon : FileAudioIcon;
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const didLongPress = useRef(false);
+
+  const clearLongPress = useCallback(() => {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+  }, []);
+
+  const handleTouchStart = useCallback(() => {
+    clearLongPress();
+    didLongPress.current = false;
+    longPressTimer.current = setTimeout(() => {
+      didLongPress.current = true;
+      onSelect(transcript.id, true);
+    }, 500);
+  }, [transcript.id, onSelect, clearLongPress]);
+
+  const handleTouchEnd = useCallback(() => {
+    clearLongPress();
+  }, [clearLongPress]);
+
+  const handleTouchMove = useCallback(() => {
+    clearLongPress();
+  }, [clearLongPress]);
+
+  React.useEffect(() => {
+    return () => { clearLongPress(); };
+  }, [clearLongPress]);
 
   const handleCardClick = (e: React.MouseEvent) => {
+    if (didLongPress.current) {
+      didLongPress.current = false;
+      return;
+    }
     if ((e.target as HTMLElement).closest('input[type="checkbox"]')) return;
     if (selectionMode) {
       onSelect(transcript.id, !isSelected);
@@ -35,7 +69,11 @@ export function TranscriptCard({
   return (
     <div
       onClick={handleCardClick}
-      className={`group relative bg-white dark:bg-slate-900 border rounded-lg shadow-sm transition-all hover:shadow-md cursor-pointer ${isSelected ? 'border-indigo-500 ring-1 ring-indigo-500' : 'border-slate-200 dark:border-slate-800'}`}>
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
+      onTouchMove={handleTouchMove}
+      onTouchCancel={handleTouchEnd}
+      className={`group relative bg-white dark:bg-slate-900 border rounded-lg shadow-sm transition-all hover:shadow-md cursor-pointer select-none ${isSelected ? 'border-indigo-500 ring-1 ring-indigo-500' : 'border-slate-200 dark:border-slate-800'}`}>
 
       <div className="p-3 sm:p-4 flex items-start gap-3 sm:gap-4">
         <div className={`flex-shrink-0 pt-1 w-5 ${selectionMode || isSelected ? 'block' : 'hidden sm:group-hover:block'}`}>
