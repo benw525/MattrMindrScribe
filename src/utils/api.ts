@@ -185,5 +185,7 @@ export const api = {
       request(`/mattrmindr/send/${folderId}`, { method: 'POST' }),
     confirmSend: (folderId: string, replaceFileIds: Record<string, string>) =>
       request(`/mattrmindr/send/${folderId}/confirm`, { method: 'POST', body: JSON.stringify({ replaceFileIds }) }),
+    sendTranscript: (transcriptId: string, caseId: string, caseName: string) =>
+      request(`/mattrmindr/send-transcript/${transcriptId}`, { method: 'POST', body: JSON.stringify({ caseId, caseName }) }),
   },
 };

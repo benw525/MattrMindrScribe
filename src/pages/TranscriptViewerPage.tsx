@@ -20,6 +20,7 @@ import { VersionHistory } from '../components/viewer/VersionHistory';
 import { AISummarizeModal } from '../components/viewer/AISummarizeModal';
 import { AISummaryPanel } from '../components/viewer/AISummaryPanel';
 import { PipelineSummary } from '../components/viewer/PipelineSummary';
+import { SendToMattrMindrModal } from '../components/viewer/SendToMattrMindrModal';
 import { Transcript, TranscriptSegment, TranscriptVersion } from '../types/transcript';
 import { api } from '../utils/api';
 interface UndoEntry {
@@ -86,6 +87,8 @@ export function TranscriptViewerPage() {
   const [showSummarizeModal, setShowSummarizeModal] = useState(false);
   const [showPipeline, setShowPipeline] = useState(false);
   const [showSummaryPanel, setShowSummaryPanel] = useState(false);
+  const [showSendToMattrMindr, setShowSendToMattrMindr] = useState(false);
+  const [mattrmindrConnected, setMattrmindrConnected] = useState(false);
   const [agents, setAgents] = useState<{ id: string; name: string; icon: string; description: string; subTypes: { id: string; name: string; description: string }[] }[]>([]);
   const [summaries, setSummaries] = useState<{ id: string; agentType: string; subType: string | null; subTypeName: string | null; summary: string; modelUsed: string; createdAt: string }[]>([]);
   const [loadingAgentId, setLoadingAgentId] = useState<string | null>(null);
@@ -128,6 +131,9 @@ export function TranscriptViewerPage() {
   useEffect(() => {
     api.transcripts.getAgents().then((a: any[]) => {
       setAgents(a || []);
+    }).catch(() => {});
+    api.mattrmindr.status().then((res: any) => {
+      setMattrmindrConnected(!!res?.connected);
     }).catch(() => {});
   }, []);
 
@@ -553,7 +559,8 @@ export function TranscriptViewerPage() {
               transcript.pipelineLog.fatalError
             ))}
             onShowSummaries={() => setShowSummaryPanel(true)}
-            summaryCount={summaries.length} />
+            summaryCount={summaries.length}
+            onSendToMattrMindr={mattrmindrConnected && transcript.status === 'completed' ? () => setShowSendToMattrMindr(true) : undefined} />
         </div>
       </header>
 
@@ -1042,6 +1049,16 @@ export function TranscriptViewerPage() {
         onClose={() => setShowPipeline(false)}
         onRetranscribeStarted={() => refreshData()} />
 
+      }
+
+      {showSendToMattrMindr && transcript &&
+      <SendToMattrMindrModal
+        transcriptId={transcript.id}
+        transcriptFilename={transcript.filename}
+        onClose={() => setShowSendToMattrMindr(false)}
+        onSent={() => {
+          refreshData();
+        }} />
       }
 
       {!isProcessing &&

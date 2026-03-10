@@ -14,7 +14,8 @@ import {
   FileTextIcon,
   FileTypeIcon,
   FileIcon,
-  ChevronDownIcon } from
+  ChevronDownIcon,
+  SendIcon } from
 'lucide-react';
 import { toast } from 'sonner';
 
@@ -31,6 +32,7 @@ interface TranscriptToolbarProps {
   hasPipelineIssue?: boolean;
   onShowSummaries?: () => void;
   summaryCount?: number;
+  onSendToMattrMindr?: () => void;
 }
 
 const EXPORT_FORMATS = [
@@ -51,7 +53,8 @@ export function TranscriptToolbar({
   onShowPipeline,
   hasPipelineIssue,
   onShowSummaries,
-  summaryCount
+  summaryCount,
+  onSendToMattrMindr
 }: TranscriptToolbarProps) {
   const navigate = useNavigate();
   const [showExportMenu, setShowExportMenu] = useState(false);
@@ -204,6 +207,16 @@ export function TranscriptToolbar({
           document.body
         )}
       </div>
+
+      {onSendToMattrMindr && (
+        <button
+          onClick={onSendToMattrMindr}
+          className="inline-flex items-center gap-1.5 p-2 sm:px-3 sm:py-2 text-sm font-medium text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-900/30 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 active:bg-indigo-200 dark:active:bg-indigo-900/70 rounded-md transition-colors"
+          title="Send to MattrMindr">
+          <SendIcon className="h-4 w-4" />
+          <span className="hidden lg:inline">MattrMindr</span>
+        </button>
+      )}
 
       {onShowPipeline && (
         <button

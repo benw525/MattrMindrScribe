@@ -356,6 +356,100 @@ router.post('/send/:folderId/confirm', async (req: AuthRequest, res: Response) =
   }
 });
 
+router.post('/send-transcript/:transcriptId', async (req: AuthRequest, res: Response) => {
+  try {
+    const conn = await getConnection(req.userId!);
+    if (!conn) {
+      return res.status(400).json({ error: 'Not connected to MattrMindr' });
+    }
+
+    const { transcriptId } = req.params;
+    const { caseId, caseName } = req.body;
+
+    if (!caseId) {
+      return res.status(400).json({ error: 'caseId is required' });
+    }
+
+    const transcriptResult = await pool.query(
+      `SELECT t.id, t.filename, t.description, t.type, t.duration, t.pipeline_log, t.folder_id,
+        COALESCE(json_agg(
+          json_build_object('startTime', s.start_time, 'endTime', s.end_time, 'speaker', s.speaker, 'text', s.text)
+          ORDER BY s.segment_order
+        ) FILTER (WHERE s.id IS NOT NULL), '[]') as segments
+      FROM transcripts t
+      LEFT JOIN transcript_segments s ON s.transcript_id = t.id
+      WHERE t.id = $1 AND t.user_id = $2 AND t.status = 'completed'
+      GROUP BY t.id`,
+      [transcriptId, req.userId]
+    );
+
+    if (transcriptResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Completed transcript not found' });
+    }
+
+    const t = transcriptResult.rows[0];
+
+    let folderLinked = false;
+    if (t.folder_id) {
+      const folderCheck = await pool.query(
+        'SELECT mattrmindr_case_id FROM folders WHERE id = $1 AND user_id = $2',
+        [t.folder_id, req.userId]
+      );
+      if (folderCheck.rows.length > 0 && !folderCheck.rows[0].mattrmindr_case_id) {
+        await pool.query(
+          'UPDATE folders SET mattrmindr_case_id = $1, mattrmindr_case_name = $2 WHERE id = $3 AND user_id = $4',
+          [caseId, caseName || 'MattrMindr Case', t.folder_id, req.userId]
+        );
+        folderLinked = true;
+      } else if (folderCheck.rows.length > 0 && folderCheck.rows[0].mattrmindr_case_id === caseId) {
+        folderLinked = true;
+      }
+    }
+
+    if (!folderLinked) {
+      const existingFolder = await pool.query(
+        'SELECT id FROM folders WHERE mattrmindr_case_id = $1 AND user_id = $2 LIMIT 1',
+        [caseId, req.userId]
+      );
+
+      let folderId: string;
+      if (existingFolder.rows.length > 0) {
+        folderId = existingFolder.rows[0].id;
+      } else {
+        const folderName = caseName || 'MattrMindr Case';
+        const newFolder = await pool.query(
+          `INSERT INTO folders (name, case_number, user_id, mattrmindr_case_id, mattrmindr_case_name)
+           VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+          [folderName, caseId, req.userId, caseId, folderName]
+        );
+        folderId = newFolder.rows[0].id;
+      }
+
+      await pool.query(
+        'UPDATE transcripts SET folder_id = $1, updated_at = NOW() WHERE id = $2 AND user_id = $3',
+        [folderId, transcriptId, req.userId]
+      );
+    }
+
+    const results = await sendFilesToMattrMindr(
+      conn,
+      caseId,
+      [t],
+      req.userId!,
+      {}
+    );
+
+    const result = results[0];
+    res.json({
+      status: result.success ? 'sent' : 'error',
+      ...result,
+    });
+  } catch (err: any) {
+    console.error('MattrMindr send-transcript error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 async function sendFilesToMattrMindr(
   conn: { base_url: string; auth_token: string },
   caseId: string,
