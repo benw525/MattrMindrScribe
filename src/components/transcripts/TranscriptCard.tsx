@@ -1,5 +1,5 @@
 import React from 'react';
-import { Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { FileAudioIcon, FileVideoIcon, ClockIcon } from 'lucide-react';
 import { Transcript } from '../../types/transcript';
 import { StatusBadge } from './StatusBadge';
@@ -20,22 +20,31 @@ export function TranscriptCard({
   onSelect,
   selectionMode
 }: TranscriptCardProps) {
+  const navigate = useNavigate();
   const Icon = transcript.type === 'video' ? FileVideoIcon : FileAudioIcon;
+
+  const handleCardClick = (e: React.MouseEvent) => {
+    if ((e.target as HTMLElement).closest('input[type="checkbox"]')) return;
+    if (selectionMode) {
+      onSelect(transcript.id, !isSelected);
+    } else {
+      navigate(`/app/transcript/${transcript.id}`);
+    }
+  };
+
   return (
     <div
-      className={`group relative bg-white dark:bg-slate-900 border rounded-lg shadow-sm transition-all hover:shadow-md ${isSelected ? 'border-indigo-500 ring-1 ring-indigo-500' : 'border-slate-200 dark:border-slate-800'}`}>
+      onClick={handleCardClick}
+      className={`group relative bg-white dark:bg-slate-900 border rounded-lg shadow-sm transition-all hover:shadow-md cursor-pointer ${isSelected ? 'border-indigo-500 ring-1 ring-indigo-500' : 'border-slate-200 dark:border-slate-800'}`}>
 
       <div className="p-3 sm:p-4 flex items-start gap-3 sm:gap-4">
-        {(selectionMode || isSelected) &&
-        <div className="pt-1">
-            <input
+        <div className={`flex-shrink-0 pt-1 w-5 ${selectionMode || isSelected ? 'block' : 'hidden sm:group-hover:block'}`}>
+          <input
             type="checkbox"
             checked={isSelected}
             onChange={(e) => onSelect(transcript.id, e.target.checked)}
-            className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-slate-300 dark:border-slate-600 rounded cursor-pointer" />
-
-          </div>
-        }
+            className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-slate-300 dark:border-slate-600 rounded cursor-pointer bg-white dark:bg-slate-800" />
+        </div>
 
         <div
           className={`h-10 w-10 rounded-lg flex items-center justify-center flex-shrink-0 ${transcript.type === 'video' ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400' : 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400'}`}>
@@ -45,12 +54,9 @@ export function TranscriptCard({
 
         <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between mb-1 gap-2">
-            <Link
-              to={`/app/transcript/${transcript.id}`}
-              className="text-sm sm:text-base font-semibold text-slate-900 dark:text-white hover:text-indigo-600 dark:hover:text-indigo-400 truncate focus:outline-none focus:underline">
-
+            <span className="text-sm sm:text-base font-semibold text-slate-900 dark:text-white hover:text-indigo-600 dark:hover:text-indigo-400 truncate">
               {transcript.filename}
-            </Link>
+            </span>
             <StatusBadge status={transcript.status} />
           </div>
 
@@ -74,17 +80,6 @@ export function TranscriptCard({
           </div>
         </div>
       </div>
-
-      {!selectionMode && !isSelected &&
-      <div className="absolute top-3 sm:top-4 left-3 sm:left-4 opacity-0 group-hover:opacity-100 sm:group-hover:opacity-100 transition-opacity">
-          <input
-          type="checkbox"
-          checked={isSelected}
-          onChange={(e) => onSelect(transcript.id, e.target.checked)}
-          className="h-5 w-5 sm:h-4 sm:w-4 text-indigo-600 focus:ring-indigo-500 border-slate-300 dark:border-slate-600 rounded cursor-pointer bg-white dark:bg-slate-800" />
-
-        </div>
-      }
     </div>);
 
 }
