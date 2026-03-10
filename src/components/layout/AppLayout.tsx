@@ -5,9 +5,13 @@ import { MenuIcon } from 'lucide-react';
 import { Sidebar } from './Sidebar';
 import { UploadDropzone } from '../upload/UploadDropzone';
 import { UploadProgress } from '../upload/UploadProgress';
+import { AudioRecorder } from '../upload/AudioRecorder';
+import { RecordingMetadata } from '../upload/RecordingMetadata';
 import { Logo } from '../brand/Logo';
 export function AppLayout() {
   const [isUploadOpen, setIsUploadOpen] = useState(false);
+  const [isRecorderOpen, setIsRecorderOpen] = useState(false);
+  const [recordedFile, setRecordedFile] = useState<File | null>(null);
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
   const [sidebarHidden, setSidebarHidden] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -18,6 +22,7 @@ export function AppLayout() {
       <div className="hidden md:flex">
           <Sidebar
           onUploadClick={() => setIsUploadOpen(true)}
+          onRecordClick={() => setIsRecorderOpen(true)}
           selectedFolderId={selectedFolderId}
           onSelectFolder={setSelectedFolderId} />
 
@@ -63,6 +68,10 @@ export function AppLayout() {
                 setIsUploadOpen(true);
                 setMobileMenuOpen(false);
               }}
+              onRecordClick={() => {
+                setIsRecorderOpen(true);
+                setMobileMenuOpen(false);
+              }}
               selectedFolderId={selectedFolderId}
               onSelectFolder={setSelectedFolderId}
               onClose={() => setMobileMenuOpen(false)}
@@ -103,6 +112,22 @@ export function AppLayout() {
 
       {isUploadOpen &&
       <UploadDropzone onClose={() => setIsUploadOpen(false)} />
+      }
+
+      {isRecorderOpen && !recordedFile &&
+      <AudioRecorder
+        onRecordingComplete={(file) => {
+          setIsRecorderOpen(false);
+          setRecordedFile(file);
+        }}
+        onClose={() => setIsRecorderOpen(false)} />
+      }
+
+      {recordedFile &&
+      <RecordingMetadata
+        file={recordedFile}
+        onClose={() => setRecordedFile(null)}
+        onComplete={() => setRecordedFile(null)} />
       }
 
       <UploadProgress />

@@ -18,7 +18,8 @@ import {
   PinIcon,
   SearchIcon,
   LoaderIcon,
-  SendIcon } from
+  SendIcon,
+  MicIcon } from
 'lucide-react';
 import { toast } from 'sonner';
 import { useTranscripts } from '../../hooks/useTranscripts';
@@ -42,6 +43,7 @@ interface SendConflict {
 }
 interface SidebarProps {
   onUploadClick: () => void;
+  onRecordClick: () => void;
   selectedFolderId: string | null;
   onSelectFolder: (id: string | null) => void;
   onClose?: () => void;
@@ -49,6 +51,7 @@ interface SidebarProps {
 }
 export function Sidebar({
   onUploadClick,
+  onRecordClick,
   selectedFolderId,
   onSelectFolder,
   onClose,
@@ -451,16 +454,24 @@ export function Sidebar({
         }
       </div>
 
-      <div className="px-4 mb-6">
+      <div className="px-4 mb-6 flex gap-2">
         <button
           onClick={() => {
             onUploadClick();
             if (isMobile && onClose) onClose();
           }}
-          className="w-full bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-md font-medium flex items-center justify-center gap-2 transition-colors shadow-sm">
-
+          className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-2.5 rounded-md font-medium flex items-center justify-center gap-2 transition-colors shadow-sm text-sm">
           <UploadIcon className="h-4 w-4" />
-          Upload File
+          Upload
+        </button>
+        <button
+          onClick={() => {
+            onRecordClick();
+            if (isMobile && onClose) onClose();
+          }}
+          className="bg-red-500 hover:bg-red-600 text-white px-3 py-2.5 rounded-md font-medium flex items-center justify-center gap-2 transition-colors shadow-sm text-sm">
+          <MicIcon className="h-4 w-4" />
+          Record
         </button>
       </div>
 
