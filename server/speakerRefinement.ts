@@ -25,8 +25,8 @@ function buildSystemPrompt(): string {
 3. **Clean up text formatting.** Add proper punctuation (periods, question marks, commas). Format times with colons (e.g. "1.33 p.m." becomes "1:33 p.m."). Fix capitalization. But PRESERVE all filler words (uh, um, mm-hmm) and all spoken content exactly as said — do not add, remove, or rephrase words. Do not combine or split segments.
 
 Your response must be ONLY valid JSON with no other text. The JSON has two fields:
-- "segments": array of objects with "label" and "text", one per input segment, in order. Length MUST match input.
-- "identifications": object mapping original generic labels to identified names/roles.`;
+- "segments": array of objects with "label" and "text", one per input segment, in order. Length MUST match input. IMPORTANT: Each segment's "label" must be the speaker's actual name or role (e.g. "Alexander Kirkland", "Barry Porter", "Videographer", "Court Reporter") — NOT a generic label like "Speaker 1" or "Speaker 2". Apply your identifications directly into every segment's label.
+- "identifications": object mapping the original generic input labels to the identified names/roles (e.g. {"Speaker 1": "Videographer", "Speaker 3": "Alexander Kirkland"}).`;
 }
 
 const RECORDING_TYPE_SECTIONS: Record<string, string> = {
@@ -201,6 +201,35 @@ function parseResponse(content: string, expectedCount: number): { segments: Pars
 
   console.log(`[Speaker Refinement] No usable data in parsed response. Keys: ${Object.keys(parsed).join(', ')}`);
   return null;
+}
+
+function applyIdentificationsToGenericLabels(refined: Segment[], identifications: Record<string, string>): Segment[] {
+  if (Object.keys(identifications).length === 0) return refined;
+
+  let replaced = 0;
+  const result = refined.map(seg => {
+    if (/^Speaker\s*\d+$/i.test(seg.speaker)) {
+      const mapped = identifications[seg.speaker];
+      if (typeof mapped === 'string' && mapped.trim().length > 0) {
+        replaced++;
+        return { ...seg, speaker: mapped.trim() };
+      }
+      const normalizedKey = Object.keys(identifications).find(k =>
+        k.replace(/\s+/g, '').toLowerCase() === seg.speaker.replace(/\s+/g, '').toLowerCase()
+      );
+      if (normalizedKey && typeof identifications[normalizedKey] === 'string' && identifications[normalizedKey].trim().length > 0) {
+        replaced++;
+        return { ...seg, speaker: identifications[normalizedKey].trim() };
+      }
+    }
+    return seg;
+  });
+
+  if (replaced > 0) {
+    console.log(`[Speaker Refinement] Applied identifications map to ${replaced} generic label(s)`);
+  }
+
+  return result;
 }
 
 async function refineBatch(
@@ -461,6 +490,8 @@ export async function refineSpeakersWithGPT(
         });
       }
 
+      refined = applyIdentificationsToGenericLabels(refined, result.identifications);
+
       const uniqueSpeakers = new Set(refined.map(s => s.speaker));
       console.log(`[Speaker Refinement] Refined to ${uniqueSpeakers.size} speaker(s): ${[...uniqueSpeakers].join(', ')}`);
 
@@ -618,6 +649,8 @@ export async function refineSpeakersWithGPT(
     speaker: allLabels[i] || seg.speaker,
     text: allTexts[i] || seg.text,
   }));
+
+  refined = applyIdentificationsToGenericLabels(refined, cumulativeIdentifications);
 
   const uniqueSpeakers = new Set(refined.map(s => s.speaker));
   console.log(`[Speaker Refinement] Refined to ${uniqueSpeakers.size} speaker(s) across ${totalBatches} batches: ${[...uniqueSpeakers].join(', ')}`);
