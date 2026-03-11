@@ -111,6 +111,9 @@ export async function downloadFromR2(key: string): Promise<string> {
     throw new Error(`No body in R2 response for key: ${key}`);
   }
 
+  const totalBytes = response.ContentLength;
+  console.log(`[R2 Download] Starting: ${key} (${totalBytes ? (totalBytes / 1024 / 1024).toFixed(1) + ' MB' : 'unknown size'})`);
+
   const tempDir = path.join(tmpdir(), `r2_download_${randomUUID()}`);
   await mkdir(tempDir, { recursive: true });
 
@@ -118,10 +121,29 @@ export async function downloadFromR2(key: string): Promise<string> {
   const tempPath = path.join(tempDir, `file${ext}`);
 
   const { createWriteStream } = await import('fs');
+  const { Transform } = await import('stream');
   const { pipeline } = await import('stream/promises');
   const readStream = response.Body as Readable;
   const writeStream = createWriteStream(tempPath);
-  await pipeline(readStream, writeStream);
+
+  let downloaded = 0;
+  let lastLog = Date.now();
+  const progress = new Transform({
+    transform(chunk, _encoding, callback) {
+      downloaded += chunk.length;
+      const now = Date.now();
+      if (now - lastLog > 10000) {
+        const mb = (downloaded / 1024 / 1024).toFixed(1);
+        const pct = totalBytes ? ` (${((downloaded / totalBytes) * 100).toFixed(0)}%)` : '';
+        console.log(`[R2 Download] ${mb} MB downloaded${pct}`);
+        lastLog = now;
+      }
+      callback(null, chunk);
+    },
+  });
+
+  await pipeline(readStream, progress, writeStream);
+  console.log(`[R2 Download] Complete: ${(downloaded / 1024 / 1024).toFixed(1)} MB → ${tempPath}`);
 
   return tempPath;
 }
