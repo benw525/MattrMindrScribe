@@ -23,25 +23,54 @@ interface TranscriptSegment {
   endTime: number;
 }
 
-async function getAudioDuration(filePath: string): Promise<number> {
+function runFfprobe(args: string[]): Promise<{ stdout: string; stderr: string; code: number | null }> {
   return new Promise((resolve, reject) => {
-    const proc = spawn('ffprobe', [
-      '-v', 'error',
-      '-show_entries', 'format=duration',
-      '-of', 'default=noprint_wrappers=1:nokey=1',
-      filePath,
-    ]);
-    let output = '';
-    proc.stdout.on('data', (data) => { output += data.toString(); });
-    proc.stderr.on('data', () => {});
-    proc.on('close', (code) => {
-      if (code !== 0) return reject(new Error(`ffprobe exited with code ${code}`));
-      const duration = parseFloat(output.trim());
-      if (isNaN(duration)) return reject(new Error('Could not parse duration'));
-      resolve(duration);
-    });
+    const proc = spawn('ffprobe', args);
+    let stdout = '';
+    let stderr = '';
+    proc.stdout.on('data', (data) => { stdout += data.toString(); });
+    proc.stderr.on('data', (data) => { stderr += data.toString(); });
+    proc.on('close', (code) => resolve({ stdout, stderr, code }));
     proc.on('error', reject);
   });
+}
+
+async function getAudioDuration(filePath: string): Promise<number | null> {
+  const strategies = [
+    {
+      name: 'format metadata',
+      args: ['-v', 'error', '-show_entries', 'format=duration', '-of', 'default=noprint_wrappers=1:nokey=1', filePath],
+    },
+    {
+      name: 'stream metadata',
+      args: ['-v', 'error', '-select_streams', 'a:0', '-show_entries', 'stream=duration', '-of', 'default=noprint_wrappers=1:nokey=1', filePath],
+    },
+    {
+      name: 'full file scan',
+      args: ['-v', 'error', '-analyzeduration', '2147483647', '-probesize', '2147483647', '-show_entries', 'format=duration', '-of', 'default=noprint_wrappers=1:nokey=1', filePath],
+    },
+  ];
+
+  for (const strategy of strategies) {
+    try {
+      const result = await runFfprobe(strategy.args);
+      if (result.code !== 0) {
+        console.warn(`[Duration] Strategy "${strategy.name}" exited with code ${result.code}: ${result.stderr.trim()}`);
+        continue;
+      }
+      const duration = parseFloat(result.stdout.trim());
+      if (!isNaN(duration) && duration > 0) {
+        console.log(`[Duration] Resolved via "${strategy.name}": ${duration.toFixed(1)}s`);
+        return duration;
+      }
+      console.warn(`[Duration] Strategy "${strategy.name}" returned unparseable output: "${result.stdout.trim()}"`);
+    } catch (err: any) {
+      console.warn(`[Duration] Strategy "${strategy.name}" failed: ${err.message}`);
+    }
+  }
+
+  console.warn(`[Duration] All strategies failed for ${filePath} — continuing without duration`);
+  return null;
 }
 
 async function convertToWav(inputPath: string, outputPath: string): Promise<void> {
@@ -74,9 +103,10 @@ async function splitWavIntoChunks(wavPath: string, workDir: string): Promise<{ p
     return [{ path: wavPath, offsetSec: 0 }];
   }
 
+  const WAV_HEADER_SIZE = 44;
   const bytesPerSec = 16000 * 2;
   const chunkDurationSec = Math.floor(MAX_CHUNK_SIZE / bytesPerSec);
-  const totalDuration = await getAudioDuration(wavPath);
+  const totalDuration = (size - WAV_HEADER_SIZE) / bytesPerSec;
   const chunks: { path: string; offsetSec: number }[] = [];
 
   let start = 0;
@@ -450,8 +480,12 @@ export async function processTranscription(transcriptId: string): Promise<void> 
 
     console.log(`[Transcription] Starting for "${filename}" (${transcriptId})${expectedSpeakers ? ` — expecting ${expectedSpeakers} speakers` : ''}`);
 
-    const duration = await getAudioDuration(sourcePath);
-    console.log(`[Transcription] Duration: ${duration.toFixed(1)}s`);
+    let duration = await getAudioDuration(sourcePath);
+    if (duration !== null) {
+      console.log(`[Transcription] Duration: ${duration.toFixed(1)}s`);
+    } else {
+      console.warn(`[Transcription] Could not determine duration — will calculate from segments after transcription`);
+    }
 
     await checkCancelled();
 
@@ -607,10 +641,15 @@ export async function processTranscription(transcriptId: string): Promise<void> 
         );
       }
 
+      if (duration === null && allSegments.length > 0) {
+        duration = Math.max(...allSegments.map(s => s.endTime));
+        console.log(`[Transcription] Duration estimated from segments: ${duration.toFixed(1)}s`);
+      }
+
       await client.query(
         `UPDATE transcripts SET status = 'completed', duration = $1, error_message = NULL, pipeline_log = $2::jsonb, updated_at = NOW()
          WHERE id = $3`,
-        [duration, JSON.stringify(pipelineLog), transcriptId]
+        [duration ?? 0, JSON.stringify(pipelineLog), transcriptId]
       );
       await client.query('COMMIT');
     } catch (txErr) {
