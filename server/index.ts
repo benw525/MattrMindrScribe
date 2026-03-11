@@ -127,9 +127,14 @@ app.get('/api/health', (_req, res) => {
 if (isProduction) {
   const distPath = path.join(__dirname, '..', 'dist');
   const indexPath = path.join(distPath, 'index.html');
-  app.use(express.static(distPath));
+  app.use(express.static(distPath, {
+    maxAge: '1y',
+    immutable: true,
+    index: false,
+  }));
   app.get('/{*splat}', (_req, res) => {
     if (fs.existsSync(indexPath)) {
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
       res.sendFile(indexPath);
     } else {
       res.status(503).send('Application is starting up...');
