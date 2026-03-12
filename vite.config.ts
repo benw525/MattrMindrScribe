@@ -8,7 +8,7 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       injectRegister: false,
-      includeAssets: [],
+      includeAssets: ['offline.html'],
       manifest: {
         name: 'MattrMindrScribe — Legal Transcription',
         short_name: 'MattrMindrScribe',
@@ -39,9 +39,21 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2}'],
-        navigateFallback: 'offline.html',
-        navigateFallbackDenylist: [/^\/api\//, /^\/uploads\//],
+        navigateFallback: null,
         runtimeCaching: [
+          {
+            urlPattern: ({ request }) => request.mode === 'navigate',
+            handler: 'NetworkFirst',
+            options: {
+              cacheName: 'pages',
+              networkTimeoutSeconds: 5,
+              plugins: [{
+                handlerDidError: async () => {
+                  return caches.match('offline.html');
+                },
+              }],
+            },
+          },
           {
             urlPattern: /^https:\/\/.*\.(js|css|png|jpg|svg|ico|woff|woff2)$/,
             handler: 'StaleWhileRevalidate',
