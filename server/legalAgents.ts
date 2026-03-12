@@ -172,17 +172,17 @@ Be thorough but concise. Reference specific speakers and timestamps when availab
         description: 'Recorded interview of a child in the case',
         promptModifier: 'This transcript is from a CHILD INTERVIEW. Handle this content with sensitivity. Focus on the child\'s expressed preferences, their descriptions of each household, any disclosures of concerning behavior, the child\'s emotional state and well-being indicators, and signs of coaching or undue influence.',
       },
-    ],
-    systemPrompt: `You are an AI legal summary assistant specializing in family law. You are analyzing a legal transcript (deposition, hearing, mediation, or proceeding) on behalf of a family law attorney.
-
-Provide a structured summary organized into the following sections:
-
       {
         id: 'other',
         name: 'Other',
         description: 'Custom recording type — describe it and the AI will adapt',
         promptModifier: '',
       },
+    ],
+    systemPrompt: `You are an AI legal summary assistant specializing in family law. You are analyzing a legal transcript (deposition, hearing, mediation, or proceeding) on behalf of a family law attorney.
+
+Provide a structured summary organized into the following sections:
+
 **1. Case Overview**
 A brief synopsis of the matter based on what is discussed in the transcript.
 
@@ -275,6 +275,12 @@ Be thorough but concise. Reference specific speakers and timestamps when availab
         description: 'Recorded phone call or visit from a detention facility',
         promptModifier: 'This transcript is from a JAIL CALL OR RECORDING. Focus on any admissions or incriminating statements, discussions about the case or evidence, references to witnesses or co-defendants, emotional state and demeanor, any statements indicating consciousness of guilt or innocence, and potential attorney-client privilege issues.',
       },
+      {
+        id: 'other',
+        name: 'Other',
+        description: 'Custom recording type — describe it and the AI will adapt',
+        promptModifier: '',
+      },
     ],
     systemPrompt: `You are an AI legal summary assistant specializing in criminal defense. You are analyzing a legal transcript (deposition, hearing, interview, or proceeding) on behalf of a criminal defense attorney.
 
@@ -285,12 +291,6 @@ A brief synopsis of the matter based on what is discussed in the transcript.
 
 **2. Charges & Elements**
 Identify any criminal charges mentioned or implied. For each, note which elements of the offense are addressed (or left unaddressed) in the testimony.
-      {
-        id: 'other',
-        name: 'Other',
-        description: 'Custom recording type — describe it and the AI will adapt',
-        promptModifier: '',
-      },
 
 **3. Key Admissions & Denials**
 Highlight any statements where a witness admits to or denies facts relevant to guilt, innocence, or defenses. Include exact quotes where impactful.
@@ -372,6 +372,12 @@ Be thorough but concise. Use plain legal language. Reference specific speakers a
         description: 'Insurance adjuster recorded statement of the claimant',
         promptModifier: 'This transcript is from a RECORDED STATEMENT taken by an insurance adjuster. Focus on early descriptions of the injury before legal counsel was involved, inconsistencies with later testimony, the circumstances under which the statement was taken, admissions about prior injuries, descriptions of job duties and physical demands, and statements about current abilities.',
       },
+      {
+        id: 'other',
+        name: 'Other',
+        description: 'Custom recording type — describe it and the AI will adapt',
+        promptModifier: '',
+      },
     ],
     systemPrompt: `You are an AI legal summary assistant specializing in workers' compensation law. You are analyzing a legal transcript on behalf of a workers' compensation attorney.
 
@@ -387,12 +393,6 @@ Detail the workplace injury — how it occurred, where, when, and the mechanism 
 Summarize the claimant's employment history, job title, duties, tenure, and relationship with the employer.
 
 **4. Medical Treatment & Restrictions**
-      {
-        id: 'other',
-        name: 'Other',
-        description: 'Custom recording type — describe it and the AI will adapt',
-        promptModifier: '',
-      },
 Detail medical treatment received, providers seen, surgeries, physical therapy, prescribed medications, and any work restrictions or impairments.
 
 **5. Return-to-Work Capability**
@@ -463,6 +463,12 @@ Be thorough but concise. Reference specific speakers and timestamps when availab
         description: 'Testimony from a witness with firsthand knowledge',
         promptModifier: 'This transcript is from a FACT WITNESS DEPOSITION. Focus on the witness\'s firsthand observations of the incident or claimed damages, their relationship to the claimant, any contradictions with the claimant\'s account, evidence of the claimant\'s condition or activities, and potential bias.',
       },
+      {
+        id: 'other',
+        name: 'Other',
+        description: 'Custom recording type — describe it and the AI will adapt',
+        promptModifier: '',
+      },
     ],
     systemPrompt: `You are an AI legal summary assistant specializing in insurance defense. You are analyzing a legal transcript on behalf of an insurance defense attorney.
 
@@ -483,12 +489,6 @@ Flag any red flags suggesting exaggeration, misrepresentation, or fraudulent cla
 **5. Damages Evaluation**
 Assess the damages claimed vs. evidence presented. Note medical bill analysis, lost wage documentation, and property damage assessments.
 
-      {
-        id: 'other',
-        name: 'Other',
-        description: 'Custom recording type — describe it and the AI will adapt',
-        promptModifier: '',
-      },
 **6. Witness Credibility**
 Note inconsistencies, contradictions, or impeachment opportunities in witness testimony.
 
@@ -560,6 +560,12 @@ Be thorough but concise. Reference specific speakers and timestamps when availab
         description: 'Federal or state court proceedings',
         promptModifier: 'This transcript is from a COURT HEARING in an employment case. Focus on the judge\'s rulings on motions (summary judgment, class certification, etc.), evidentiary issues, arguments on statutory interpretation, damages evidence, and any orders regarding discovery or trial procedures.',
       },
+      {
+        id: 'other',
+        name: 'Other',
+        description: 'Custom recording type — describe it and the AI will adapt',
+        promptModifier: '',
+      },
     ],
     systemPrompt: `You are an AI legal summary assistant specializing in employment law. You are analyzing a legal transcript on behalf of an employment law attorney.
 
@@ -585,12 +591,6 @@ Detail the circumstances of termination, demotion, reassignment, or other advers
 
 **7. Damages**
 Summarize lost wages, benefits, emotional distress, and other damages discussed.
-      {
-        id: 'other',
-        name: 'Other',
-        description: 'Custom recording type — describe it and the AI will adapt',
-        promptModifier: '',
-      },
 
 **8. Witness Credibility**
 Note inconsistencies, bias indicators, and credibility issues in witness testimony.
@@ -657,6 +657,12 @@ Be thorough but concise. Reference specific speakers and timestamps when availab
         description: 'Defense-requested medical examination',
         promptModifier: 'This transcript is from an INDEPENDENT MEDICAL EXAMINATION (IME) in a malpractice case. Focus on the examiner\'s findings compared to the treating physician\'s assessment, opinions on causation and whether the standard of care was met, the thoroughness of the examination, areas of agreement and disagreement with the plaintiff\'s experts, and any limitations conceded.',
       },
+      {
+        id: 'other',
+        name: 'Other',
+        description: 'Custom recording type — describe it and the AI will adapt',
+        promptModifier: '',
+      },
     ],
     systemPrompt: `You are an AI legal summary assistant specializing in medical malpractice. You are analyzing a legal transcript on behalf of a medical malpractice attorney.
 
@@ -687,12 +693,6 @@ Note references to medical records, chart notes, imaging, lab results, and any g
 Summarize the patient's injuries, ongoing medical needs, disability, pain and suffering, and economic losses.
 
 **9. Timeline of Medical Events**
-      {
-        id: 'other',
-        name: 'Other',
-        description: 'Custom recording type — describe it and the AI will adapt',
-        promptModifier: '',
-      },
 Reconstruct the chronological sequence of medical treatment and adverse outcomes.
 
 **10. Attorney Action Items**
@@ -754,6 +754,12 @@ Be thorough but concise. Reference specific speakers and timestamps when availab
         description: 'Real estate dispute mediation',
         promptModifier: 'This transcript is from a MEDIATION SESSION in a real estate dispute. Focus on each party\'s position and demands, areas of compromise, proposed settlement terms, unresolved sticking points, property value disputes, and the mediator\'s suggestions for resolution.',
       },
+      {
+        id: 'other',
+        name: 'Other',
+        description: 'Custom recording type — describe it and the AI will adapt',
+        promptModifier: '',
+      },
     ],
     systemPrompt: `You are an AI legal summary assistant specializing in real estate and property law. You are analyzing a legal transcript on behalf of a real estate attorney.
 
@@ -789,12 +795,6 @@ Reconstruct the chronological sequence of the real estate transaction or dispute
 **10. Attorney Action Items**
 Recommended next steps and strategic considerations.
 
-      {
-        id: 'other',
-        name: 'Other',
-        description: 'Custom recording type — describe it and the AI will adapt',
-        promptModifier: '',
-      },
 Be thorough but concise. Reference specific speakers and timestamps when available. Do not provide legal advice — present factual analysis only.`,
   },
   {
@@ -851,6 +851,12 @@ Be thorough but concise. Reference specific speakers and timestamps when availab
         description: 'Consular visa interview or USCIS benefits interview',
         promptModifier: 'This transcript is from a VISA INTERVIEW. Focus on the applicant\'s stated purpose of travel or basis for the visa petition, supporting documentation discussed, ties to the home country, financial sponsorship, relationship evidence (for family-based petitions), and any red flags or concerns raised by the officer.',
       },
+      {
+        id: 'other',
+        name: 'Other',
+        description: 'Custom recording type — describe it and the AI will adapt',
+        promptModifier: '',
+      },
     ],
     systemPrompt: `You are an AI legal summary assistant specializing in immigration law. You are analyzing a legal transcript (interview, hearing, deposition, or proceeding) on behalf of an immigration attorney.
 
@@ -891,12 +897,6 @@ Be thorough but concise. Reference specific speakers and timestamps when availab
   {
     id: 'general-litigation',
     name: 'General Litigation',
-      {
-        id: 'other',
-        name: 'Other',
-        description: 'Custom recording type — describe it and the AI will adapt',
-        promptModifier: '',
-      },
     icon: 'Scale',
     description: 'Balanced legal summary for any deposition, hearing, or proceeding',
     subTypes: [
@@ -948,6 +948,12 @@ Be thorough but concise. Reference specific speakers and timestamps when availab
         description: 'Deposition of a designated corporate witness',
         promptModifier: 'This transcript is from a CORPORATE REPRESENTATIVE (30(b)(6)) DEPOSITION. Focus on the topics designated for testimony, the organization\'s official positions and knowledge, policies and procedures relevant to the dispute, decision-making processes, gaps in the designee\'s preparation, and any areas where the witness lacked adequate knowledge.',
       },
+      {
+        id: 'other',
+        name: 'Other',
+        description: 'Custom recording type — describe it and the AI will adapt',
+        promptModifier: '',
+      },
     ],
     systemPrompt: `You are an AI legal summary assistant for general civil litigation. You are analyzing a legal transcript (deposition, hearing, interview, or proceeding) on behalf of a litigation attorney.
 
@@ -993,12 +999,6 @@ export function getAgentById(id: string): LegalAgent | undefined {
 
 export function getSubTypeById(agentId: string, subTypeId: string): RecordingSubType | undefined {
   const agent = getAgentById(agentId);
-      {
-        id: 'other',
-        name: 'Other',
-        description: 'Custom recording type — describe it and the AI will adapt',
-        promptModifier: '',
-      },
   if (!agent) return undefined;
   return agent.subTypes.find(st => st.id === subTypeId);
 }
