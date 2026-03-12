@@ -55,6 +55,12 @@ function renderMarkdown(text: string) {
           {cleaned}
         </h3>
       );
+    } else if (line.match(/^\d+\.\s+[A-Z]/)) {
+      elements.push(
+        <h3 key={key++} className="text-sm font-bold text-slate-900 dark:text-white mt-4 mb-1.5">
+          {line}
+        </h3>
+      );
     } else if (line.startsWith('- ') || line.startsWith('• ')) {
       elements.push(
         <li key={key++} className="text-sm text-slate-700 dark:text-slate-300 ml-4 list-disc">
@@ -64,9 +70,16 @@ function renderMarkdown(text: string) {
     } else if (line.trim() === '') {
       elements.push(<div key={key++} className="h-2" />);
     } else {
+      const parts = line.split(/(\*\*[^*]+\*\*)/g);
+      const rendered = parts.map((part, i) => {
+        if (part.startsWith('**') && part.endsWith('**')) {
+          return <strong key={i} className="font-semibold text-slate-900 dark:text-white">{part.slice(2, -2)}</strong>;
+        }
+        return part;
+      });
       elements.push(
         <p key={key++} className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed">
-          {line}
+          {rendered}
         </p>
       );
     }
