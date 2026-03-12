@@ -779,7 +779,7 @@ router.get('/agents', (_req: AuthRequest, res: Response) => {
 router.post('/:id/summarize', async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
-    const { agentType, subType } = req.body;
+    const { agentType, subType, customDescription } = req.body;
 
     if (!agentType) {
       return res.status(400).json({ error: 'agentType is required' });
@@ -794,9 +794,14 @@ router.post('/:id/summarize', async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ error: 'subType is required' });
     }
 
-    const subTypeInfo = agent.subTypes.find(st => st.id === subType);
-    if (!subTypeInfo) {
+    const subTypeDef = agent.subTypes.find(st => st.id === subType);
+    if (!subTypeDef) {
       return res.status(400).json({ error: 'Invalid sub-type for this practice area' });
+    }
+
+    const subTypeInfo = { ...subTypeDef };
+    if (subType === 'other' && customDescription) {
+      subTypeInfo.promptModifier = `This transcript is from: ${customDescription}. Analyze it thoroughly using the framework for this practice area, adapting your analysis to fit this specific recording type.`;
     }
 
     const existing = await pool.query(

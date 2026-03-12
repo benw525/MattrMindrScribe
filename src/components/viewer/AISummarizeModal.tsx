@@ -18,7 +18,7 @@ interface AgentInfo {
 
 interface AISummarizeModalProps {
   agents: AgentInfo[];
-  onSelectAgent: (agentId: string, subTypeId: string) => void;
+  onSelectAgent: (agentId: string, subTypeId: string, customDescription?: string) => void;
   onClose: () => void;
   loadingAgentId: string | null;
 }
@@ -43,9 +43,16 @@ const ICON_COLORS: Record<string, string> = {
 
 export function AISummarizeModal({ agents, onSelectAgent, onClose, loadingAgentId }: AISummarizeModalProps) {
   const [selectedAgent, setSelectedAgent] = useState<AgentInfo | null>(null);
+  const [showOtherInput, setShowOtherInput] = useState(false);
+  const [otherDescription, setOtherDescription] = useState('');
 
   const handleBack = () => {
-    setSelectedAgent(null);
+    if (showOtherInput) {
+      setShowOtherInput(false);
+      setOtherDescription('');
+    } else {
+      setSelectedAgent(null);
+    }
   };
 
   return (
@@ -77,7 +84,9 @@ export function AISummarizeModal({ agents, onSelectAgent, onClose, loadingAgentI
                 {selectedAgent ? selectedAgent.name : 'AI Summarize'}
               </h2>
               <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">
-                {selectedAgent
+                {selectedAgent && showOtherInput
+                  ? 'Describe this recording so the AI can adapt'
+                  : selectedAgent
                   ? 'Select the type of recording'
                   : 'Select a practice area for a tailored summary'}
               </p>
@@ -128,6 +137,51 @@ export function AISummarizeModal({ agents, onSelectAgent, onClose, loadingAgentI
                   );
                 })}
               </motion.div>
+            ) : showOtherInput ? (
+              <motion.div
+                key="other-input"
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: 20 }}
+                transition={{ duration: 0.15 }}
+                className="space-y-4"
+              >
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                    Describe the recording type
+                  </label>
+                  <input
+                    type="text"
+                    value={otherDescription}
+                    onChange={(e) => setOtherDescription(e.target.value)}
+                    placeholder='e.g. "Client interview", "Settlement conference", "Witness statement"'
+                    className="w-full px-3 py-2.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                    autoFocus
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && otherDescription.trim() && selectedAgent) {
+                        onSelectAgent(selectedAgent.id, 'other', otherDescription.trim());
+                      }
+                    }}
+                  />
+                  <p className="text-xs text-slate-400 dark:text-slate-500 mt-1.5">
+                    This helps the AI tailor its analysis to your specific recording
+                  </p>
+                </div>
+                <button
+                  onClick={() => selectedAgent && onSelectAgent(selectedAgent.id, 'other', otherDescription.trim())}
+                  disabled={!otherDescription.trim() || !!loadingAgentId}
+                  className="w-full py-2.5 rounded-lg bg-indigo-600 text-white text-sm font-medium hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
+                >
+                  {loadingAgentId ? (
+                    <>
+                      <Loader2Icon className="h-4 w-4 animate-spin" />
+                      Generating Summary...
+                    </>
+                  ) : (
+                    'Generate Summary'
+                  )}
+                </button>
+              </motion.div>
             ) : (
               <motion.div
                 key="subtypes"
@@ -146,7 +200,13 @@ export function AISummarizeModal({ agents, onSelectAgent, onClose, loadingAgentI
                   return (
                     <button
                       key={subType.id}
-                      onClick={() => onSelectAgent(selectedAgent.id, subType.id)}
+                      onClick={() => {
+                        if (subType.id === 'other') {
+                          setShowOtherInput(true);
+                        } else {
+                          onSelectAgent(selectedAgent.id, subType.id);
+                        }
+                      }}
                       disabled={isDisabled}
                       className={`flex items-start gap-3 p-3.5 rounded-lg border text-left transition-all ${
                         isLoading

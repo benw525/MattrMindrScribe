@@ -75,6 +75,12 @@ export const LEGAL_AGENTS: LegalAgent[] = [
         description: 'Courtroom proceedings such as motions or trial testimony',
         promptModifier: 'This transcript is from a COURT HEARING. Focus on the judge\'s rulings and reasoning, arguments made by each side, evidentiary objections and their outcomes, witness examination and cross-examination highlights, and any orders or deadlines set by the court.',
       },
+      {
+        id: 'other',
+        name: 'Other',
+        description: 'Custom recording type — describe it and the AI will adapt',
+        promptModifier: '',
+      },
     ],
     systemPrompt: `You are an AI legal summary assistant specializing in personal injury law. You are analyzing a legal transcript (deposition, hearing, interview, or proceeding) on behalf of a personal injury attorney.
 
@@ -171,6 +177,12 @@ Be thorough but concise. Reference specific speakers and timestamps when availab
 
 Provide a structured summary organized into the following sections:
 
+      {
+        id: 'other',
+        name: 'Other',
+        description: 'Custom recording type — describe it and the AI will adapt',
+        promptModifier: '',
+      },
 **1. Case Overview**
 A brief synopsis of the matter based on what is discussed in the transcript.
 
@@ -273,6 +285,12 @@ A brief synopsis of the matter based on what is discussed in the transcript.
 
 **2. Charges & Elements**
 Identify any criminal charges mentioned or implied. For each, note which elements of the offense are addressed (or left unaddressed) in the testimony.
+      {
+        id: 'other',
+        name: 'Other',
+        description: 'Custom recording type — describe it and the AI will adapt',
+        promptModifier: '',
+      },
 
 **3. Key Admissions & Denials**
 Highlight any statements where a witness admits to or denies facts relevant to guilt, innocence, or defenses. Include exact quotes where impactful.
@@ -369,6 +387,12 @@ Detail the workplace injury — how it occurred, where, when, and the mechanism 
 Summarize the claimant's employment history, job title, duties, tenure, and relationship with the employer.
 
 **4. Medical Treatment & Restrictions**
+      {
+        id: 'other',
+        name: 'Other',
+        description: 'Custom recording type — describe it and the AI will adapt',
+        promptModifier: '',
+      },
 Detail medical treatment received, providers seen, surgeries, physical therapy, prescribed medications, and any work restrictions or impairments.
 
 **5. Return-to-Work Capability**
@@ -459,6 +483,12 @@ Flag any red flags suggesting exaggeration, misrepresentation, or fraudulent cla
 **5. Damages Evaluation**
 Assess the damages claimed vs. evidence presented. Note medical bill analysis, lost wage documentation, and property damage assessments.
 
+      {
+        id: 'other',
+        name: 'Other',
+        description: 'Custom recording type — describe it and the AI will adapt',
+        promptModifier: '',
+      },
 **6. Witness Credibility**
 Note inconsistencies, contradictions, or impeachment opportunities in witness testimony.
 
@@ -555,6 +585,12 @@ Detail the circumstances of termination, demotion, reassignment, or other advers
 
 **7. Damages**
 Summarize lost wages, benefits, emotional distress, and other damages discussed.
+      {
+        id: 'other',
+        name: 'Other',
+        description: 'Custom recording type — describe it and the AI will adapt',
+        promptModifier: '',
+      },
 
 **8. Witness Credibility**
 Note inconsistencies, bias indicators, and credibility issues in witness testimony.
@@ -651,6 +687,12 @@ Note references to medical records, chart notes, imaging, lab results, and any g
 Summarize the patient's injuries, ongoing medical needs, disability, pain and suffering, and economic losses.
 
 **9. Timeline of Medical Events**
+      {
+        id: 'other',
+        name: 'Other',
+        description: 'Custom recording type — describe it and the AI will adapt',
+        promptModifier: '',
+      },
 Reconstruct the chronological sequence of medical treatment and adverse outcomes.
 
 **10. Attorney Action Items**
@@ -747,6 +789,12 @@ Reconstruct the chronological sequence of the real estate transaction or dispute
 **10. Attorney Action Items**
 Recommended next steps and strategic considerations.
 
+      {
+        id: 'other',
+        name: 'Other',
+        description: 'Custom recording type — describe it and the AI will adapt',
+        promptModifier: '',
+      },
 Be thorough but concise. Reference specific speakers and timestamps when available. Do not provide legal advice — present factual analysis only.`,
   },
   {
@@ -843,6 +891,12 @@ Be thorough but concise. Reference specific speakers and timestamps when availab
   {
     id: 'general-litigation',
     name: 'General Litigation',
+      {
+        id: 'other',
+        name: 'Other',
+        description: 'Custom recording type — describe it and the AI will adapt',
+        promptModifier: '',
+      },
     icon: 'Scale',
     description: 'Balanced legal summary for any deposition, hearing, or proceeding',
     subTypes: [
@@ -939,6 +993,12 @@ export function getAgentById(id: string): LegalAgent | undefined {
 
 export function getSubTypeById(agentId: string, subTypeId: string): RecordingSubType | undefined {
   const agent = getAgentById(agentId);
+      {
+        id: 'other',
+        name: 'Other',
+        description: 'Custom recording type — describe it and the AI will adapt',
+        promptModifier: '',
+      },
   if (!agent) return undefined;
   return agent.subTypes.find(st => st.id === subTypeId);
 }

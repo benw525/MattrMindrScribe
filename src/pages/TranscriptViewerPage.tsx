@@ -445,7 +445,7 @@ export function TranscriptViewerPage() {
   const getSpeakerBorderColor = (speaker: string) => {
     return getSpeakerColorObj(speaker, speakerColors).border;
   };
-  const handleSelectAgent = async (agentId: string, subTypeId: string) => {
+  const handleSelectAgent = async (agentId: string, subTypeId: string, customDescription?: string) => {
     if (!transcript) return;
     setLoadingAgentId(agentId);
     setStreamingContent('');
@@ -456,7 +456,7 @@ export function TranscriptViewerPage() {
     setShowHistory(false);
 
     try {
-      const response = await api.transcripts.summarize(transcript.id, agentId, subTypeId);
+      const response = await api.transcripts.summarize(transcript.id, agentId, subTypeId, customDescription);
       if (!response.ok) {
         const err = await response.json();
         throw new Error(err.error || 'Summary failed');
