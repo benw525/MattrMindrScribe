@@ -57,9 +57,9 @@ externalPort = 5000
 
 [deployment]
 deploymentTarget = "vm"
-build = ["npm run build"]
+build = ["bash", "-c", "npm run build"]
 publicDir = "dist"
-run = ["npm run start"]
+run = ["bash", "-c", "npm run start"]
 
 [userenv]
 
