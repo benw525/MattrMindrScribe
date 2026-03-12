@@ -377,14 +377,34 @@ router.patch('/:id', async (req: AuthRequest, res: Response) => {
     }
 
     if (segments !== undefined) {
-      await pool.query('DELETE FROM transcript_segments WHERE transcript_id = $1', [id]);
-      for (let i = 0; i < segments.length; i++) {
-        const seg = segments[i];
-        await pool.query(
-          `INSERT INTO transcript_segments (transcript_id, start_time, end_time, speaker, text, segment_order)
-           VALUES ($1, $2, $3, $4, $5, $6)`,
-          [id, seg.startTime, seg.endTime, seg.speaker, seg.text, i]
-        );
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        await client.query('SELECT id FROM transcripts WHERE id = $1 FOR UPDATE', [id]);
+        await client.query('DELETE FROM transcript_segments WHERE transcript_id = $1', [id]);
+        const BATCH_SIZE = 200;
+        for (let b = 0; b < segments.length; b += BATCH_SIZE) {
+          const batch = segments.slice(b, b + BATCH_SIZE);
+          const vals: any[] = [];
+          const placeholders: string[] = [];
+          for (let i = 0; i < batch.length; i++) {
+            const seg = batch[i];
+            const offset = i * 6;
+            placeholders.push(`($${offset+1}, $${offset+2}, $${offset+3}, $${offset+4}, $${offset+5}, $${offset+6})`);
+            vals.push(id, seg.startTime, seg.endTime, seg.speaker, seg.text, b + i);
+          }
+          await client.query(
+            `INSERT INTO transcript_segments (transcript_id, start_time, end_time, speaker, text, segment_order)
+             VALUES ${placeholders.join(', ')}`,
+            vals
+          );
+        }
+        await client.query('COMMIT');
+      } catch (txErr) {
+        await client.query('ROLLBACK');
+        throw txErr;
+      } finally {
+        client.release();
       }
     }
 
