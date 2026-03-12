@@ -73,55 +73,48 @@ async function getAudioDuration(filePath: string): Promise<number | null> {
   return null;
 }
 
-async function convertToWav(inputPath: string, outputPath: string): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const proc = spawn('ffmpeg', [
-      '-y',
-      '-thread_queue_size', '512',
-      '-i', inputPath,
-      '-vn', '-ar', '16000', '-ac', '1',
-      '-threads', '0',
-      '-filter_threads', '0',
-      '-filter_complex_threads', '0',
-      '-max_muxing_queue_size', '9999',
-      '-acodec', 'pcm_s16le', '-f', 'wav',
-      outputPath,
-    ]);
-    proc.stderr.on('data', () => {});
-    proc.on('close', (code) => {
-      if (code !== 0) return reject(new Error(`ffmpeg exited with code ${code}`));
-      resolve();
-    });
-    proc.on('error', reject);
-  });
-}
+async function splitAudioIntoChunks(
+  sourcePath: string,
+  workDir: string,
+  totalDuration: number | null,
+): Promise<{ path: string; offsetSec: number }[]> {
+  const fs = await import('fs');
+  const fileSize = fs.statSync(sourcePath).size;
 
-async function splitWavIntoChunks(wavPath: string, workDir: string): Promise<{ path: string; offsetSec: number }[]> {
-  const { size } = await import('fs').then(fs => fs.statSync(wavPath));
-
-  if (size <= MAX_CHUNK_SIZE) {
-    return [{ path: wavPath, offsetSec: 0 }];
+  if (fileSize <= MAX_CHUNK_SIZE) {
+    return [{ path: sourcePath, offsetSec: 0 }];
   }
 
-  const WAV_HEADER_SIZE = 44;
-  const bytesPerSec = 16000 * 2;
-  const chunkDurationSec = Math.floor(MAX_CHUNK_SIZE / bytesPerSec);
-  const totalDuration = (size - WAV_HEADER_SIZE) / bytesPerSec;
+  if (!totalDuration || totalDuration <= 0) {
+    totalDuration = 3600;
+    console.warn(`[Transcription] Unknown duration, assuming ${totalDuration}s for chunking`);
+  }
+
+  const MP3_BITRATE = 64000;
+  const OUTPUT_BYTES_PER_SEC = MP3_BITRATE / 8;
+  const TARGET_CHUNK_BYTES = 20 * 1024 * 1024;
+  const chunkDurationSec = Math.floor(TARGET_CHUNK_BYTES / OUTPUT_BYTES_PER_SEC);
   const chunks: { path: string; offsetSec: number }[] = [];
+
+  console.log(`[Transcription] Splitting ${(fileSize / 1024 / 1024).toFixed(1)}MB source into ~${Math.ceil(totalDuration / chunkDurationSec)} MP3 chunks of ~${chunkDurationSec}s each (no WAV conversion)`);
 
   let start = 0;
   let chunkIndex = 0;
 
   while (start < totalDuration) {
     const overlapStart = Math.max(0, start - 1);
-    const chunkPath = path.join(workDir, `chunk_${chunkIndex}.wav`);
+    const duration = chunkDurationSec + (start > 0 ? 1 : 0);
+    const chunkPath = path.join(workDir, `chunk_${chunkIndex}.mp3`);
 
     await new Promise<void>((resolve, reject) => {
       const proc = spawn('ffmpeg', [
-        '-y', '-i', wavPath,
+        '-y',
         '-ss', overlapStart.toString(),
-        '-t', (chunkDurationSec + (start > 0 ? 1 : 0)).toString(),
-        '-ar', '16000', '-ac', '1', '-threads', '0', '-acodec', 'pcm_s16le', '-f', 'wav',
+        '-i', sourcePath,
+        '-t', duration.toString(),
+        '-vn', '-ar', '16000', '-ac', '1',
+        '-b:a', '64k',
+        '-f', 'mp3',
         chunkPath,
       ]);
       proc.stderr.on('data', () => {});
@@ -147,7 +140,9 @@ async function transcribeChunk(filePath: string, offsetSec: number = 0): Promise
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     try {
       const buffer = await readFile(filePath);
-      const file = await toFile(buffer, 'audio.wav');
+      const ext = path.extname(filePath).toLowerCase();
+      const mimeFile = ext === '.mp3' ? 'audio.mp3' : ext === '.m4a' ? 'audio.m4a' : ext === '.mp4' ? 'audio.mp4' : ext === '.webm' ? 'audio.webm' : ext === '.ogg' ? 'audio.ogg' : 'audio.wav';
+      const file = await toFile(buffer, mimeFile);
 
       const response = await whisperClient.audio.transcriptions.create({
         file,
@@ -531,11 +526,7 @@ export async function processTranscription(transcriptId: string): Promise<void> 
       })();
 
       const whisperPromise = (async () => {
-        const wavPath = path.join(workDir, 'converted.wav');
-        console.log(`[Transcription] Converting to WAV...`);
-        await convertToWav(sourcePath, wavPath);
-
-        const chunks = await splitWavIntoChunks(wavPath, workDir);
+        const chunks = await splitAudioIntoChunks(sourcePath, workDir, duration);
         console.log(`[Transcription] Processing ${chunks.length} chunk(s)...`);
 
         await checkCancelled();
