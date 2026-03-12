@@ -8,7 +8,7 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       injectRegister: false,
-      includeAssets: ['apple-touch-icon.png', 'icon.svg', 'offline.html'],
+      includeAssets: [],
       manifest: {
         name: 'MattrMindrScribe — Legal Transcription',
         short_name: 'MattrMindrScribe',
