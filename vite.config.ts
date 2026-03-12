@@ -7,6 +7,7 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
+      injectRegister: false,
       includeAssets: ['apple-touch-icon.png', 'icon.svg', 'offline.html'],
       manifest: {
         name: 'MattrMindrScribe — Legal Transcription',
@@ -38,7 +39,7 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2}'],
-        navigateFallback: 'index.html',
+        navigateFallback: 'offline.html',
         navigateFallbackDenylist: [/^\/api\//, /^\/uploads\//],
         runtimeCaching: [
           {
