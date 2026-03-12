@@ -445,13 +445,13 @@ export async function processTranscription(transcriptId: string): Promise<void> 
     );
 
     const { rows } = await pool.query(
-      'SELECT file_url, type, filename, expected_speakers, recording_type FROM transcripts WHERE id = $1',
+      'SELECT file_url, type, filename, expected_speakers, recording_type, pipeline_log FROM transcripts WHERE id = $1',
       [transcriptId]
     );
 
     if (rows.length === 0) throw new Error('Transcript not found');
 
-    const { file_url, filename, expected_speakers, recording_type } = rows[0];
+    const { file_url, filename, expected_speakers, recording_type, pipeline_log: existingLog } = rows[0];
     let expectedSpeakers = expected_speakers ? parseInt(expected_speakers) : null;
     const recordingType: string | null = recording_type || null;
 
@@ -459,137 +459,194 @@ export async function processTranscription(transcriptId: string): Promise<void> 
       expectedSpeakers = 5;
       console.log(`[Transcription] Deposition recording type detected — auto-setting expected speakers to 5`);
     }
-    let sourcePath: string;
 
-    await checkCancelled();
+    const canResume = existingLog?.whisper?.status === 'success';
+    const { rows: existingSegments } = await pool.query(
+      'SELECT start_time AS "startTime", end_time AS "endTime", speaker, text FROM transcript_segments WHERE transcript_id = $1 ORDER BY segment_order',
+      [transcriptId]
+    );
+    const hasCheckpoint = canResume && existingSegments.length > 0;
 
-    if (isR2Url(file_url)) {
-      const r2Key = getR2KeyFromUrl(file_url);
-      console.log(`[Transcription] Downloading from R2: ${r2Key}`);
-      sourcePath = await downloadFromR2(r2Key);
-      r2TempPath = sourcePath;
-    } else {
-      sourcePath = path.join(process.cwd(), file_url.startsWith('/') ? file_url.slice(1) : file_url);
-    }
-
-    if (!existsSync(sourcePath)) {
-      throw new Error(`Source file not found: ${sourcePath}`);
-    }
-
-    await mkdir(workDir, { recursive: true });
-
-    console.log(`[Transcription] Starting for "${filename}" (${transcriptId})${expectedSpeakers ? ` — expecting ${expectedSpeakers} speakers` : ''}`);
-
-    let duration = await getAudioDuration(sourcePath);
-    if (duration !== null) {
-      console.log(`[Transcription] Duration: ${duration.toFixed(1)}s`);
-    } else {
-      console.warn(`[Transcription] Could not determine duration — will calculate from segments after transcription`);
-    }
-
-    await checkCancelled();
-
+    let allSegments: TranscriptSegment[];
+    let duration: number | null = null;
     let diarizationError: string | null = null;
     let refinementError: string | null = null;
 
-    console.log(`[Transcription] Starting AssemblyAI diarization with original file + WAV conversion in parallel...`);
+    if (hasCheckpoint) {
+      console.log(`[Transcription] Resuming for "${filename}" (${transcriptId}) — ${existingSegments.length} segments from previous run, skipping to refinement`);
+      allSegments = existingSegments as TranscriptSegment[];
+      pipelineLog.whisper = existingLog.whisper;
+      pipelineLog.diarization = existingLog.diarization;
+      pipelineLog.resumed = true;
 
-    const diarizationPromise = (async () => {
-      try {
-        if (!process.env.ASSEMBLYAI_API_KEY) {
-          console.log('[Transcription] AssemblyAI not configured, skipping diarization');
-          pipelineLog.diarization = { status: 'skipped', reason: 'API key not configured' };
-          return null;
-        }
-        return await diarizeWithAssemblyAI(sourcePath, expectedSpeakers);
-      } catch (err: any) {
-        console.error(`[Transcription] AssemblyAI diarization failed (non-fatal):`, err.message);
-        diarizationError = err.message;
-        return null;
+      if (existingLog.diarization?.status === 'error') {
+        diarizationError = existingLog.diarization.error;
       }
-    })();
-
-    const whisperPromise = (async () => {
-      const wavPath = path.join(workDir, 'converted.wav');
-      console.log(`[Transcription] Converting to WAV...`);
-      await convertToWav(sourcePath, wavPath);
-
-      const chunks = await splitWavIntoChunks(wavPath, workDir);
-      console.log(`[Transcription] Processing ${chunks.length} chunk(s)...`);
+    } else {
+      let sourcePath: string;
 
       await checkCancelled();
 
-      const WHISPER_CONCURRENCY = 3;
-      const chunkResults: { index: number; segments: TranscriptSegment[] }[] = [];
-      
-      for (let batchStart = 0; batchStart < chunks.length; batchStart += WHISPER_CONCURRENCY) {
-        const batch = chunks.slice(batchStart, batchStart + WHISPER_CONCURRENCY);
-        
-        const batchPromises = batch.map(async (chunk, batchIdx) => {
-          const globalIdx = batchStart + batchIdx;
-          await checkCancelled();
-          console.log(`[Transcription] Transcribing chunk ${globalIdx + 1}/${chunks.length}...`);
-          try {
-            const segments = await transcribeChunk(chunk.path, chunk.offsetSec);
-            return { index: globalIdx, segments };
-          } catch (err: any) {
-            console.error(`[Transcription] Chunk ${globalIdx + 1} failed:`, err.message);
-            throw new Error(`Transcription failed on chunk ${globalIdx + 1}: ${err.message}`);
+      if (isR2Url(file_url)) {
+        const r2Key = getR2KeyFromUrl(file_url);
+        console.log(`[Transcription] Downloading from R2: ${r2Key}`);
+        sourcePath = await downloadFromR2(r2Key);
+        r2TempPath = sourcePath;
+      } else {
+        sourcePath = path.join(process.cwd(), file_url.startsWith('/') ? file_url.slice(1) : file_url);
+      }
+
+      if (!existsSync(sourcePath)) {
+        throw new Error(`Source file not found: ${sourcePath}`);
+      }
+
+      await mkdir(workDir, { recursive: true });
+
+      console.log(`[Transcription] Starting for "${filename}" (${transcriptId})${expectedSpeakers ? ` — expecting ${expectedSpeakers} speakers` : ''}`);
+
+      duration = await getAudioDuration(sourcePath);
+      if (duration !== null) {
+        console.log(`[Transcription] Duration: ${duration.toFixed(1)}s`);
+      } else {
+        console.warn(`[Transcription] Could not determine duration — will calculate from segments after transcription`);
+      }
+
+      await checkCancelled();
+
+      console.log(`[Transcription] Starting AssemblyAI diarization with original file + WAV conversion in parallel...`);
+
+      const diarizationPromise = (async () => {
+        try {
+          if (!process.env.ASSEMBLYAI_API_KEY) {
+            console.log('[Transcription] AssemblyAI not configured, skipping diarization');
+            pipelineLog.diarization = { status: 'skipped', reason: 'API key not configured' };
+            return null;
           }
-        });
+          return await diarizeWithAssemblyAI(sourcePath, expectedSpeakers);
+        } catch (err: any) {
+          console.error(`[Transcription] AssemblyAI diarization failed (non-fatal):`, err.message);
+          diarizationError = err.message;
+          return null;
+        }
+      })();
 
-        const batchResults = await Promise.all(batchPromises);
-        chunkResults.push(...batchResults);
+      const whisperPromise = (async () => {
+        const wavPath = path.join(workDir, 'converted.wav');
+        console.log(`[Transcription] Converting to WAV...`);
+        await convertToWav(sourcePath, wavPath);
+
+        const chunks = await splitWavIntoChunks(wavPath, workDir);
+        console.log(`[Transcription] Processing ${chunks.length} chunk(s)...`);
+
+        await checkCancelled();
+
+        const WHISPER_CONCURRENCY = 3;
+        const chunkResults: { index: number; segments: TranscriptSegment[] }[] = [];
+
+        for (let batchStart = 0; batchStart < chunks.length; batchStart += WHISPER_CONCURRENCY) {
+          const batch = chunks.slice(batchStart, batchStart + WHISPER_CONCURRENCY);
+
+          const batchPromises = batch.map(async (chunk, batchIdx) => {
+            const globalIdx = batchStart + batchIdx;
+            await checkCancelled();
+            console.log(`[Transcription] Transcribing chunk ${globalIdx + 1}/${chunks.length}...`);
+            try {
+              const segments = await transcribeChunk(chunk.path, chunk.offsetSec);
+              return { index: globalIdx, segments };
+            } catch (err: any) {
+              console.error(`[Transcription] Chunk ${globalIdx + 1} failed:`, err.message);
+              throw new Error(`Transcription failed on chunk ${globalIdx + 1}: ${err.message}`);
+            }
+          });
+
+          const batchResults = await Promise.all(batchPromises);
+          chunkResults.push(...batchResults);
+        }
+
+        chunkResults.sort((a, b) => a.index - b.index);
+        const allSegs = chunkResults.flatMap(r => r.segments);
+        return { segments: removeHallucinatedSegments(deduplicateSegments(allSegs)), chunks: chunks.length };
+      })();
+
+      let whisperSegments: TranscriptSegment[];
+      let diarizationLabels: any;
+
+      try {
+        const [whisperResult, diarizationResult] = await Promise.all([whisperPromise, diarizationPromise]);
+        whisperSegments = whisperResult.segments;
+        diarizationLabels = diarizationResult;
+        pipelineLog.whisper = {
+          status: 'success',
+          segments: whisperSegments.length,
+          chunks: whisperResult.chunks,
+        };
+      } catch (err: any) {
+        pipelineLog.whisper = { status: 'error', error: err.message };
+        await savePipelineLog();
+        throw err;
       }
 
-      chunkResults.sort((a, b) => a.index - b.index);
-      const allSegments = chunkResults.flatMap(r => r.segments);
-      return { segments: removeHallucinatedSegments(deduplicateSegments(allSegments)), chunks: chunks.length };
-    })();
+      if (diarizationError) {
+        pipelineLog.diarization = { status: 'error', error: diarizationError };
+      }
 
-    let whisperSegments: TranscriptSegment[];
-    let diarizationLabels: any;
-
-    try {
-      const [whisperResult, diarizationResult] = await Promise.all([whisperPromise, diarizationPromise]);
-      whisperSegments = whisperResult.segments;
-      diarizationLabels = diarizationResult;
-      pipelineLog.whisper = {
-        status: 'success',
-        segments: whisperSegments.length,
-        chunks: whisperResult.chunks,
-      };
-    } catch (err: any) {
-      pipelineLog.whisper = { status: 'error', error: err.message };
       await savePipelineLog();
-      throw err;
-    }
 
-    if (diarizationError) {
-      pipelineLog.diarization = { status: 'error', error: diarizationError };
-    }
-
-    await savePipelineLog();
-
-    let allSegments: TranscriptSegment[];
-
-    if (diarizationLabels && diarizationLabels.length > 0) {
-      console.log(`[Transcription] Mapping AssemblyAI speaker labels onto ${whisperSegments.length} Whisper segments...`);
-      allSegments = mapDiarizationToSegments(whisperSegments, diarizationLabels);
-      const uniqueSpeakers = new Set(allSegments.map(s => s.speaker));
-      pipelineLog.diarization = {
-        status: 'success',
-        utterances: diarizationLabels.length,
-        speakersDetected: uniqueSpeakers.size,
-      };
-    } else if (!diarizationError) {
-      if (pipelineLog.diarization.status !== 'skipped') {
-        pipelineLog.diarization = { status: 'skipped', reason: 'No utterances returned' };
+      if (diarizationLabels && diarizationLabels.length > 0) {
+        console.log(`[Transcription] Mapping AssemblyAI speaker labels onto ${whisperSegments.length} Whisper segments...`);
+        allSegments = mapDiarizationToSegments(whisperSegments, diarizationLabels);
+        const uniqueSpeakers = new Set(allSegments.map(s => s.speaker));
+        pipelineLog.diarization = {
+          status: 'success',
+          utterances: diarizationLabels.length,
+          speakersDetected: uniqueSpeakers.size,
+        };
+      } else if (!diarizationError) {
+        if (pipelineLog.diarization.status !== 'skipped') {
+          pipelineLog.diarization = { status: 'skipped', reason: 'No utterances returned' };
+        }
+        console.log(`[Transcription] No diarization data, falling back to heuristic speaker assignment`);
+        allSegments = assignSpeakers(whisperSegments);
+      } else {
+        allSegments = assignSpeakers(whisperSegments);
       }
-      console.log(`[Transcription] No diarization data, falling back to heuristic speaker assignment`);
-      allSegments = assignSpeakers(whisperSegments);
-    } else {
-      allSegments = assignSpeakers(whisperSegments);
+
+      await checkCancelled();
+
+      console.log(`[Transcription] Saving checkpoint (${allSegments.length} segments before refinement)...`);
+      const checkpointClient = await pool.connect();
+      try {
+        await checkpointClient.query('BEGIN');
+        await checkpointClient.query('DELETE FROM transcript_segments WHERE transcript_id = $1', [transcriptId]);
+        const BATCH_SIZE = 200;
+        for (let b = 0; b < allSegments.length; b += BATCH_SIZE) {
+          const batch = allSegments.slice(b, b + BATCH_SIZE);
+          const values: any[] = [];
+          const placeholders: string[] = [];
+          for (let i = 0; i < batch.length; i++) {
+            const seg = batch[i];
+            const offset = i * 6;
+            placeholders.push(`($${offset+1}, $${offset+2}, $${offset+3}, $${offset+4}, $${offset+5}, $${offset+6})`);
+            values.push(transcriptId, seg.startTime, seg.endTime, seg.speaker, seg.text, b + i);
+          }
+          await checkpointClient.query(
+            `INSERT INTO transcript_segments (transcript_id, start_time, end_time, speaker, text, segment_order)
+             VALUES ${placeholders.join(', ')}`,
+            values
+          );
+        }
+        await checkpointClient.query(
+          `UPDATE transcripts SET pipeline_log = $1::jsonb, updated_at = NOW() WHERE id = $2`,
+          [JSON.stringify(pipelineLog), transcriptId]
+        );
+        await checkpointClient.query('COMMIT');
+        console.log(`[Transcription] Checkpoint saved successfully`);
+      } catch (cpErr) {
+        await checkpointClient.query('ROLLBACK');
+        console.error(`[Transcription] Checkpoint save failed:`, cpErr);
+      } finally {
+        checkpointClient.release();
+      }
     }
 
     await checkCancelled();

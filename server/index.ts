@@ -241,15 +241,24 @@ setTimeout(async () => {
   try {
     const thirtyMinAgo = new Date(Date.now() - 30 * 60 * 1000).toISOString();
     const { rows: stuck } = await pool.query(
-      `UPDATE transcripts SET status = 'error', error_message = 'Processing was interrupted by a server restart. Please re-transcribe.', updated_at = NOW()
-       WHERE status = 'processing' AND updated_at < $1
-       RETURNING id, filename`,
+      `SELECT t.id, t.filename, t.pipeline_log,
+        (SELECT COUNT(*) FROM transcript_segments s WHERE s.transcript_id = t.id) as seg_count
+       FROM transcripts t
+       WHERE t.status = 'processing' AND t.updated_at < $1`,
       [thirtyMinAgo]
     );
+    for (const t of stuck) {
+      const hasCheckpoint = t.pipeline_log?.whisper?.status === 'success' && parseInt(t.seg_count) > 0;
+      const errorMsg = hasCheckpoint
+        ? 'Processing was interrupted by a server restart. Click retry — progress has been saved and it will resume quickly.'
+        : 'Processing was interrupted by a server restart. Please re-transcribe.';
+      await pool.query(
+        `UPDATE transcripts SET status = 'error', error_message = $1, updated_at = NOW() WHERE id = $2`,
+        [errorMsg, t.id]
+      );
+      console.log(`[Startup Recovery] Reset stuck transcript: "${t.filename}" (${t.id})${hasCheckpoint ? ' [checkpoint preserved]' : ''}`);
+    }
     if (stuck.length > 0) {
-      for (const t of stuck) {
-        console.log(`[Startup Recovery] Reset stuck transcript: "${t.filename}" (${t.id})`);
-      }
       console.log(`[Startup Recovery] Reset ${stuck.length} stuck transcript(s)`);
     }
   } catch (err: any) {
