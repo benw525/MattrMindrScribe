@@ -1067,4 +1067,57 @@ router.get('/:id/export/:format', async (req: AuthRequest, res: Response) => {
   }
 });
 
+router.post('/admin/restart-processing', async (req, res: Response) => {
+  try {
+    const adminKey = process.env.ADMIN_API_KEY;
+    const providedKey = req.headers['x-admin-key'];
+    if (!adminKey || providedKey !== adminKey) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+
+    const { rows: stuck } = await pool.query(
+      `SELECT t.id, t.filename, t.pipeline_log,
+        (SELECT COUNT(*) FROM transcript_segments s WHERE s.transcript_id = t.id) as seg_count
+       FROM transcripts t
+       WHERE t.status IN ('processing', 'resuming')`
+    );
+
+    if (stuck.length === 0) {
+      res.json({ restarted: 0, transcripts: [] });
+      return;
+    }
+
+    const results: Array<{ id: number; filename: string; fromCheckpoint: boolean }> = [];
+
+    for (let i = 0; i < stuck.length; i++) {
+      const t = stuck[i];
+      const { rowCount } = await pool.query(
+        `UPDATE transcripts SET status = 'resuming', updated_at = NOW()
+         WHERE id = $1 AND status IN ('processing', 'resuming')`,
+        [t.id]
+      );
+      if (rowCount === 0) continue;
+
+      const hasCheckpoint = t.pipeline_log?.whisper?.status === 'success' && parseInt(t.seg_count) > 0;
+      results.push({ id: t.id, filename: t.filename, fromCheckpoint: hasCheckpoint });
+
+      console.log(`[Manual Restart] ${hasCheckpoint ? 'Resuming from checkpoint' : 'Restarting from beginning'}: "${t.filename}" (ID: ${t.id})`);
+
+      if (i > 0) {
+        await new Promise(resolve => setTimeout(resolve, 5000));
+      }
+
+      processTranscription(t.id).catch(err => {
+        console.error(`[Manual Restart] Failed for transcript ${t.id}:`, err);
+      });
+    }
+
+    res.json({ restarted: results.length, transcripts: results });
+  } catch (err) {
+    console.error('[Manual Restart] Error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 export default router;

@@ -169,7 +169,8 @@ A full-stack application for managing legal case recordings/transcripts. Feature
 - Build: `npm run build`
 - Run: `npm run start`
 - In production, server runs on port 5000, serves static dist/ files
-- Startup recovery: on boot, any transcripts stuck in "processing" for 30+ minutes are reset to "error" so users can retry
+- Startup recovery: on boot, transcripts stuck in "processing"/"resuming" are auto-resumed from last checkpoint via processTranscription()
+- Manual restart endpoint: `POST /api/transcripts/admin/restart-processing` with `X-Admin-Key` header; restarts all stuck transcripts from their last checkpoint; requires `ADMIN_API_KEY` env var
 
 ### AWS EC2 (Production)
 - Domain: scribe.mattrmindr.com (via Cloudflare DNS)
@@ -180,7 +181,7 @@ A full-stack application for managing legal case recordings/transcripts. Feature
 - Code repo: github.com/benw525/MattrMindrScribe (git pull to deploy)
 - `server/db.ts` imports `dotenv/config` directly to ensure DATABASE_URL is loaded before pool creation (ES module import hoisting)
 - S3 bucket `mattrmindrscribe-files` in `us-east-2` with CORS configured for `scribe.mattrmindr.com`
-- Env vars in `/home/ubuntu/mattrmindrscribe/.env`: DATABASE_URL, AWS keys, OPENAI_API_KEY, ANTHROPIC_API_KEY, ASSEMBLYAI_API_KEY, JWT_SECRET, ADMIN_ACCOUNTS, NODE_ENV=production, REPLIT_DEPLOYMENT=1
+- Env vars in `/home/ubuntu/mattrmindrscribe/.env`: DATABASE_URL, AWS keys, OPENAI_API_KEY, ANTHROPIC_API_KEY, ASSEMBLYAI_API_KEY, JWT_SECRET, ADMIN_ACCOUNTS, ADMIN_API_KEY, NODE_ENV=production, REPLIT_DEPLOYMENT=1
 
 ## Admin Accounts
 
