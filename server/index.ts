@@ -3,6 +3,7 @@ import express from 'express';
 import cors from 'cors';
 import path from 'path';
 import fs from 'fs';
+import os from 'os';
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import { fileURLToPath } from 'url';
@@ -241,6 +242,24 @@ server.requestTimeout = 30 * 60 * 1000;
 const serverBootTime = new Date().toISOString();
 
 setTimeout(async () => {
+  try {
+    const tmpDir = os.tmpdir();
+    const entries = fs.readdirSync(tmpDir);
+    const orphaned = entries.filter(e => e.startsWith('s3_download_') || e.startsWith('transcription_'));
+    let cleaned = 0;
+    for (const entry of orphaned) {
+      try {
+        fs.rmSync(path.join(tmpDir, entry), { recursive: true, force: true });
+        cleaned++;
+      } catch {}
+    }
+    if (cleaned > 0) {
+      console.log(`[Startup Cleanup] Removed ${cleaned} orphaned temp director${cleaned === 1 ? 'y' : 'ies'}`);
+    }
+  } catch (err: any) {
+    console.error('[Startup Cleanup] Error scanning temp directory:', err.message);
+  }
+
   try {
     const { rows: stuck } = await pool.query(
       `SELECT t.id, t.filename, t.pipeline_log,

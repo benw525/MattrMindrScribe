@@ -169,7 +169,9 @@ A full-stack application for managing legal case recordings/transcripts. Feature
 - Build: `npm run build`
 - Run: `npm run start`
 - In production, server runs on port 5000, serves static dist/ files
+- Startup cleanup: on boot, orphaned `s3_download_*` and `transcription_*` temp directories are auto-deleted before recovery runs
 - Startup recovery: on boot, transcripts stuck in "processing"/"resuming" are auto-resumed from last checkpoint via processTranscription()
+- ENOSPC handling: disk-full errors during transcription are caught gracefully (status set to 'error' with clear message) instead of crashing the server
 - Manual restart endpoint: `POST /api/transcripts/admin/restart-processing` with `X-Admin-Key` header; restarts all stuck transcripts from their last checkpoint; requires `ADMIN_API_KEY` env var
 
 ### AWS EC2 (Production)

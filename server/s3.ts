@@ -141,7 +141,15 @@ export async function downloadFromS3(key: string): Promise<string> {
     },
   });
 
-  await pipeline(readStream, progress, writeStream);
+  try {
+    await pipeline(readStream, progress, writeStream);
+  } catch (downloadErr: any) {
+    try {
+      const { rmSync } = await import('fs');
+      rmSync(tempDir, { recursive: true, force: true });
+    } catch {}
+    throw downloadErr;
+  }
   console.log(`[S3 Download] Complete: ${(downloaded / 1024 / 1024).toFixed(1)} MB → ${tempPath}`);
 
   return tempPath;

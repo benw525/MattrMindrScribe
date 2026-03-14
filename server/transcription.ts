@@ -712,13 +712,17 @@ export async function processTranscription(transcriptId: string): Promise<void> 
     if (err instanceof TranscriptionCancelledError) {
       console.log(`[Transcription] ${err.message} — stopping pipeline`);
     } else {
-      console.error(`[Transcription] Error for ${transcriptId}:`, err.message);
+      const isNoSpace = err.code === 'ENOSPC' || err.message?.includes('ENOSPC') || err.message?.includes('no space left on device');
+      const errorMessage = isNoSpace
+        ? 'Disk full — not enough space to process this file. Please free up disk space and retry.'
+        : err.message;
+      console.error(`[Transcription] Error for ${transcriptId}:`, errorMessage);
       pipelineLog.completedAt = new Date().toISOString();
-      pipelineLog.fatalError = err.message;
+      pipelineLog.fatalError = errorMessage;
       try {
         await pool.query(
           `UPDATE transcripts SET status = 'error', error_message = $1, pipeline_log = $2::jsonb, updated_at = NOW() WHERE id = $3`,
-          [err.message, JSON.stringify(pipelineLog), transcriptId]
+          [errorMessage, JSON.stringify(pipelineLog), transcriptId]
         );
       } catch {
       }
