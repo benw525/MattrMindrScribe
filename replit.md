@@ -164,11 +164,23 @@ A full-stack application for managing legal case recordings/transcripts. Feature
 
 ## Deployment
 
+### Replit (Development)
 - Target: vm (always-on) — required because transcription pipelines run 20-30+ minutes; autoscale would kill them via SIGTERM
 - Build: `npm run build`
 - Run: `npm run start`
 - In production, server runs on port 5000, serves static dist/ files
 - Startup recovery: on boot, any transcripts stuck in "processing" for 30+ minutes are reset to "error" so users can retry
+
+### AWS EC2 (Production)
+- Domain: scribe.mattrmindr.com (via Cloudflare DNS)
+- Server: EC2 Ubuntu instance at ip-172-31-7-111
+- Process manager: PM2 (`pm2 start npm --name "mattrmindrscribe" -- run start`)
+- Reverse proxy: Nginx with `client_max_body_size 2G`
+- Database: PostgreSQL local, user `mattrmindr`, database `mattrmindrscribe`, auth `scram-sha-256`
+- Code repo: github.com/benw525/MattrMindrScribe (git pull to deploy)
+- `server/db.ts` imports `dotenv/config` directly to ensure DATABASE_URL is loaded before pool creation (ES module import hoisting)
+- S3 bucket `mattrmindrscribe-files` in `us-east-2` with CORS configured for `scribe.mattrmindr.com`
+- Env vars in `/home/ubuntu/mattrmindrscribe/.env`: DATABASE_URL, AWS keys, OPENAI_API_KEY, ANTHROPIC_API_KEY, ASSEMBLYAI_API_KEY, JWT_SECRET, ADMIN_ACCOUNTS, NODE_ENV=production, REPLIT_DEPLOYMENT=1
 
 ## Admin Accounts
 

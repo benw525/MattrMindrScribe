@@ -1,11 +1,8 @@
 import 'dotenv/config';
 import pg from 'pg';
 
-const dbUrl = process.env.DATABASE_URL;
-console.log('[DB] Connecting with URL:', dbUrl ? dbUrl.replace(/:[^:@]+@/, ':***@') : 'UNDEFINED');
-
 const pool = new pg.Pool({
-  connectionString: dbUrl,
+  connectionString: process.env.DATABASE_URL,
 });
 
 export default pool;
