@@ -24,9 +24,9 @@ A full-stack application for managing legal case recordings/transcripts. Feature
 - **Frontend**: React 18, TypeScript, Vite 5, Tailwind CSS
 - **Backend**: Express.js (v5), TypeScript, tsx
 - **Database**: PostgreSQL (Replit built-in)
-- **Cloud Storage**: Cloudflare R2 (S3-compatible, via @aws-sdk/client-s3)
+- **Cloud Storage**: Amazon S3 (via @aws-sdk/client-s3); backward-compatible with legacy R2 URLs in database
 - **Auth**: JWT (jsonwebtoken + bcryptjs)
-- **File Upload**: Presigned URL direct-to-R2 uploads (bypasses proxy size limits); Multer fallback for non-R2 local storage
+- **File Upload**: Presigned URL direct-to-S3 uploads (bypasses proxy size limits); Multer fallback for non-S3 local storage
 - **Animation**: Framer Motion
 - **Icons**: Lucide React
 - **Notifications**: Sonner
@@ -50,11 +50,11 @@ A full-stack application for managing legal case recordings/transcripts. Feature
 ### Backend (server/)
 - `server/index.ts` - Express server entry point (port 3000 dev, 5000 prod), media token/streaming endpoints
 - `server/db.ts` - PostgreSQL connection pool
-- `server/r2.ts` - Cloudflare R2 storage module (upload, download, stream, delete helpers)
+- `server/s3.ts` - Amazon S3 storage module (upload, download, stream, delete, presigned URLs); backward-compatible with legacy `r2://` URLs
 - `server/middleware/auth.ts` - JWT authentication middleware
 - `server/routes/auth.ts` - Auth endpoints (register, login, me, change-password)
-- `server/routes/transcripts.ts` - Transcript CRUD + file upload (R2 or local) + status/retranscribe endpoints
-- `server/transcription.ts` - AI transcription pipeline (ffmpeg conversion, chunking, Whisper API, 3-step diarization, R2 download support); robust audio duration detection with 3 ffprobe fallback strategies (format metadata → stream metadata → full file scan) plus segment-based estimation; duration is non-blocking — pipeline continues even if all probing fails; WAV chunking uses file-size-based duration calculation (no ffprobe dependency); includes deduplication with short-segment proximity check, lookback window (10 recent segments, time+text similarity), and hallucination detection (removes consecutive identical short-phrase runs with uniform spacing); segment save wrapped in DB transaction (DELETE+INSERT+UPDATE atomically); ON CONFLICT upsert on (transcript_id, segment_order) unique index prevents duplicate rows; **resumable pipeline**: after Whisper+diarization complete, segments are checkpointed to DB before speaker refinement begins — if the server restarts mid-refinement, retry skips straight to refinement instead of re-downloading/re-transcribing (checks `pipeline_log.whisper.status === 'success'` + existing segments in `transcript_segments` table); **no WAV conversion**: chunks are split directly from source audio into MP3 (64kbps mono) using ffmpeg time-based seeking — eliminates the 50-minute WAV conversion bottleneck; chunk size calculated from output MP3 bitrate (~43 min per chunk) so a 66-min recording = 2 chunks instead of 6
+- `server/routes/transcripts.ts` - Transcript CRUD + file upload (S3 or local) + status/retranscribe endpoints
+- `server/transcription.ts` - AI transcription pipeline (ffmpeg conversion, chunking, Whisper API, 3-step diarization, S3 download support); robust audio duration detection with 3 ffprobe fallback strategies (format metadata → stream metadata → full file scan) plus segment-based estimation; duration is non-blocking — pipeline continues even if all probing fails; WAV chunking uses file-size-based duration calculation (no ffprobe dependency); includes deduplication with short-segment proximity check, lookback window (10 recent segments, time+text similarity), and hallucination detection (removes consecutive identical short-phrase runs with uniform spacing); segment save wrapped in DB transaction (DELETE+INSERT+UPDATE atomically); ON CONFLICT upsert on (transcript_id, segment_order) unique index prevents duplicate rows; **resumable pipeline**: after Whisper+diarization complete, segments are checkpointed to DB before speaker refinement begins — if the server restarts mid-refinement, retry skips straight to refinement instead of re-downloading/re-transcribing (checks `pipeline_log.whisper.status === 'success'` + existing segments in `transcript_segments` table); **no WAV conversion**: chunks are split directly from source audio into MP3 (64kbps mono) using ffmpeg time-based seeking — eliminates the 50-minute WAV conversion bottleneck; chunk size calculated from output MP3 bitrate (~43 min per chunk) so a 66-min recording = 2 chunks instead of 6
 - `server/diarization.ts` - AssemblyAI speaker diarization (upload audio, get speaker labels, map onto Whisper segments)
 - `server/speakerRefinement.ts` - Claude Opus 4 speaker refinement via Anthropic streaming API; simplified, concise prompts that leverage Claude's natural understanding of legal proceedings; two-pass deposition refinement: Pass 1 identifies speaker roster from first 80 segments, Pass 2 uses roster for full transcript refinement; Claude returns `{segments: [{label, text}], identifications}` — both corrected speaker labels AND cleaned text (punctuation, time formatting, capitalization) while preserving filler words verbatim; SINGLE_CALL_LIMIT=800, BATCH_SIZE=700 (respects Claude Opus 4's 32K max output token limit); Q&A post-processing corrects short misattributed utterances using examiner/deponent alternation logic; conditionally sends only the matching recording-type section to Claude; post-batch normalization eliminates generic "Speaker N" leakage; auto-defaults 5 expected speakers for depositions
 - `server/routes/folders.ts` - Folder CRUD + move transcripts + MattrMindr case linking
@@ -78,7 +78,7 @@ A full-stack application for managing legal case recordings/transcripts. Feature
 - `PUT /api/auth/change-password` - Change password (authenticated)
 - `GET /api/transcripts` - List user transcripts
 - `GET /api/transcripts/:id/detail` - Get single transcript with segments (fallback for page reload)
-- `POST /api/transcripts/presigned-upload` - Get presigned R2 URL for direct browser upload
+- `POST /api/transcripts/presigned-upload` - Get presigned S3 URL for direct browser upload
 - `POST /api/transcripts/confirm-upload` - Confirm upload completion, create transcript record, start transcription
 - `POST /api/transcripts/upload` - Legacy upload via server (fallback, limited by proxy body size)
 - `GET /api/transcripts/:id/status` - Poll transcription status
@@ -121,16 +121,16 @@ A full-stack application for managing legal case recordings/transcripts. Feature
 - `mattrmindr_connections` - MattrMindr integration connections (one per user, stores base_url, email, auth_token)
 - `folders.mattrmindr_case_id` / `folders.mattrmindr_case_name` - Links a folder to a MattrMindr case
 
-## Cloudflare R2 Storage
+## Amazon S3 Storage
 
-- Files are uploaded to R2 when configured (env vars: R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET_NAME, R2_PUBLIC_URL)
-- DB `file_url` column stores `r2://uploads/<uuid>.<ext>` for R2 files, `/uploads/<filename>` for local files
-- `server/r2.ts` exports: `uploadToR2`, `uploadFileToR2`, `getPresignedUploadUrl`, `downloadFromR2`, `streamFromR2`, `deleteFromR2`, `isR2Url`, `getR2KeyFromUrl`, `getR2PublicUrl`
-- R2 bucket has CORS configured to allow browser direct uploads (AllowedOrigins: *, AllowedMethods: GET/PUT/POST/HEAD)
-- Media serving: `/api/media/token` returns presigned R2 download URLs for R2 files (browser loads directly from R2, bypassing proxy size limits) or generates short-lived tokens for local files; `/api/media/:filename` serves local files via proxy
-- Transcription pipeline downloads R2 files to temp dir before processing, cleans up after
-- Falls back to local disk storage when R2 is not configured
-- Bucket name is normalized to lowercase (R2 requirement)
+- Files are uploaded to S3 when configured (env vars: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, S3_BUCKET_NAME, S3_REGION, optional S3_PUBLIC_URL)
+- DB `file_url` column stores `s3://uploads/<uuid>.<ext>` for new S3 files, `/uploads/<filename>` for local files
+- Legacy `r2://` URLs from prior Cloudflare R2 storage are still recognized (backward-compatible via `isCloudStorageUrl` which matches both `s3://` and `r2://` prefixes)
+- `server/s3.ts` exports: `uploadToS3`, `uploadFileToS3`, `getPresignedUploadUrl`, `downloadFromS3`, `streamFromS3`, `deleteFromS3`, `isCloudStorageUrl`, `getKeyFromStorageUrl`, `getS3PublicUrl`
+- S3 bucket must have CORS configured to allow browser direct uploads (AllowedOrigins: *, AllowedMethods: GET/PUT/POST/HEAD)
+- Media serving: `/api/media/token` returns presigned S3 download URLs for cloud files (browser loads directly from S3, bypassing proxy size limits) or generates short-lived tokens for local files; `/api/media/:filename` serves local files via proxy
+- Transcription pipeline downloads S3 files to temp dir before processing, cleans up after
+- Falls back to local disk storage when S3 is not configured
 
 ## MattrMindr Integration
 
