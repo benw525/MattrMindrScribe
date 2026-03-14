@@ -1,5 +1,5 @@
 import { AssemblyAI } from 'assemblyai';
-import { readFile } from 'fs/promises';
+import { createReadStream } from 'fs';
 
 interface DiarizationLabel {
   speaker: string;
@@ -21,8 +21,8 @@ export async function diarizeWithAssemblyAI(
   }
 
   console.log(`[Diarization] Uploading audio to AssemblyAI...`);
-  const audioData = await readFile(audioFilePath);
-  const uploadUrl = await client.files.upload(audioData);
+  const audioStream = createReadStream(audioFilePath);
+  const uploadUrl = await client.files.upload(audioStream);
   console.log(`[Diarization] Upload complete, starting transcription with speaker labels...`);
 
   const config: any = {
