@@ -521,7 +521,7 @@ export function TranscriptViewerPage() {
     }
   };
   const isProcessing =
-  transcript.status === 'processing' || transcript.status === 'pending';
+  transcript.status === 'processing' || transcript.status === 'pending' || transcript.status === 'resuming';
   return (
     <div className="flex-1 flex flex-col h-full bg-white dark:bg-slate-950 relative overflow-hidden">
       {/* Top Bar */}

@@ -245,7 +245,7 @@ setTimeout(async () => {
       `SELECT t.id, t.filename, t.pipeline_log,
         (SELECT COUNT(*) FROM transcript_segments s WHERE s.transcript_id = t.id) as seg_count
        FROM transcripts t
-       WHERE t.status = 'processing' AND t.updated_at < $1`,
+       WHERE t.status IN ('processing', 'resuming') AND t.updated_at < $1`,
       [serverStartTime]
     );
     if (stuck.length > 0) {
@@ -253,7 +253,7 @@ setTimeout(async () => {
       for (let i = 0; i < stuck.length; i++) {
         const t = stuck[i];
         const { rowCount } = await pool.query(
-          `UPDATE transcripts SET status = 'resuming', updated_at = NOW() WHERE id = $1 AND status = 'processing'`,
+          `UPDATE transcripts SET status = 'resuming', updated_at = NOW() WHERE id = $1 AND status IN ('processing', 'resuming')`,
           [t.id]
         );
         if (rowCount === 0) {

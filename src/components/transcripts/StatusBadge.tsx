@@ -1,9 +1,10 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 interface StatusBadgeProps {
-  status: 'pending' | 'processing' | 'completed' | 'error';
+  status: 'pending' | 'processing' | 'resuming' | 'completed' | 'error';
 }
-export function StatusBadge({ status }: StatusBadgeProps) {
+export function StatusBadge({ status: rawStatus }: StatusBadgeProps) {
+  const status = rawStatus === 'resuming' ? 'processing' : rawStatus;
   const config = {
     pending: {
       color:
