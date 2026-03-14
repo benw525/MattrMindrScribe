@@ -712,7 +712,7 @@ export async function processTranscription(transcriptId: string): Promise<void> 
     if (err instanceof TranscriptionCancelledError) {
       console.log(`[Transcription] ${err.message} — stopping pipeline`);
     } else {
-      const isNoSpace = err.code === 'ENOSPC' || err.message?.includes('ENOSPC') || err.message?.includes('no space left on device');
+      const isNoSpace = err.code === 'ENOSPC' || err.message?.includes('ENOSPC') || err.message?.toLowerCase().includes('no space left on device');
       const errorMessage = isNoSpace
         ? 'Disk full — not enough space to process this file. Please free up disk space and retry.'
         : err.message;
