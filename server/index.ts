@@ -238,15 +238,16 @@ const server = app.listen(PORT, '0.0.0.0', () => {
 server.timeout = 30 * 60 * 1000;
 server.requestTimeout = 30 * 60 * 1000;
 
+const serverBootTime = new Date().toISOString();
+
 setTimeout(async () => {
   try {
-    const serverStartTime = new Date().toISOString();
     const { rows: stuck } = await pool.query(
       `SELECT t.id, t.filename, t.pipeline_log,
         (SELECT COUNT(*) FROM transcript_segments s WHERE s.transcript_id = t.id) as seg_count
        FROM transcripts t
        WHERE t.status IN ('processing', 'resuming') AND t.updated_at < $1`,
-      [serverStartTime]
+      [serverBootTime]
     );
     if (stuck.length > 0) {
       console.log(`[Startup Recovery] Found ${stuck.length} interrupted transcript(s) — auto-resuming...`);
