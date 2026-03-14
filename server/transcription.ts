@@ -6,7 +6,7 @@ import { randomUUID } from 'crypto';
 import { tmpdir } from 'os';
 import OpenAI, { toFile } from 'openai';
 import pool from './db.js';
-import { isR2Url, getR2KeyFromUrl, downloadFromR2 } from './r2.js';
+import { isCloudStorageUrl, getKeyFromStorageUrl, downloadFromS3 } from './s3.js';
 import { diarizeWithAssemblyAI, mapDiarizationToSegments } from './diarization.js';
 import { refineSpeakersWithGPT } from './speakerRefinement.js';
 
@@ -407,7 +407,7 @@ async function isTranscriptDeleted(transcriptId: string): Promise<boolean> {
 
 export async function processTranscription(transcriptId: string): Promise<void> {
   const workDir = path.join(tmpdir(), `transcription_${randomUUID()}`);
-  let r2TempPath: string | null = null;
+  let cloudTempPath: string | null = null;
 
   const pipelineLog: Record<string, any> = {
     whisper: { status: 'pending' },
@@ -482,11 +482,11 @@ export async function processTranscription(transcriptId: string): Promise<void> 
 
       await checkCancelled();
 
-      if (isR2Url(file_url)) {
-        const r2Key = getR2KeyFromUrl(file_url);
-        console.log(`[Transcription] Downloading from R2: ${r2Key}`);
-        sourcePath = await downloadFromR2(r2Key);
-        r2TempPath = sourcePath;
+      if (isCloudStorageUrl(file_url)) {
+        const storageKey = getKeyFromStorageUrl(file_url);
+        console.log(`[Transcription] Downloading from S3: ${storageKey}`);
+        sourcePath = await downloadFromS3(storageKey);
+        cloudTempPath = sourcePath;
       } else {
         sourcePath = path.join(process.cwd(), file_url.startsWith('/') ? file_url.slice(1) : file_url);
       }
@@ -725,9 +725,9 @@ export async function processTranscription(transcriptId: string): Promise<void> 
     }
   } finally {
     await cleanupDir(workDir);
-    if (r2TempPath) {
+    if (cloudTempPath) {
       try {
-        const tempDir = path.dirname(r2TempPath);
+        const tempDir = path.dirname(cloudTempPath);
         await cleanupDir(tempDir);
       } catch {}
     }

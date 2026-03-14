@@ -9,7 +9,7 @@ import { pipeline } from 'stream/promises';
 import pool from '../db.js';
 import { generateToken, authenticateToken, AuthRequest } from '../middleware/auth.js';
 import { processTranscription } from '../transcription.js';
-import { r2Configured, uploadFileToR2 } from '../r2.js';
+import { s3Configured, uploadFileToS3 } from '../s3.js';
 
 const router = Router();
 
@@ -202,10 +202,10 @@ router.post('/receive', authenticateToken, async (req: AuthRequest, res: Respons
     const fileType = (contentType && contentType.startsWith('video/')) || VIDEO_EXTENSIONS.includes(ext) ? 'video' : 'audio';
     const actualFileSize = fileSize || downloadedSize;
 
-    if (r2Configured) {
-      const r2Key = `uploads/${uuidv4()}${ext}`;
+    if (s3Configured) {
+      const s3Key = `uploads/${uuidv4()}${ext}`;
       try {
-        storedFileUrl = await uploadFileToR2(tempPath, r2Key, contentType || 'application/octet-stream');
+        storedFileUrl = await uploadFileToS3(tempPath, s3Key, contentType || 'application/octet-stream');
       } finally {
         await fs.unlink(tempPath).catch(() => {});
       }

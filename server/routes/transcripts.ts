@@ -5,7 +5,7 @@ import { v4 as uuidv4 } from 'uuid';
 import pool from '../db.js';
 import { authenticateToken, AuthRequest } from '../middleware/auth.js';
 import { processTranscription, deduplicateExistingSegments } from '../transcription.js';
-import { r2Configured, uploadFileToR2, deleteFromR2, isR2Url, getR2KeyFromUrl, getPresignedUploadUrl } from '../r2.js';
+import { s3Configured, uploadFileToS3, deleteFromS3, isCloudStorageUrl, getKeyFromStorageUrl, getPresignedUploadUrl } from '../s3.js';
 import { LEGAL_AGENTS, getAgentById, RecordingSubType } from '../legalAgents.js';
 import OpenAI from 'openai';
 import fs from 'fs/promises';
@@ -42,7 +42,7 @@ const ALLOWED_EXTENSIONS = [
 
 const upload = multer({
   storage,
-  limits: { fileSize: r2Configured ? 2 * 1024 * 1024 * 1024 : 500 * 1024 * 1024 },
+  limits: { fileSize: s3Configured ? 2 * 1024 * 1024 * 1024 : 500 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
     const ext = path.extname(file.originalname).toLowerCase();
     if (ALLOWED_TYPES.includes(file.mimetype) || ALLOWED_EXTENSIONS.includes(ext)) {
@@ -143,12 +143,12 @@ router.get('/:id/detail', async (req: AuthRequest, res: Response) => {
 });
 
 const MAX_FILE_SIZE = 2 * 1024 * 1024 * 1024;
-const pendingUploads = new Map<string, { userId: string; r2Key: string; filename: string; contentType: string; fileSize: number; expires: number }>();
+const pendingUploads = new Map<string, { userId: string; s3Key: string; filename: string; contentType: string; fileSize: number; expires: number }>();
 
 router.post('/presigned-upload', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
-    if (!r2Configured) {
-      return res.status(400).json({ error: 'Direct upload not available. R2 storage is not configured.' });
+    if (!s3Configured) {
+      return res.status(400).json({ error: 'Direct upload not available. S3 storage is not configured.' });
     }
 
     const { filename, contentType, fileSize } = req.body;
@@ -165,21 +165,21 @@ router.post('/presigned-upload', authenticateToken, async (req: AuthRequest, res
       return res.status(400).json({ error: 'File too large. Maximum size is 2GB.' });
     }
 
-    const r2Key = `uploads/${uuidv4()}${ext}`;
+    const s3Key = `uploads/${uuidv4()}${ext}`;
     const uploadToken = uuidv4();
 
     pendingUploads.set(uploadToken, {
       userId: req.userId!,
-      r2Key,
+      s3Key,
       filename,
       contentType,
       fileSize: fileSize || 0,
       expires: Date.now() + 3600 * 1000,
     });
 
-    const presignedUrl = await getPresignedUploadUrl(r2Key, contentType);
+    const presignedUrl = await getPresignedUploadUrl(s3Key, contentType);
 
-    res.json({ presignedUrl, r2Key, contentType, uploadToken });
+    res.json({ presignedUrl, s3Key, contentType, uploadToken });
   } catch (err: any) {
     console.error('[Presigned Upload] Error generating URL:', err.message);
     res.status(500).json({ error: 'Failed to generate upload URL' });
@@ -209,7 +209,7 @@ router.post('/confirm-upload', authenticateToken, async (req: AuthRequest, res: 
 
     pendingUploads.delete(uploadToken);
 
-    const fileUrl = `r2://${pending.r2Key}`;
+    const fileUrl = `s3://${pending.s3Key}`;
     const fileType = pending.contentType.startsWith('video/') ? 'video' : 'audio';
 
     const validRecordingTypes = ['deposition', 'court_hearing', 'recorded_statement', 'police_interrogation', 'other'];
@@ -287,11 +287,11 @@ router.post('/upload', (req, res: Response, next) => {
     let fileUrl: string;
     const diskPath = req.file.path;
 
-    if (r2Configured) {
+    if (s3Configured) {
       const ext = path.extname(req.file.originalname);
-      const r2Key = `uploads/${uuidv4()}${ext}`;
+      const s3Key = `uploads/${uuidv4()}${ext}`;
       try {
-        fileUrl = await uploadFileToR2(diskPath, r2Key, req.file.mimetype);
+        fileUrl = await uploadFileToS3(diskPath, s3Key, req.file.mimetype);
       } finally {
         await fs.unlink(diskPath).catch(() => {});
       }
@@ -673,8 +673,8 @@ router.delete('/', async (req: AuthRequest, res: Response) => {
     );
 
     for (const row of fileResults.rows) {
-      if (row.file_url && isR2Url(row.file_url)) {
-        deleteFromR2(getR2KeyFromUrl(row.file_url)).catch(() => {});
+      if (row.file_url && isCloudStorageUrl(row.file_url)) {
+        deleteFromS3(getKeyFromStorageUrl(row.file_url)).catch(() => {});
       } else if (row.file_url) {
         try {
           const localPath = path.join(process.cwd(), row.file_url.startsWith('/') ? row.file_url.slice(1) : row.file_url);

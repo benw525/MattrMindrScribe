@@ -5,7 +5,7 @@ import fs from 'fs';
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import { fileURLToPath } from 'url';
-import { isR2Url, getR2KeyFromUrl, getR2PublicUrl, getPresignedDownloadUrl } from './r2.js';
+import { isCloudStorageUrl, getKeyFromStorageUrl, getS3PublicUrl, getPresignedDownloadUrl } from './s3.js';
 import authRoutes from './routes/auth.js';
 import transcriptRoutes from './routes/transcripts.js';
 import folderRoutes from './routes/folders.js';
@@ -45,7 +45,7 @@ app.use(express.urlencoded({ extended: true }));
 
 app.use('/uploads', authenticateToken as any, express.static(path.join(__dirname, '..', 'uploads')));
 
-const mediaTokens = new Map<string, { userId: string; filename: string; expires: number; isR2: boolean }>();
+const mediaTokens = new Map<string, { userId: string; filename: string; expires: number; isCloudStorage: boolean }>();
 
 app.post('/api/media/token', authenticateToken as any, async (req: any, res) => {
   const { filename } = req.body;
@@ -59,10 +59,10 @@ app.post('/api/media/token', authenticateToken as any, async (req: any, res) => 
     return res.status(403).json({ error: 'Access denied' });
   }
 
-  if (isR2Url(filename)) {
+  if (isCloudStorageUrl(filename)) {
     try {
-      const r2Key = getR2KeyFromUrl(filename);
-      const presignedUrl = await getPresignedDownloadUrl(r2Key);
+      const storageKey = getKeyFromStorageUrl(filename);
+      const presignedUrl = await getPresignedDownloadUrl(storageKey);
       return res.json({ mediaUrl: presignedUrl });
     } catch (err: any) {
       console.error('[Media] Presigned download URL error:', err.message);
@@ -75,7 +75,7 @@ app.post('/api/media/token', authenticateToken as any, async (req: any, res) => 
     userId: req.userId,
     filename: path.basename(filename),
     expires: Date.now() + 60 * 60 * 1000,
-    isR2: false,
+    isCloudStorage: false,
   });
 
   const mediaFilename = path.basename(filename);
@@ -97,12 +97,12 @@ app.get('/api/media/:filename', async (req, res) => {
     return res.status(403).json({ error: 'Access denied' });
   }
 
-  if (entry.isR2) {
+  if (entry.isCloudStorage) {
     try {
-      const { streamFromR2 } = await import('./r2.js');
-      await streamFromR2(entry.filename, res);
+      const { streamFromS3 } = await import('./s3.js');
+      await streamFromS3(entry.filename, res);
     } catch (err: any) {
-      console.error('[Media] R2 stream error:', err.message);
+      console.error('[Media] S3 stream error:', err.message);
       return res.status(500).json({ error: 'Failed to stream file' });
     }
   } else {
