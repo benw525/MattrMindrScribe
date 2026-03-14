@@ -14,7 +14,7 @@ import mattrmindrRoutes from './routes/mattrmindr.js';
 import externalRoutes from './routes/external.js';
 import { authenticateToken } from './middleware/auth.js';
 import pool from './db.js';
-import { deduplicateExistingSegments } from './transcription.js';
+import { deduplicateExistingSegments, processTranscription } from './transcription.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -240,27 +240,35 @@ server.requestTimeout = 30 * 60 * 1000;
 
 setTimeout(async () => {
   try {
-    const thirtyMinAgo = new Date(Date.now() - 30 * 60 * 1000).toISOString();
+    const serverStartTime = new Date().toISOString();
     const { rows: stuck } = await pool.query(
       `SELECT t.id, t.filename, t.pipeline_log,
         (SELECT COUNT(*) FROM transcript_segments s WHERE s.transcript_id = t.id) as seg_count
        FROM transcripts t
        WHERE t.status = 'processing' AND t.updated_at < $1`,
-      [thirtyMinAgo]
+      [serverStartTime]
     );
-    for (const t of stuck) {
-      const hasCheckpoint = t.pipeline_log?.whisper?.status === 'success' && parseInt(t.seg_count) > 0;
-      const errorMsg = hasCheckpoint
-        ? 'Processing was interrupted by a server restart. Click retry — progress has been saved and it will resume quickly.'
-        : 'Processing was interrupted by a server restart. Please re-transcribe.';
-      await pool.query(
-        `UPDATE transcripts SET status = 'error', error_message = $1, updated_at = NOW() WHERE id = $2`,
-        [errorMsg, t.id]
-      );
-      console.log(`[Startup Recovery] Reset stuck transcript: "${t.filename}" (${t.id})${hasCheckpoint ? ' [checkpoint preserved]' : ''}`);
-    }
     if (stuck.length > 0) {
-      console.log(`[Startup Recovery] Reset ${stuck.length} stuck transcript(s)`);
+      console.log(`[Startup Recovery] Found ${stuck.length} interrupted transcript(s) — auto-resuming...`);
+      for (let i = 0; i < stuck.length; i++) {
+        const t = stuck[i];
+        const { rowCount } = await pool.query(
+          `UPDATE transcripts SET status = 'resuming', updated_at = NOW() WHERE id = $1 AND status = 'processing'`,
+          [t.id]
+        );
+        if (rowCount === 0) {
+          console.log(`[Startup Recovery] Skipping "${t.filename}" (${t.id}) — already claimed`);
+          continue;
+        }
+        const hasCheckpoint = t.pipeline_log?.whisper?.status === 'success' && parseInt(t.seg_count) > 0;
+        console.log(`[Startup Recovery] Auto-resuming transcript: "${t.filename}" (${t.id})${hasCheckpoint ? ' [checkpoint — skipping to refinement]' : ' [restarting from beginning]'}`);
+        if (i > 0) {
+          await new Promise(resolve => setTimeout(resolve, 5000));
+        }
+        processTranscription(t.id).catch(err => {
+          console.error(`[Startup Recovery] Auto-resume failed for "${t.filename}" (${t.id}):`, err.message);
+        });
+      }
     }
   } catch (err: any) {
     console.error('[Startup Recovery] Error:', err.message);
