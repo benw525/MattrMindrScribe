@@ -196,7 +196,7 @@
   {\pard\sa60\f1\fs20 agent_type      varchar(100) NOT NULL\par}
   {\pard\sa60\f1\fs20 sub_type        varchar(100) NULLABLE\par}
   {\pard\sa60\f1\fs20 summary         text NOT NULL\par}
-  {\pard\sa60\f1\fs20 model_used      varchar(100) DEFAULT 'gpt-4o-mini'\par}
+  {\pard\sa60\f1\fs20 model_used      varchar(100) DEFAULT 'gpt-5-mini'\par}
   {\pard\sa60\f1\fs20 created_at      timestamp DEFAULT now()\par}
   {\pard\sa60\f0\fs24 \b Indexes:\b0  transcript_summaries_pkey (id), idx_summaries_transcript (transcript_id)\par}
 
@@ -393,7 +393,7 @@
   {\pard\sa100\f0\fs24 Each agent has a systemPrompt that defines the AI's role and the 10-section output structure (Case Overview, specific sections per practice area, Attorney Action Items). Each sub-type has a promptModifier that narrows the focus. The "Other" sub-type accepts a custom description from the user and generates a dynamic prompt: "This transcript is from: [description]. Analyze it thoroughly using the framework for this practice area."\par}
 
   {\pard\sb200\sa100\f0\fs28\b 8.3 Summarize Endpoint (SSE)\b0\par}
-  {\pard\sa100\f0\fs24 POST /api/transcripts/:id/summarize is a Server-Sent Events endpoint. It streams tokens in real-time as the AI generates the summary. Uses GPT model for generation. On completion, saves the full summary to transcript_summaries table with agent_type and sub_type.\par}
+  {\pard\sa100\f0\fs24 POST /api/transcripts/:id/summarize is a Server-Sent Events endpoint. It streams tokens in real-time as the AI generates the summary. Uses gpt-5-mini model for generation. On completion, saves the full summary to transcript_summaries table with agent_type and sub_type.\par}
 
   {\pard\sb200\sa100\f0\fs28\b 8.4 Summary Storage\b0\par}
   {\pard\sa100\f0\fs24 Multiple summaries can exist per transcript (different agents, different sub-types). GET /api/transcripts/:id/summaries retrieves all past summaries ordered by creation date.\par}
