@@ -26,7 +26,7 @@ A full-stack application for managing legal case recordings/transcripts. Feature
 - **Database**: PostgreSQL (Replit built-in)
 - **Cloud Storage**: Amazon S3 (via @aws-sdk/client-s3); backward-compatible with legacy R2 URLs in database
 - **Auth**: JWT (jsonwebtoken + bcryptjs)
-- **File Upload**: Presigned URL direct-to-S3 uploads (bypasses proxy size limits); Multer fallback for non-S3 local storage
+- **File Upload**: Chunked multipart direct-to-S3 uploads (50MB chunks, 3 concurrent, auto-retry with exponential backoff); survives tab suspension/background; no file size limit; legacy presigned single-PUT endpoint retained for backward compat; Multer fallback for non-S3 local storage
 - **Animation**: Framer Motion
 - **Icons**: Lucide React
 - **Notifications**: Sonner

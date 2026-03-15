@@ -73,66 +73,140 @@ export const api = {
   transcripts: {
     list: () => request('/transcripts'),
     upload: async (file: File, description?: string, folderId?: string, onProgress?: (percent: number) => void, expectedSpeakers?: number | null, recordingType?: string, practiceArea?: string) => {
-      const presignedRes = await request('/transcripts/presigned-upload', {
+      const contentType = file.type || 'application/octet-stream';
+
+      const initRes = await request('/transcripts/multipart/initiate', {
         method: 'POST',
         body: JSON.stringify({
           filename: file.name,
-          contentType: file.type || 'application/octet-stream',
+          contentType,
           fileSize: file.size,
-          description,
-          folderId,
         }),
       });
 
-      if (!presignedRes.presignedUrl) {
-        throw new Error(presignedRes.error || 'Failed to get upload URL');
+      if (!initRes.uploadToken) {
+        throw new Error(initRes.error || 'Failed to initiate upload');
       }
 
-      await new Promise<void>((resolve, reject) => {
-        const xhr = new XMLHttpRequest();
-        xhr.open('PUT', presignedRes.presignedUrl);
-        xhr.setRequestHeader('Content-Type', presignedRes.contentType || file.type || 'application/octet-stream');
+      const { uploadToken, chunkSize, totalParts } = initRes;
+      const completedParts: Array<{ PartNumber: number; ETag: string }> = [];
+      const partBytesLoaded: Record<number, number> = {};
+      const CONCURRENT_UPLOADS = 3;
+      const MAX_RETRIES = 3;
 
-        if (onProgress) {
-          xhr.upload.onprogress = (e) => {
-            if (e.lengthComputable) {
-              const percent = Math.round((e.loaded / e.total) * 100);
-              onProgress(Math.min(percent, 95));
-            }
-          };
+      const reportProgress = () => {
+        if (!onProgress) return;
+        const totalLoaded = Object.values(partBytesLoaded).reduce((sum, b) => sum + b, 0);
+        const percent = Math.round((totalLoaded / file.size) * 95);
+        onProgress(Math.min(percent, 95));
+      };
+
+      const uploadPart = async (partNumber: number, presignedUrl: string): Promise<{ PartNumber: number; ETag: string }> => {
+        const start = (partNumber - 1) * chunkSize;
+        const end = Math.min(start + chunkSize, file.size);
+        const chunk = file.slice(start, end);
+        partBytesLoaded[partNumber] = 0;
+
+        for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+          try {
+            const etag = await new Promise<string>((resolve, reject) => {
+              const xhr = new XMLHttpRequest();
+              xhr.open('PUT', presignedUrl);
+              xhr.setRequestHeader('Content-Type', contentType);
+
+              xhr.upload.onprogress = (e) => {
+                if (e.lengthComputable) {
+                  partBytesLoaded[partNumber] = e.loaded;
+                  reportProgress();
+                }
+              };
+
+              xhr.onload = () => {
+                if (xhr.status >= 200 && xhr.status < 300) {
+                  const etag = xhr.getResponseHeader('ETag');
+                  if (!etag) {
+                    reject(new Error('Missing ETag in response'));
+                    return;
+                  }
+                  partBytesLoaded[partNumber] = end - start;
+                  reportProgress();
+                  resolve(etag);
+                } else {
+                  reject(new Error(`Part upload failed (${xhr.status})`));
+                }
+              };
+
+              xhr.onerror = () => {
+                reject(new Error('Network error during part upload'));
+              };
+
+              xhr.send(chunk);
+            });
+
+            return { PartNumber: partNumber, ETag: etag };
+          } catch (err) {
+            if (attempt === MAX_RETRIES - 1) throw err;
+            partBytesLoaded[partNumber] = 0;
+            await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
+
+            const refreshRes = await request('/transcripts/multipart/presign-part', {
+              method: 'POST',
+              body: JSON.stringify({ uploadToken, partNumber }),
+            });
+            presignedUrl = refreshRes.url;
+          }
+        }
+        throw new Error('Unreachable');
+      };
+
+      try {
+        for (let batchStart = 1; batchStart <= totalParts; batchStart += CONCURRENT_UPLOADS) {
+          const batchEnd = Math.min(batchStart + CONCURRENT_UPLOADS - 1, totalParts);
+          const partNumbers = Array.from({ length: batchEnd - batchStart + 1 }, (_, i) => batchStart + i);
+
+          const batchRes = await request('/transcripts/multipart/presign-batch', {
+            method: 'POST',
+            body: JSON.stringify({ uploadToken, partNumbers }),
+          });
+
+          const batchPromises = batchRes.urls.map((u: { partNumber: number; url: string }) =>
+            uploadPart(u.partNumber, u.url)
+          );
+
+          const batchResults = await Promise.all(batchPromises);
+          completedParts.push(...batchResults);
         }
 
-        xhr.onload = () => {
-          if (xhr.status >= 200 && xhr.status < 300) {
-            resolve();
-          } else {
-            reject(new Error(`Upload to storage failed (${xhr.status})`));
-          }
-        };
+        await request('/transcripts/multipart/complete', {
+          method: 'POST',
+          body: JSON.stringify({ uploadToken, parts: completedParts }),
+        });
 
-        xhr.onerror = () => {
-          reject(new Error('Failed to upload file to storage. Please try again.'));
-        };
+        if (onProgress) onProgress(98);
 
-        xhr.send(file);
-      });
+        const confirmRes = await request('/transcripts/confirm-upload', {
+          method: 'POST',
+          body: JSON.stringify({
+            uploadToken,
+            description,
+            folderId,
+            expectedSpeakers: expectedSpeakers || null,
+            recordingType: recordingType || null,
+            practiceArea: practiceArea || null,
+          }),
+        });
 
-      if (onProgress) onProgress(98);
-
-      const confirmRes = await request('/transcripts/confirm-upload', {
-        method: 'POST',
-        body: JSON.stringify({
-          uploadToken: presignedRes.uploadToken,
-          description,
-          folderId,
-          expectedSpeakers: expectedSpeakers || null,
-          recordingType: recordingType || null,
-          practiceArea: practiceArea || null,
-        }),
-      });
-
-      if (onProgress) onProgress(100);
-      return confirmRes;
+        if (onProgress) onProgress(100);
+        return confirmRes;
+      } catch (err) {
+        try {
+          await request('/transcripts/multipart/abort', {
+            method: 'POST',
+            body: JSON.stringify({ uploadToken }),
+          });
+        } catch (_) {}
+        throw err;
+      }
     },
     get: (id: string) => request(`/transcripts/${id}/detail`),
     update: (id: string, updates: Record<string, any>) =>

@@ -1,4 +1,4 @@
-import { S3Client, PutObjectCommand, DeleteObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, DeleteObjectCommand, GetObjectCommand, CreateMultipartUploadCommand, UploadPartCommand, CompleteMultipartUploadCommand, AbortMultipartUploadCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { mkdir, stat } from 'fs/promises';
 import { createReadStream } from 'fs';
@@ -209,6 +209,78 @@ export async function getPresignedUploadUrl(key: string, contentType: string): P
 
   const url = await getSignedUrl(s3Client, command, { expiresIn: 3600 });
   return url;
+}
+
+export async function createMultipartUpload(key: string, contentType: string): Promise<string> {
+  if (!s3Client || !S3_BUCKET_NAME) {
+    throw new Error('S3 is not configured');
+  }
+
+  const result = await s3Client.send(
+    new CreateMultipartUploadCommand({
+      Bucket: S3_BUCKET_NAME,
+      Key: key,
+      ContentType: contentType,
+    })
+  );
+
+  if (!result.UploadId) {
+    throw new Error('Failed to create multipart upload');
+  }
+
+  return result.UploadId;
+}
+
+export async function getPresignedPartUrl(key: string, uploadId: string, partNumber: number): Promise<string> {
+  if (!s3Client || !S3_BUCKET_NAME) {
+    throw new Error('S3 is not configured');
+  }
+
+  const command = new UploadPartCommand({
+    Bucket: S3_BUCKET_NAME,
+    Key: key,
+    UploadId: uploadId,
+    PartNumber: partNumber,
+  });
+
+  return await getSignedUrl(s3Client, command, { expiresIn: 3600 });
+}
+
+export async function completeMultipartUpload(
+  key: string,
+  uploadId: string,
+  parts: Array<{ PartNumber: number; ETag: string }>
+): Promise<void> {
+  if (!s3Client || !S3_BUCKET_NAME) {
+    throw new Error('S3 is not configured');
+  }
+
+  await s3Client.send(
+    new CompleteMultipartUploadCommand({
+      Bucket: S3_BUCKET_NAME,
+      Key: key,
+      UploadId: uploadId,
+      MultipartUpload: {
+        Parts: parts.sort((a, b) => a.PartNumber - b.PartNumber),
+      },
+    })
+  );
+}
+
+export async function abortMultipartUpload(key: string, uploadId: string): Promise<void> {
+  if (!s3Client || !S3_BUCKET_NAME) return;
+
+  try {
+    await s3Client.send(
+      new AbortMultipartUploadCommand({
+        Bucket: S3_BUCKET_NAME,
+        Key: key,
+        UploadId: uploadId,
+      })
+    );
+  } catch (err: any) {
+    console.error(`[S3] Failed to abort multipart upload ${uploadId}:`, err.message);
+  }
 }
 
 export function isCloudStorageUrl(fileUrl: string): boolean {

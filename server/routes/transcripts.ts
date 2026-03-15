@@ -5,7 +5,7 @@ import { v4 as uuidv4 } from 'uuid';
 import pool from '../db.js';
 import { authenticateToken, AuthRequest } from '../middleware/auth.js';
 import { processTranscription, deduplicateExistingSegments } from '../transcription.js';
-import { s3Configured, uploadFileToS3, deleteFromS3, isCloudStorageUrl, getKeyFromStorageUrl, getPresignedUploadUrl } from '../s3.js';
+import { s3Configured, uploadFileToS3, deleteFromS3, isCloudStorageUrl, getKeyFromStorageUrl, getPresignedUploadUrl, createMultipartUpload, getPresignedPartUrl, completeMultipartUpload, abortMultipartUpload } from '../s3.js';
 import { LEGAL_AGENTS, getAgentById, RecordingSubType } from '../legalAgents.js';
 import OpenAI from 'openai';
 import fs from 'fs/promises';
@@ -199,8 +199,18 @@ router.get('/:id/detail', async (req: AuthRequest, res: Response) => {
   }
 });
 
-const MAX_FILE_SIZE = 5 * 1024 * 1024 * 1024;
-const pendingUploads = new Map<string, { userId: string; s3Key: string; filename: string; contentType: string; fileSize: number; expires: number }>();
+const pendingUploads = new Map<string, { userId: string; s3Key: string; filename: string; contentType: string; fileSize: number; expires: number; multipart?: { uploadId: string; totalParts: number; completed: boolean } }>();
+
+function validatePendingUpload(uploadToken: string, userId: string): { pending: any; error?: string; status?: number } {
+  const pending = pendingUploads.get(uploadToken);
+  if (!pending) return { pending: null, error: 'Invalid or expired upload token', status: 400 };
+  if (pending.userId !== userId) return { pending: null, error: 'Access denied', status: 403 };
+  if (pending.expires < Date.now()) {
+    pendingUploads.delete(uploadToken);
+    return { pending: null, error: 'Upload token expired', status: 400 };
+  }
+  return { pending };
+}
 
 router.post('/presigned-upload', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
@@ -216,10 +226,6 @@ router.post('/presigned-upload', authenticateToken, async (req: AuthRequest, res
     const ext = path.extname(filename).toLowerCase();
     if (!ALLOWED_TYPES.includes(contentType) && !ALLOWED_EXTENSIONS.includes(ext)) {
       return res.status(400).json({ error: 'Invalid file type. Only audio and video files are allowed.' });
-    }
-
-    if (fileSize && fileSize > MAX_FILE_SIZE) {
-      return res.status(400).json({ error: 'File too large. Maximum size is 5GB.' });
     }
 
     const s3Key = `uploads/${uuidv4()}${ext}`;
@@ -243,6 +249,154 @@ router.post('/presigned-upload', authenticateToken, async (req: AuthRequest, res
   }
 });
 
+const CHUNK_SIZE = 50 * 1024 * 1024;
+
+router.post('/multipart/initiate', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    if (!s3Configured) {
+      return res.status(400).json({ error: 'Direct upload not available. S3 storage is not configured.' });
+    }
+
+    const { filename, contentType, fileSize } = req.body;
+    if (!filename || !contentType || !fileSize) {
+      return res.status(400).json({ error: 'filename, contentType, and fileSize are required' });
+    }
+
+    const ext = path.extname(filename).toLowerCase();
+    if (!ALLOWED_TYPES.includes(contentType) && !ALLOWED_EXTENSIONS.includes(ext)) {
+      return res.status(400).json({ error: 'Invalid file type. Only audio and video files are allowed.' });
+    }
+
+    const s3Key = `uploads/${uuidv4()}${ext}`;
+    const uploadToken = uuidv4();
+    const totalParts = Math.ceil(fileSize / CHUNK_SIZE);
+
+    const uploadId = await createMultipartUpload(s3Key, contentType);
+
+    pendingUploads.set(uploadToken, {
+      userId: req.userId!,
+      s3Key,
+      filename,
+      contentType,
+      fileSize,
+      expires: Date.now() + 24 * 3600 * 1000,
+      multipart: { uploadId, totalParts, completed: false },
+    });
+
+    console.log(`[Multipart] Initiated: ${filename}, ${totalParts} parts, uploadId=${uploadId}`);
+    res.json({ uploadToken, s3Key, uploadId, totalParts, chunkSize: CHUNK_SIZE });
+  } catch (err: any) {
+    console.error('[Multipart] Error initiating:', err.message);
+    res.status(500).json({ error: 'Failed to initiate multipart upload' });
+  }
+});
+
+router.post('/multipart/presign-part', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const { uploadToken, partNumber } = req.body;
+    if (!uploadToken || !partNumber) {
+      return res.status(400).json({ error: 'uploadToken and partNumber are required' });
+    }
+
+    const { pending, error, status } = validatePendingUpload(uploadToken, req.userId!);
+    if (!pending || !pending.multipart) {
+      return res.status(status || 400).json({ error: error || 'Invalid multipart upload' });
+    }
+
+    if (partNumber < 1 || partNumber > pending.multipart.totalParts) {
+      return res.status(400).json({ error: `Invalid part number. Must be 1-${pending.multipart.totalParts}` });
+    }
+
+    const url = await getPresignedPartUrl(pending.s3Key, pending.multipart.uploadId, partNumber);
+    res.json({ url, partNumber });
+  } catch (err: any) {
+    console.error('[Multipart] Error presigning part:', err.message);
+    res.status(500).json({ error: 'Failed to generate part upload URL' });
+  }
+});
+
+router.post('/multipart/presign-batch', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const { uploadToken, partNumbers } = req.body;
+    if (!uploadToken || !partNumbers || !Array.isArray(partNumbers)) {
+      return res.status(400).json({ error: 'uploadToken and partNumbers array are required' });
+    }
+
+    const { pending, error, status } = validatePendingUpload(uploadToken, req.userId!);
+    if (!pending || !pending.multipart) {
+      return res.status(status || 400).json({ error: error || 'Invalid multipart upload' });
+    }
+
+    for (const pn of partNumbers) {
+      if (pn < 1 || pn > pending.multipart.totalParts) {
+        return res.status(400).json({ error: `Invalid part number ${pn}. Must be 1-${pending.multipart.totalParts}` });
+      }
+    }
+
+    const urls = await Promise.all(
+      partNumbers.map(async (partNumber: number) => ({
+        partNumber,
+        url: await getPresignedPartUrl(pending.s3Key, pending.multipart!.uploadId, partNumber),
+      }))
+    );
+
+    res.json({ urls });
+  } catch (err: any) {
+    console.error('[Multipart] Error presigning batch:', err.message);
+    res.status(500).json({ error: 'Failed to generate part upload URLs' });
+  }
+});
+
+router.post('/multipart/complete', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const { uploadToken, parts } = req.body;
+    if (!uploadToken || !parts || !Array.isArray(parts)) {
+      return res.status(400).json({ error: 'uploadToken and parts array are required' });
+    }
+
+    const { pending, error, status } = validatePendingUpload(uploadToken, req.userId!);
+    if (!pending || !pending.multipart) {
+      return res.status(status || 400).json({ error: error || 'Invalid multipart upload' });
+    }
+
+    if (parts.length !== pending.multipart.totalParts) {
+      return res.status(400).json({ error: `Expected ${pending.multipart.totalParts} parts but received ${parts.length}` });
+    }
+
+    await completeMultipartUpload(pending.s3Key, pending.multipart.uploadId, parts);
+    pending.multipart.completed = true;
+    console.log(`[Multipart] Completed: ${pending.filename}, ${parts.length} parts`);
+
+    res.json({ success: true });
+  } catch (err: any) {
+    console.error('[Multipart] Error completing:', err.message);
+    res.status(500).json({ error: 'Failed to complete multipart upload' });
+  }
+});
+
+router.post('/multipart/abort', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const { uploadToken } = req.body;
+    if (!uploadToken) {
+      return res.status(400).json({ error: 'uploadToken is required' });
+    }
+
+    const { pending, error, status } = validatePendingUpload(uploadToken, req.userId!);
+    if (!pending || !pending.multipart) {
+      return res.status(status || 400).json({ error: error || 'Invalid multipart upload' });
+    }
+
+    await abortMultipartUpload(pending.s3Key, pending.multipart.uploadId);
+    pendingUploads.delete(uploadToken);
+    console.log(`[Multipart] Aborted: ${pending.filename}`);
+
+    res.json({ success: true });
+  } catch (err: any) {
+    console.error('[Multipart] Error aborting:', err.message);
+    res.status(500).json({ error: 'Failed to abort multipart upload' });
+  }
+});
+
 router.post('/confirm-upload', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
     const { uploadToken, description, folderId, expectedSpeakers, recordingType, practiceArea } = req.body;
@@ -250,18 +404,13 @@ router.post('/confirm-upload', authenticateToken, async (req: AuthRequest, res: 
       return res.status(400).json({ error: 'uploadToken is required' });
     }
 
-    const pending = pendingUploads.get(uploadToken);
+    const { pending, error, status } = validatePendingUpload(uploadToken, req.userId!);
     if (!pending) {
-      return res.status(400).json({ error: 'Invalid or expired upload token' });
+      return res.status(status || 400).json({ error: error || 'Invalid or expired upload token' });
     }
 
-    if (pending.userId !== req.userId) {
-      return res.status(403).json({ error: 'Access denied' });
-    }
-
-    if (pending.expires < Date.now()) {
-      pendingUploads.delete(uploadToken);
-      return res.status(400).json({ error: 'Upload token expired' });
+    if (pending.multipart && !pending.multipart.completed) {
+      return res.status(400).json({ error: 'Multipart upload not yet completed. Call /multipart/complete first.' });
     }
 
     pendingUploads.delete(uploadToken);
