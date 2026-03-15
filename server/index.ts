@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
+import cookieParser from 'cookie-parser';
 import path from 'path';
 import fs from 'fs';
 import os from 'os';
@@ -13,7 +14,7 @@ import transcriptRoutes from './routes/transcripts.js';
 import folderRoutes from './routes/folders.js';
 import mattrmindrRoutes from './routes/mattrmindr.js';
 import externalRoutes from './routes/external.js';
-import { authenticateToken } from './middleware/auth.js';
+import { authenticateToken, csrfProtection } from './middleware/auth.js';
 import pool from './db.js';
 import { deduplicateExistingSegments, processTranscription } from './transcription.js';
 
@@ -24,11 +25,39 @@ const app = express();
 const isProduction = process.env.REPLIT_DEPLOYMENT === '1';
 const PORT = isProduction ? 5000 : 3000;
 
+const allowedOrigins: string[] = [];
+if (process.env.ALLOWED_ORIGINS) {
+  allowedOrigins.push(...process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim()).filter(Boolean));
+}
+if (allowedOrigins.length === 0) {
+  if (isProduction) {
+    allowedOrigins.push('https://scribe.mattrmindr.com', 'http://scribe.mattrmindr.com');
+  } else {
+    allowedOrigins.push('http://localhost:5000', 'http://localhost:3000');
+    if (process.env.REPLIT_DEV_DOMAIN) {
+      allowedOrigins.push(`https://${process.env.REPLIT_DEV_DOMAIN}`);
+    }
+    if (process.env.REPLIT_DOMAINS) {
+      for (const domain of process.env.REPLIT_DOMAINS.split(',')) {
+        allowedOrigins.push(`https://${domain.trim()}`);
+      }
+    }
+  }
+}
 
 app.use(cors({
-  origin: true,
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(null, false);
+    }
+  },
   credentials: true,
 }));
+
+app.use(cookieParser());
+app.use(csrfProtection as any);
 
 
 app.get('/', (_req, res, next) => {

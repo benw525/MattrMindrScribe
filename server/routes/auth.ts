@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import pool from '../db.js';
-import { authenticateToken, generateToken, AuthRequest } from '../middleware/auth.js';
+import { authenticateToken, generateToken, generateCsrfToken, setAuthCookies, clearAuthCookies, AuthRequest } from '../middleware/auth.js';
 
 const router = Router();
 
@@ -26,9 +26,11 @@ router.post('/register', async (req: Request, res: Response) => {
 
     const user = result.rows[0];
     const token = generateToken(user.id);
+    const csrfToken = generateCsrfToken();
+
+    setAuthCookies(res, token, csrfToken);
 
     res.status(201).json({
-      token,
       user: {
         id: user.id,
         email: user.email,
@@ -68,9 +70,11 @@ router.post('/login', async (req: Request, res: Response) => {
     }
 
     const token = generateToken(user.id);
+    const csrfToken = generateCsrfToken();
+
+    setAuthCookies(res, token, csrfToken);
 
     res.json({
-      token,
       user: {
         id: user.id,
         email: user.email,
@@ -83,6 +87,11 @@ router.post('/login', async (req: Request, res: Response) => {
     console.error('Login error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
+});
+
+router.post('/logout', (_req: Request, res: Response) => {
+  clearAuthCookies(res);
+  res.json({ message: 'Logged out successfully' });
 });
 
 router.get('/me', authenticateToken, async (req: AuthRequest, res: Response) => {
