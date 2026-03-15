@@ -1,6 +1,8 @@
 import { Router, Response } from 'express';
 import pool from '../db.js';
 import { authenticateToken, AuthRequest } from '../middleware/auth.js';
+import { validate } from '../middleware/validate.js';
+import { mattrmindrConnectSchema, mattrmindrSendConfirmSchema, mattrmindrSendTranscriptSchema } from '../validation/schemas.js';
 
 const router = Router();
 
@@ -32,13 +34,9 @@ function validateBaseUrl(url: string): string | null {
   }
 }
 
-router.post('/connect', async (req: AuthRequest, res: Response) => {
+router.post('/connect', validate(mattrmindrConnectSchema), async (req: AuthRequest, res: Response) => {
   try {
     const { baseUrl, email, password } = req.body;
-
-    if (!baseUrl || !email || !password) {
-      return res.status(400).json({ error: 'Base URL, email, and password are required' });
-    }
 
     const cleanUrl = validateBaseUrl(baseUrl);
     if (!cleanUrl) {
@@ -268,7 +266,7 @@ router.post('/send/:folderId', async (req: AuthRequest, res: Response) => {
   }
 });
 
-router.post('/send/:folderId/confirm', async (req: AuthRequest, res: Response) => {
+router.post('/send/:folderId/confirm', validate(mattrmindrSendConfirmSchema), async (req: AuthRequest, res: Response) => {
   try {
     const conn = await getConnection(req.userId!);
     if (!conn) {
@@ -356,7 +354,7 @@ router.post('/send/:folderId/confirm', async (req: AuthRequest, res: Response) =
   }
 });
 
-router.post('/send-transcript/:transcriptId', async (req: AuthRequest, res: Response) => {
+router.post('/send-transcript/:transcriptId', validate(mattrmindrSendTranscriptSchema), async (req: AuthRequest, res: Response) => {
   try {
     const conn = await getConnection(req.userId!);
     if (!conn) {
@@ -365,10 +363,6 @@ router.post('/send-transcript/:transcriptId', async (req: AuthRequest, res: Resp
 
     const { transcriptId } = req.params;
     const { caseId, caseName } = req.body;
-
-    if (!caseId) {
-      return res.status(400).json({ error: 'caseId is required' });
-    }
 
     const transcriptResult = await pool.query(
       `SELECT t.id, t.filename, t.description, t.type, t.duration, t.pipeline_log, t.folder_id,

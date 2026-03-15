@@ -1,6 +1,8 @@
 import { Router, Response } from 'express';
 import pool from '../db.js';
 import { authenticateToken, AuthRequest } from '../middleware/auth.js';
+import { validate } from '../middleware/validate.js';
+import { createFolderSchema, updateFolderSchema, moveTranscriptsSchema } from '../validation/schemas.js';
 
 const router = Router();
 
@@ -29,13 +31,9 @@ router.get('/', async (req: AuthRequest, res: Response) => {
   }
 });
 
-router.post('/', async (req: AuthRequest, res: Response) => {
+router.post('/', validate(createFolderSchema), async (req: AuthRequest, res: Response) => {
   try {
     const { name, caseNumber, parentId, mattrmindrCaseId, mattrmindrCaseName } = req.body;
-
-    if (!name) {
-      return res.status(400).json({ error: 'Folder name is required' });
-    }
 
     const result = await pool.query(
       `INSERT INTO folders (name, case_number, parent_id, user_id, mattrmindr_case_id, mattrmindr_case_name)
@@ -58,7 +56,7 @@ router.post('/', async (req: AuthRequest, res: Response) => {
   }
 });
 
-router.patch('/:id', async (req: AuthRequest, res: Response) => {
+router.patch('/:id', validate(updateFolderSchema), async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
     const { name, caseNumber } = req.body;
@@ -113,13 +111,9 @@ router.delete('/:id', async (req: AuthRequest, res: Response) => {
   }
 });
 
-router.post('/move-transcripts', async (req: AuthRequest, res: Response) => {
+router.post('/move-transcripts', validate(moveTranscriptsSchema), async (req: AuthRequest, res: Response) => {
   try {
     const { transcriptIds, folderId } = req.body;
-
-    if (!transcriptIds || !Array.isArray(transcriptIds)) {
-      return res.status(400).json({ error: 'Array of transcript IDs required' });
-    }
 
     const placeholders = transcriptIds.map((_: string, i: number) => `$${i + 1}`).join(', ');
     await pool.query(

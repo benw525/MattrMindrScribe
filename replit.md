@@ -60,6 +60,8 @@ A full-stack application for managing legal case recordings/transcripts. Feature
 - `server/routes/folders.ts` - Folder CRUD + move transcripts + MattrMindr case linking
 - `server/routes/mattrmindr.ts` - MattrMindr integration API (connect, disconnect, status, case search proxy, send files)
 - `server/routes/external.ts` - External API for inbound integrations (auth, receive files for transcription, transcription status)
+- `server/validation/schemas.ts` - Zod validation schemas for all API request bodies
+- `server/middleware/validate.ts` - Generic Zod validation middleware factory
 - `server/replit_integrations/` - OpenAI AI Integrations (audio, chat, image, batch utilities)
 
 ## Routes

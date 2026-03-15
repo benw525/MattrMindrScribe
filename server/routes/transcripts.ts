@@ -6,6 +6,8 @@ import { v4 as uuidv4 } from 'uuid';
 import pool from '../db.js';
 import { authenticateToken, AuthRequest } from '../middleware/auth.js';
 import { authenticateAdmin } from '../middleware/adminAuth.js';
+import { validate } from '../middleware/validate.js';
+import { presignedUploadSchema, initiateMultipartSchema, presignPartSchema, presignBatchSchema, completeMultipartSchema, abortMultipartSchema, confirmUploadSchema, updateTranscriptSchema, deleteTranscriptsSchema, mergeSpeakerSchema, summarizeSchema, createVersionSchema, legacyUploadMetadataSchema } from '../validation/schemas.js';
 import { processTranscription, deduplicateExistingSegments } from '../transcription.js';
 import { s3Configured, uploadFileToS3, deleteFromS3, isCloudStorageUrl, getKeyFromStorageUrl, getPresignedUploadUrl, createMultipartUpload, getPresignedPartUrl, completeMultipartUpload, abortMultipartUpload } from '../s3.js';
 import { LEGAL_AGENTS, getAgentById, RecordingSubType } from '../legalAgents.js';
@@ -237,16 +239,13 @@ async function validatePendingUpload(uploadToken: string, userId: string): Promi
   return { pending };
 }
 
-router.post('/presigned-upload', uploadLimiter, async (req: AuthRequest, res: Response) => {
+router.post('/presigned-upload', uploadLimiter, validate(presignedUploadSchema), async (req: AuthRequest, res: Response) => {
   try {
     if (!s3Configured) {
       return res.status(400).json({ error: 'Direct upload not available. S3 storage is not configured.' });
     }
 
     const { filename, contentType, fileSize } = req.body;
-    if (!filename || !contentType) {
-      return res.status(400).json({ error: 'filename and contentType are required' });
-    }
 
     const ext = path.extname(filename).toLowerCase();
     if (!ext || !ALLOWED_EXTENSIONS.includes(ext)) {
@@ -277,16 +276,13 @@ router.post('/presigned-upload', uploadLimiter, async (req: AuthRequest, res: Re
 
 const CHUNK_SIZE = 25 * 1024 * 1024;
 
-router.post('/multipart/initiate', async (req: AuthRequest, res: Response) => {
+router.post('/multipart/initiate', validate(initiateMultipartSchema), async (req: AuthRequest, res: Response) => {
   try {
     if (!s3Configured) {
       return res.status(400).json({ error: 'Direct upload not available. S3 storage is not configured.' });
     }
 
     const { filename, contentType, fileSize } = req.body;
-    if (!filename || !contentType || !fileSize) {
-      return res.status(400).json({ error: 'filename, contentType, and fileSize are required' });
-    }
 
     const ext = path.extname(filename).toLowerCase();
     if (!ext || !ALLOWED_EXTENSIONS.includes(ext)) {
@@ -317,12 +313,9 @@ router.post('/multipart/initiate', async (req: AuthRequest, res: Response) => {
   }
 });
 
-router.post('/multipart/presign-part', authenticateToken, async (req: AuthRequest, res: Response) => {
+router.post('/multipart/presign-part', authenticateToken, validate(presignPartSchema), async (req: AuthRequest, res: Response) => {
   try {
     const { uploadToken, partNumber } = req.body;
-    if (!uploadToken || !partNumber) {
-      return res.status(400).json({ error: 'uploadToken and partNumber are required' });
-    }
 
     const { pending, error, status } = await validatePendingUpload(uploadToken, req.userId!);
     if (!pending || !pending.multipart) {
@@ -341,12 +334,9 @@ router.post('/multipart/presign-part', authenticateToken, async (req: AuthReques
   }
 });
 
-router.post('/multipart/presign-batch', authenticateToken, async (req: AuthRequest, res: Response) => {
+router.post('/multipart/presign-batch', authenticateToken, validate(presignBatchSchema), async (req: AuthRequest, res: Response) => {
   try {
     const { uploadToken, partNumbers } = req.body;
-    if (!uploadToken || !partNumbers || !Array.isArray(partNumbers)) {
-      return res.status(400).json({ error: 'uploadToken and partNumbers array are required' });
-    }
 
     const { pending, error, status } = await validatePendingUpload(uploadToken, req.userId!);
     if (!pending || !pending.multipart) {
@@ -373,12 +363,9 @@ router.post('/multipart/presign-batch', authenticateToken, async (req: AuthReque
   }
 });
 
-router.post('/multipart/complete', authenticateToken, async (req: AuthRequest, res: Response) => {
+router.post('/multipart/complete', authenticateToken, validate(completeMultipartSchema), async (req: AuthRequest, res: Response) => {
   try {
     const { uploadToken, parts } = req.body;
-    if (!uploadToken || !parts || !Array.isArray(parts)) {
-      return res.status(400).json({ error: 'uploadToken and parts array are required' });
-    }
 
     const { pending, error, status } = await validatePendingUpload(uploadToken, req.userId!);
     if (!pending || !pending.multipart) {
@@ -403,12 +390,9 @@ router.post('/multipart/complete', authenticateToken, async (req: AuthRequest, r
   }
 });
 
-router.post('/multipart/abort', authenticateToken, async (req: AuthRequest, res: Response) => {
+router.post('/multipart/abort', authenticateToken, validate(abortMultipartSchema), async (req: AuthRequest, res: Response) => {
   try {
     const { uploadToken } = req.body;
-    if (!uploadToken) {
-      return res.status(400).json({ error: 'uploadToken is required' });
-    }
 
     const { pending, error, status } = await validatePendingUpload(uploadToken, req.userId!);
     if (!pending || !pending.multipart) {
@@ -426,12 +410,9 @@ router.post('/multipart/abort', authenticateToken, async (req: AuthRequest, res:
   }
 });
 
-router.post('/confirm-upload', authenticateToken, async (req: AuthRequest, res: Response) => {
+router.post('/confirm-upload', authenticateToken, validate(confirmUploadSchema), async (req: AuthRequest, res: Response) => {
   try {
     const { uploadToken, description, folderId, expectedSpeakers, recordingType, practiceArea } = req.body;
-    if (!uploadToken) {
-      return res.status(400).json({ error: 'uploadToken is required' });
-    }
 
     const { pending, error, status } = await validatePendingUpload(uploadToken, req.userId!);
     if (!pending) {
@@ -516,7 +497,16 @@ router.post('/upload', uploadLimiter, (req: AuthRequest, res: Response, next) =>
     }
     console.log('[Upload] File received:', req.file.originalname, req.file.size, 'bytes');
 
-    const { description, folderId, expectedSpeakers, recordingType, practiceArea } = req.body;
+    const metadataResult = legacyUploadMetadataSchema.safeParse(req.body);
+    if (!metadataResult.success) {
+      await fs.unlink(req.file.path).catch(() => {});
+      const details = metadataResult.error.errors.map(e => ({
+        field: e.path.join('.'),
+        message: e.message,
+      }));
+      return res.status(400).json({ error: 'Validation failed', details });
+    }
+    const { description, folderId, expectedSpeakers, recordingType, practiceArea } = metadataResult.data;
     const fileType = req.file.mimetype.startsWith('video/') ? 'video' : 'audio';
 
     let fileUrl: string;
@@ -546,7 +536,7 @@ router.post('/upload', uploadLimiter, (req: AuthRequest, res: Response, next) =>
         fileUrl,
         folderId || null,
         req.userId,
-        expectedSpeakers ? parseInt(expectedSpeakers, 10) : null,
+        expectedSpeakers || null,
         recordingType || null,
         practiceArea || null,
       ]
@@ -581,7 +571,7 @@ router.post('/upload', uploadLimiter, (req: AuthRequest, res: Response, next) =>
   }
 });
 
-router.patch('/:id', async (req: AuthRequest, res: Response) => {
+router.patch('/:id', validate(updateTranscriptSchema), async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
     const { filename, description, status, folderId, segments, speakers } = req.body;
@@ -689,14 +679,10 @@ router.patch('/:id', async (req: AuthRequest, res: Response) => {
   }
 });
 
-router.post('/:id/merge-speaker', async (req: AuthRequest, res: Response) => {
+router.post('/:id/merge-speaker', validate(mergeSpeakerSchema), async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
     const { fromSpeaker, toSpeaker } = req.body;
-
-    if (!fromSpeaker || !toSpeaker) {
-      return res.status(400).json({ error: 'Both fromSpeaker and toSpeaker are required' });
-    }
     if (fromSpeaker === toSpeaker) {
       return res.status(400).json({ error: 'fromSpeaker and toSpeaker must be different' });
     }
@@ -888,12 +874,9 @@ router.post('/:id/deduplicate', async (req: AuthRequest, res: Response) => {
   }
 });
 
-router.delete('/', async (req: AuthRequest, res: Response) => {
+router.delete('/', validate(deleteTranscriptsSchema), async (req: AuthRequest, res: Response) => {
   try {
     const { ids } = req.body;
-    if (!ids || !Array.isArray(ids) || ids.length === 0) {
-      return res.status(400).json({ error: 'Array of transcript IDs required' });
-    }
 
     const placeholders = ids.map((_: string, i: number) => `$${i + 1}`).join(', ');
 
@@ -1004,7 +987,7 @@ router.post('/:id/permanent-delete', async (req: AuthRequest, res: Response) => 
   }
 });
 
-router.post('/:id/versions', async (req: AuthRequest, res: Response) => {
+router.post('/:id/versions', validate(createVersionSchema), async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
     const { changeDescription } = req.body;
@@ -1088,14 +1071,10 @@ router.get('/agents', (_req: AuthRequest, res: Response) => {
   res.json(agents);
 });
 
-router.post('/:id/summarize', async (req: AuthRequest, res: Response) => {
+router.post('/:id/summarize', validate(summarizeSchema), async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
     const { agentType, subType, customDescription } = req.body;
-
-    if (!agentType) {
-      return res.status(400).json({ error: 'agentType is required' });
-    }
 
     const agent = getAgentById(agentType);
     if (!agent) {

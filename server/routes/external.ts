@@ -8,6 +8,8 @@ import { Readable } from 'stream';
 import { pipeline } from 'stream/promises';
 import pool from '../db.js';
 import { generateToken, authenticateToken, AuthRequest } from '../middleware/auth.js';
+import { validate } from '../middleware/validate.js';
+import { externalAuthSchema, externalReceiveSchema } from '../validation/schemas.js';
 import { processTranscription } from '../transcription.js';
 import { s3Configured, uploadFileToS3 } from '../s3.js';
 
@@ -59,13 +61,9 @@ function validateExternalUrl(urlStr: string): string | null {
   return null;
 }
 
-router.post('/auth', async (req: Request, res: Response) => {
+router.post('/auth', validate(externalAuthSchema), async (req: Request, res: Response) => {
   try {
     const { email, password } = req.body;
-
-    if (!email || !password) {
-      return res.status(400).json({ error: 'Email and password are required' });
-    }
 
     const result = await pool.query(
       'SELECT id, email, password_hash, full_name FROM users WHERE email = $1',
@@ -99,13 +97,9 @@ router.post('/auth', async (req: Request, res: Response) => {
   }
 });
 
-router.post('/receive', authenticateToken, async (req: AuthRequest, res: Response) => {
+router.post('/receive', authenticateToken, validate(externalReceiveSchema), async (req: AuthRequest, res: Response) => {
   try {
     const { filename, fileUrl, contentType, fileSize, description, caseId, caseName, expectedSpeakers } = req.body;
-
-    if (!filename || !fileUrl) {
-      return res.status(400).json({ error: 'filename and fileUrl are required' });
-    }
 
     const ext = path.extname(filename).toLowerCase();
     if (!ALLOWED_EXTENSIONS.includes(ext)) {
