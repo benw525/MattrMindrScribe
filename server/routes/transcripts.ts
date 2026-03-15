@@ -4,6 +4,7 @@ import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
 import pool from '../db.js';
 import { authenticateToken, AuthRequest } from '../middleware/auth.js';
+import { authenticateAdmin } from '../middleware/adminAuth.js';
 import { processTranscription, deduplicateExistingSegments } from '../transcription.js';
 import { s3Configured, uploadFileToS3, deleteFromS3, isCloudStorageUrl, getKeyFromStorageUrl, getPresignedUploadUrl, createMultipartUpload, getPresignedPartUrl, completeMultipartUpload, abortMultipartUpload } from '../s3.js';
 import { LEGAL_AGENTS, getAgentById, RecordingSubType } from '../legalAgents.js';
@@ -53,15 +54,8 @@ const upload = multer({
   },
 });
 
-router.post('/admin/restart-processing', async (req, res: Response) => {
+router.post('/admin/restart-processing', authenticateAdmin, async (req, res: Response) => {
   try {
-    const adminKey = process.env.ADMIN_API_KEY;
-    const providedKey = req.headers['x-admin-key'];
-    if (!adminKey || providedKey !== adminKey) {
-      res.status(401).json({ error: 'Unauthorized' });
-      return;
-    }
-
     const { rows: stuck } = await pool.query(
       `SELECT t.id, t.filename, t.pipeline_log,
         (SELECT COUNT(*) FROM transcript_segments s WHERE s.transcript_id = t.id) as seg_count

@@ -2,6 +2,8 @@ import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
+import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
 import path from 'path';
 import fs from 'fs';
 import os from 'os';
@@ -56,8 +58,64 @@ app.use(cors({
 }));
 
 app.use(cookieParser());
-app.use(csrfProtection);
 
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'"],
+      styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+      fontSrc: ["'self'", "https://fonts.gstatic.com"],
+      imgSrc: ["'self'", "data:", "blob:"],
+      connectSrc: ["'self'", "https://*.amazonaws.com"],
+      mediaSrc: ["'self'", "blob:", "https://*.amazonaws.com"],
+      frameSrc: ["'none'"],
+    },
+  },
+  crossOriginEmbedderPolicy: false,
+}));
+
+const generalLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 100,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests, please try again later.' },
+});
+
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many authentication attempts, please try again later.' },
+});
+
+const uploadLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Upload limit reached, please try again later.' },
+});
+
+const adminLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 1,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Admin rate limit reached, please try again later.' },
+});
+
+app.use('/api/', generalLimiter);
+app.use('/api/auth/login', authLimiter);
+app.use('/api/auth/register', authLimiter);
+app.use('/api/transcripts/upload', uploadLimiter);
+app.use('/api/transcripts/presigned-upload', uploadLimiter);
+app.use('/api/transcripts/multipart', uploadLimiter);
+app.use('/api/transcripts/admin', adminLimiter);
+
+app.use(csrfProtection);
 
 app.get('/', (_req, res, next) => {
   if (isProduction) {
@@ -70,7 +128,15 @@ app.get('/', (_req, res, next) => {
   next();
 });
 
-app.use(express.json({ limit: '50mb' }));
+const largeJsonRoutes = ['/api/transcripts'];
+app.use((req, res, next) => {
+  for (const prefix of largeJsonRoutes) {
+    if (req.originalUrl.startsWith(prefix)) {
+      return express.json({ limit: '10mb' })(req, res, next);
+    }
+  }
+  return express.json({ limit: '1mb' })(req, res, next);
+});
 app.use(express.urlencoded({ extended: true }));
 
 app.use('/uploads', authenticateToken as any, express.static(path.join(__dirname, '..', 'uploads')));

@@ -81,9 +81,13 @@ export function csrfProtection(req: AuthRequest, res: Response, next: NextFuncti
     return next();
   }
 
-  const unauthPaths = ['/api/auth/login', '/api/auth/register'];
+  const csrfExemptPaths = ['/api/auth/login', '/api/auth/register'];
   const checkPath = req.originalUrl.split('?')[0];
-  if (unauthPaths.includes(checkPath) || unauthPaths.includes(req.path)) {
+  if (csrfExemptPaths.includes(checkPath) || csrfExemptPaths.includes(req.path)) {
+    return next();
+  }
+
+  if (req.path.startsWith('/api/transcripts/admin/') || checkPath.startsWith('/api/transcripts/admin/')) {
     return next();
   }
 
