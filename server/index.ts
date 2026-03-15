@@ -363,13 +363,15 @@ const server = app.listen(PORT, '0.0.0.0', () => {
 server.timeout = 30 * 60 * 1000;
 server.requestTimeout = 30 * 60 * 1000;
 
-setInterval(async () => {
+async function cleanupExpiredTokens() {
   try {
     const { rows: expiredUploads } = await pool.query(
       `SELECT token, s3_key, multipart_upload_id, multipart_completed
        FROM pending_uploads WHERE expires < NOW()`
     );
 
+    let deletedUploads = 0;
+    let skippedUploads = 0;
     for (const upload of expiredUploads) {
       if (upload.multipart_upload_id && !upload.multipart_completed) {
         try {
@@ -378,13 +380,15 @@ setInterval(async () => {
           console.log(`[Cleanup] Aborted expired multipart upload: ${upload.s3_key}`);
         } catch (err: any) {
           console.error(`[Cleanup] Failed to abort multipart for ${upload.s3_key}:`, err.message);
+          skippedUploads++;
           continue;
         }
       }
       await pool.query('DELETE FROM pending_uploads WHERE token = $1', [upload.token]);
+      deletedUploads++;
     }
-    if (expiredUploads.length > 0) {
-      console.log(`[Cleanup] Removed ${expiredUploads.length} expired pending upload(s)`);
+    if (deletedUploads > 0 || skippedUploads > 0) {
+      console.log(`[Cleanup] Pending uploads: ${deletedUploads} removed, ${skippedUploads} skipped (abort failed)`);
     }
 
     const { rowCount: mediaCount } = await pool.query('DELETE FROM media_tokens WHERE expires < NOW()');
@@ -394,7 +398,10 @@ setInterval(async () => {
   } catch (err: any) {
     console.error('[Cleanup] Error during token cleanup:', err.message);
   }
-}, 15 * 60 * 1000);
+}
+
+setTimeout(() => cleanupExpiredTokens(), 10_000);
+setInterval(cleanupExpiredTokens, 15 * 60 * 1000);
 
 const serverBootTime = new Date().toISOString();
 
