@@ -96,6 +96,9 @@ const uploadLimiter = rateLimit({
   max: 20,
   standardHeaders: true,
   legacyHeaders: false,
+  keyGenerator: (req: any) => {
+    return req.userId || req.ip;
+  },
   message: { error: 'Upload limit reached, please try again later.' },
 });
 
@@ -128,10 +131,14 @@ app.get('/', (_req, res, next) => {
   next();
 });
 
-const largeJsonRoutes = ['/api/transcripts'];
+const largeBodyPatterns = [
+  /^\/api\/transcripts\/\d+\/versions/,
+  /^\/api\/transcripts\/\d+$/,
+];
 app.use((req, res, next) => {
-  for (const prefix of largeJsonRoutes) {
-    if (req.originalUrl.startsWith(prefix)) {
+  const cleanPath = req.originalUrl.split('?')[0];
+  for (const pattern of largeBodyPatterns) {
+    if (pattern.test(cleanPath)) {
       return express.json({ limit: '10mb' })(req, res, next);
     }
   }

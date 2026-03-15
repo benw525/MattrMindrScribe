@@ -218,8 +218,11 @@ router.post('/presigned-upload', authenticateToken, async (req: AuthRequest, res
     }
 
     const ext = path.extname(filename).toLowerCase();
-    if (!ALLOWED_TYPES.includes(contentType) && !ALLOWED_EXTENSIONS.includes(ext)) {
-      return res.status(400).json({ error: 'Invalid file type. Only audio and video files are allowed.' });
+    if (!ext || !ALLOWED_EXTENSIONS.includes(ext)) {
+      return res.status(400).json({ error: 'Invalid file extension. Only audio and video files are allowed.' });
+    }
+    if (!ALLOWED_TYPES.includes(contentType)) {
+      return res.status(400).json({ error: 'Invalid content type. Only audio and video MIME types are allowed.' });
     }
 
     const s3Key = `uploads/${uuidv4()}${ext}`;
@@ -257,8 +260,11 @@ router.post('/multipart/initiate', authenticateToken, async (req: AuthRequest, r
     }
 
     const ext = path.extname(filename).toLowerCase();
-    if (!ALLOWED_TYPES.includes(contentType) && !ALLOWED_EXTENSIONS.includes(ext)) {
-      return res.status(400).json({ error: 'Invalid file type. Only audio and video files are allowed.' });
+    if (!ext || !ALLOWED_EXTENSIONS.includes(ext)) {
+      return res.status(400).json({ error: 'Invalid file extension. Only audio and video files are allowed.' });
+    }
+    if (!ALLOWED_TYPES.includes(contentType)) {
+      return res.status(400).json({ error: 'Invalid content type. Only audio and video MIME types are allowed.' });
     }
 
     const s3Key = `uploads/${uuidv4()}${ext}`;
