@@ -118,14 +118,14 @@ app.get('/', (_req, res, next) => {
   next();
 });
 
-const largeBodyPatterns = [
-  /^\/api\/transcripts\/[^/]+\/versions/,
-  /^\/api\/transcripts\/[^/]+$/,
+const largeBodyRoutes: Array<{ method: string; pattern: RegExp }> = [
+  { method: 'POST', pattern: /^\/api\/transcripts\/[^/]+\/versions/ },
+  { method: 'PATCH', pattern: /^\/api\/transcripts\/[^/]+$/ },
 ];
 app.use((req, res, next) => {
   const cleanPath = req.originalUrl.split('?')[0];
-  for (const pattern of largeBodyPatterns) {
-    if (pattern.test(cleanPath)) {
+  for (const route of largeBodyRoutes) {
+    if (req.method === route.method && route.pattern.test(cleanPath)) {
       return express.json({ limit: '10mb' })(req, res, next);
     }
   }
