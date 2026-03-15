@@ -247,32 +247,6 @@ process.on('unhandledRejection', (err) => {
 });
 
 pool.query(`
-  CREATE OR REPLACE FUNCTION update_updated_at_column()
-  RETURNS TRIGGER AS $$
-  BEGIN
-    NEW.updated_at = NOW();
-    RETURN NEW;
-  END;
-  $$ LANGUAGE plpgsql;
-`).then(() => {
-  const tables = ['users', 'transcripts', 'folders', 'mattrmindr_connections'];
-  for (const table of tables) {
-    pool.query(`
-      DO $$ BEGIN
-        IF NOT EXISTS (
-          SELECT 1 FROM pg_trigger WHERE tgname = 'set_updated_at_${table}'
-        ) THEN
-          CREATE TRIGGER set_updated_at_${table}
-            BEFORE UPDATE ON ${table}
-            FOR EACH ROW
-            EXECUTE FUNCTION update_updated_at_column();
-        END IF;
-      END $$;
-    `).catch((err: any) => console.error(`Migration error (trigger ${table}):`, err.message));
-  }
-}).catch((err: any) => console.error('Migration error (update_updated_at_column):', err.message));
-
-pool.query(`
   ALTER TABLE transcripts ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ DEFAULT NULL;
   ALTER TABLE folders ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ DEFAULT NULL;
 `).then(() => {
@@ -321,6 +295,32 @@ pool.query(`
     UNIQUE(user_id)
   );
 `).catch((err: any) => console.error('Migration error (mattrmindr_connections):', err.message));
+
+pool.query(`
+  CREATE OR REPLACE FUNCTION update_updated_at_column()
+  RETURNS TRIGGER AS $$
+  BEGIN
+    NEW.updated_at = NOW();
+    RETURN NEW;
+  END;
+  $$ LANGUAGE plpgsql;
+`).then(() => {
+  const tables = ['users', 'transcripts', 'folders', 'mattrmindr_connections'];
+  for (const table of tables) {
+    pool.query(`
+      DO $$ BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_trigger WHERE tgname = 'set_updated_at_${table}'
+        ) THEN
+          CREATE TRIGGER set_updated_at_${table}
+            BEFORE UPDATE ON ${table}
+            FOR EACH ROW
+            EXECUTE FUNCTION update_updated_at_column();
+        END IF;
+      END $$;
+    `).catch((err: any) => console.error(`Migration error (trigger ${table}):`, err.message));
+  }
+}).catch((err: any) => console.error('Migration error (update_updated_at_column):', err.message));
 
 pool.query(`
   ALTER TABLE folders ADD COLUMN IF NOT EXISTS mattrmindr_case_id VARCHAR(255) DEFAULT NULL;
@@ -455,6 +455,11 @@ async function purgeOldSoftDeletes() {
           } catch (err: any) {
             console.error(`[Purge] Failed to delete S3 object for transcript ${t.id}:`, err.message);
           }
+        } else if (t.file_url) {
+          try {
+            const localPath = path.join(process.cwd(), t.file_url.startsWith('/') ? t.file_url.slice(1) : t.file_url);
+            if (fs.existsSync(localPath)) fs.unlinkSync(localPath);
+          } catch {}
         }
         await pool.query('DELETE FROM transcripts WHERE id = $1', [t.id]);
       }

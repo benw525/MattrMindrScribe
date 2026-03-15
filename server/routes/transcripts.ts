@@ -988,6 +988,12 @@ router.post('/:id/permanent-delete', async (req: AuthRequest, res: Response) => 
       } catch (err: any) {
         console.error(`[Permanent Delete] S3 cleanup error for ${id}:`, err.message);
       }
+    } else if (row.file_url) {
+      try {
+        const localPath = path.join(process.cwd(), row.file_url.startsWith('/') ? row.file_url.slice(1) : row.file_url);
+        const fsModule = await import('fs');
+        if (fsModule.existsSync(localPath)) fsModule.unlinkSync(localPath);
+      } catch {}
     }
 
     await pool.query('DELETE FROM transcripts WHERE id = $1', [id]);
