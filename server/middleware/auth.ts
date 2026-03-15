@@ -84,11 +84,6 @@ export function csrfProtection(req: AuthRequest, res: Response, next: NextFuncti
     return next();
   }
 
-  const authHeader = req.headers['authorization'];
-  if (authHeader && authHeader.startsWith('Bearer ')) {
-    return next();
-  }
-
   const csrfCookie = req.cookies?.csrf_token;
   const csrfHeader = req.headers['x-csrf-token'];
 

@@ -38,7 +38,7 @@ async function request(endpoint: string, options: RequestInit = {}) {
     throw new Error('Unable to connect to the server. Please try again in a moment.');
   }
 
-  if (res.status === 401 || res.status === 403) {
+  if (res.status === 401) {
     clearAuthState();
     throw new Error('Authentication required');
   }
@@ -229,7 +229,7 @@ export const api = {
         credentials: 'include',
         body: JSON.stringify({ agentType, subType, ...(customDescription ? { customDescription } : {}) }),
       });
-      if (res.status === 401 || res.status === 403) {
+      if (res.status === 401) {
         clearAuthState();
         throw new Error('Authentication required');
       }

@@ -29,18 +29,17 @@ const allowedOrigins: string[] = [];
 if (process.env.ALLOWED_ORIGINS) {
   allowedOrigins.push(...process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim()).filter(Boolean));
 }
-if (allowedOrigins.length === 0) {
-  if (isProduction) {
-    allowedOrigins.push('https://scribe.mattrmindr.com', 'http://scribe.mattrmindr.com');
-  } else {
-    allowedOrigins.push('http://localhost:5000', 'http://localhost:3000');
-    if (process.env.REPLIT_DEV_DOMAIN) {
-      allowedOrigins.push(`https://${process.env.REPLIT_DEV_DOMAIN}`);
-    }
-    if (process.env.REPLIT_DOMAINS) {
-      for (const domain of process.env.REPLIT_DOMAINS.split(',')) {
-        allowedOrigins.push(`https://${domain.trim()}`);
-      }
+if (isProduction && allowedOrigins.length === 0) {
+  allowedOrigins.push('https://scribe.mattrmindr.com');
+}
+if (!isProduction) {
+  allowedOrigins.push('http://localhost:5000', 'http://localhost:3000');
+  if (process.env.REPLIT_DEV_DOMAIN) {
+    allowedOrigins.push(`https://${process.env.REPLIT_DEV_DOMAIN}`);
+  }
+  if (process.env.REPLIT_DOMAINS) {
+    for (const domain of process.env.REPLIT_DOMAINS.split(',')) {
+      allowedOrigins.push(`https://${domain.trim()}`);
     }
   }
 }
@@ -57,7 +56,7 @@ app.use(cors({
 }));
 
 app.use(cookieParser());
-app.use(csrfProtection as any);
+app.use(csrfProtection);
 
 
 app.get('/', (_req, res, next) => {
