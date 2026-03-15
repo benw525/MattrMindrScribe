@@ -135,8 +135,6 @@ app.use(express.urlencoded({ extended: true }));
 
 app.use('/uploads', authenticateToken as any, express.static(path.join(__dirname, '..', 'uploads')));
 
-const mediaTokens = new Map<string, { userId: string; filename: string; expires: number; isCloudStorage: boolean }>();
-
 app.post('/api/media/token', authenticateToken as any, async (req: any, res) => {
   const { filename } = req.body;
   if (!filename) return res.status(400).json({ error: 'Filename required' });
@@ -161,33 +159,41 @@ app.post('/api/media/token', authenticateToken as any, async (req: any, res) => 
   }
 
   const token = crypto.randomBytes(32).toString('hex');
-  mediaTokens.set(token, {
-    userId: req.userId,
-    filename: path.basename(filename),
-    expires: Date.now() + 60 * 60 * 1000,
-    isCloudStorage: false,
-  });
-
   const mediaFilename = path.basename(filename);
+  const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
+
+  await pool.query(
+    `INSERT INTO media_tokens (token, user_id, filename, expires, is_cloud_storage)
+     VALUES ($1, $2, $3, $4, $5)`,
+    [token, req.userId, mediaFilename, expiresAt, false]
+  );
+
   res.json({ token, mediaFilename });
 });
 
 app.get('/api/media/:filename', async (req, res) => {
   const token = req.query.token as string;
   if (!token) return res.status(401).json({ error: 'Token required' });
-  const entry = mediaTokens.get(token);
-  if (!entry || entry.expires < Date.now()) {
-    mediaTokens.delete(token);
+
+  const { rows } = await pool.query(
+    'SELECT user_id, filename, expires, is_cloud_storage FROM media_tokens WHERE token = $1',
+    [token]
+  );
+  if (rows.length === 0 || new Date(rows[0].expires) < new Date()) {
+    if (rows.length > 0) {
+      await pool.query('DELETE FROM media_tokens WHERE token = $1', [token]);
+    }
     return res.status(401).json({ error: 'Invalid or expired token' });
   }
 
+  const entry = rows[0];
   const requestedFile = decodeURIComponent(req.params.filename);
 
   if (entry.filename !== requestedFile) {
     return res.status(403).json({ error: 'Access denied' });
   }
 
-  if (entry.isCloudStorage) {
+  if (entry.is_cloud_storage) {
     try {
       const { streamFromS3 } = await import('./s3.js');
       await streamFromS3(entry.filename, res);
@@ -292,6 +298,36 @@ pool.query(`
   if (!err.message.includes('already exists')) console.error('Migration error (transcripts recording_type/practice_area):', err.message);
 });
 
+pool.query(`
+  CREATE TABLE IF NOT EXISTS pending_uploads (
+    token TEXT PRIMARY KEY,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    s3_key TEXT NOT NULL,
+    filename TEXT NOT NULL,
+    content_type TEXT NOT NULL,
+    file_size BIGINT DEFAULT 0,
+    expires TIMESTAMPTZ NOT NULL,
+    multipart_upload_id TEXT,
+    multipart_total_parts INTEGER,
+    multipart_completed BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+  );
+  CREATE INDEX IF NOT EXISTS idx_pending_uploads_expires ON pending_uploads(expires);
+`).catch((err: any) => console.error('Migration error (pending_uploads):', err.message));
+
+pool.query(`
+  CREATE TABLE IF NOT EXISTS media_tokens (
+    token TEXT PRIMARY KEY,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    filename TEXT NOT NULL,
+    expires TIMESTAMPTZ NOT NULL,
+    is_cloud_storage BOOLEAN DEFAULT FALSE,
+    media_url TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+  );
+  CREATE INDEX IF NOT EXISTS idx_media_tokens_expires ON media_tokens(expires);
+`).catch((err: any) => console.error('Migration error (media_tokens):', err.message));
+
 async function seedAdminAccounts() {
   const raw = process.env.ADMIN_ACCOUNTS;
   if (!raw) return;
@@ -326,6 +362,39 @@ const server = app.listen(PORT, '0.0.0.0', () => {
 });
 server.timeout = 30 * 60 * 1000;
 server.requestTimeout = 30 * 60 * 1000;
+
+setInterval(async () => {
+  try {
+    const { rows: expiredUploads } = await pool.query(
+      `SELECT token, s3_key, multipart_upload_id, multipart_completed
+       FROM pending_uploads WHERE expires < NOW()`
+    );
+
+    for (const upload of expiredUploads) {
+      if (upload.multipart_upload_id && !upload.multipart_completed) {
+        try {
+          const { abortMultipartUpload } = await import('./s3.js');
+          await abortMultipartUpload(upload.s3_key, upload.multipart_upload_id);
+          console.log(`[Cleanup] Aborted expired multipart upload: ${upload.s3_key}`);
+        } catch (err: any) {
+          console.error(`[Cleanup] Failed to abort multipart for ${upload.s3_key}:`, err.message);
+          continue;
+        }
+      }
+      await pool.query('DELETE FROM pending_uploads WHERE token = $1', [upload.token]);
+    }
+    if (expiredUploads.length > 0) {
+      console.log(`[Cleanup] Removed ${expiredUploads.length} expired pending upload(s)`);
+    }
+
+    const { rowCount: mediaCount } = await pool.query('DELETE FROM media_tokens WHERE expires < NOW()');
+    if (mediaCount && mediaCount > 0) {
+      console.log(`[Cleanup] Removed ${mediaCount} expired media token(s)`);
+    }
+  } catch (err: any) {
+    console.error('[Cleanup] Error during token cleanup:', err.message);
+  }
+}, 15 * 60 * 1000);
 
 const serverBootTime = new Date().toISOString();
 

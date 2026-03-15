@@ -118,6 +118,8 @@ A full-stack application for managing legal case recordings/transcripts. Feature
 - `transcript_versions` - Version snapshots
 - `transcript_summaries` - AI-generated legal summaries (per-agent, per-transcript)
 - `transcripts.pipeline_log` - JSONB column storing per-step results (whisper, diarization, refinement) with status, stats, and errors
+- `pending_uploads` - Persisted pending upload tokens (token PK, user_id, s3_key, filename, content_type, file_size, expires, multipart fields); replaces former in-memory Map
+- `media_tokens` - Persisted media access tokens (token PK, user_id, filename, expires, is_cloud_storage, media_url); replaces former in-memory Map
 - `mattrmindr_connections` - MattrMindr integration connections (one per user, stores base_url, email, auth_token)
 - `folders.mattrmindr_case_id` / `folders.mattrmindr_case_name` - Links a folder to a MattrMindr case
 

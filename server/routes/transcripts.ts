@@ -207,15 +207,32 @@ router.get('/:id/detail', async (req: AuthRequest, res: Response) => {
   }
 });
 
-const pendingUploads = new Map<string, { userId: string; s3Key: string; filename: string; contentType: string; fileSize: number; expires: number; multipart?: { uploadId: string; totalParts: number; completed: boolean } }>();
-
-function validatePendingUpload(uploadToken: string, userId: string): { pending: any; error?: string; status?: number } {
-  const pending = pendingUploads.get(uploadToken);
-  if (!pending) return { pending: null, error: 'Invalid or expired upload token', status: 400 };
-  if (pending.userId !== userId) return { pending: null, error: 'Access denied', status: 403 };
-  if (pending.expires < Date.now()) {
-    pendingUploads.delete(uploadToken);
+async function validatePendingUpload(uploadToken: string, userId: string): Promise<{ pending: any; error?: string; status?: number }> {
+  const { rows } = await pool.query(
+    'SELECT * FROM pending_uploads WHERE token = $1',
+    [uploadToken]
+  );
+  if (rows.length === 0) return { pending: null, error: 'Invalid or expired upload token', status: 400 };
+  const row = rows[0];
+  if (row.user_id !== userId) return { pending: null, error: 'Access denied', status: 403 };
+  if (new Date(row.expires) < new Date()) {
+    await pool.query('DELETE FROM pending_uploads WHERE token = $1', [uploadToken]);
     return { pending: null, error: 'Upload token expired', status: 400 };
+  }
+  const pending: any = {
+    userId: row.user_id,
+    s3Key: row.s3_key,
+    filename: row.filename,
+    contentType: row.content_type,
+    fileSize: Number(row.file_size),
+    expires: new Date(row.expires).getTime(),
+  };
+  if (row.multipart_upload_id) {
+    pending.multipart = {
+      uploadId: row.multipart_upload_id,
+      totalParts: row.multipart_total_parts,
+      completed: row.multipart_completed,
+    };
   }
   return { pending };
 }
@@ -242,14 +259,12 @@ router.post('/presigned-upload', uploadLimiter, async (req: AuthRequest, res: Re
     const s3Key = `uploads/${uuidv4()}${ext}`;
     const uploadToken = uuidv4();
 
-    pendingUploads.set(uploadToken, {
-      userId: req.userId!,
-      s3Key,
-      filename,
-      contentType,
-      fileSize: fileSize || 0,
-      expires: Date.now() + 3600 * 1000,
-    });
+    const expiresAt = new Date(Date.now() + 3600 * 1000);
+    await pool.query(
+      `INSERT INTO pending_uploads (token, user_id, s3_key, filename, content_type, file_size, expires)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [uploadToken, req.userId, s3Key, filename, contentType, fileSize || 0, expiresAt]
+    );
 
     const presignedUrl = await getPresignedUploadUrl(s3Key, contentType);
 
@@ -287,15 +302,12 @@ router.post('/multipart/initiate', async (req: AuthRequest, res: Response) => {
 
     const uploadId = await createMultipartUpload(s3Key, contentType);
 
-    pendingUploads.set(uploadToken, {
-      userId: req.userId!,
-      s3Key,
-      filename,
-      contentType,
-      fileSize,
-      expires: Date.now() + 24 * 3600 * 1000,
-      multipart: { uploadId, totalParts, completed: false },
-    });
+    const expiresAt = new Date(Date.now() + 24 * 3600 * 1000);
+    await pool.query(
+      `INSERT INTO pending_uploads (token, user_id, s3_key, filename, content_type, file_size, expires, multipart_upload_id, multipart_total_parts, multipart_completed)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+      [uploadToken, req.userId, s3Key, filename, contentType, fileSize, expiresAt, uploadId, totalParts, false]
+    );
 
     console.log(`[Multipart] Initiated: ${filename}, ${totalParts} parts, uploadId=${uploadId}`);
     res.json({ uploadToken, s3Key, uploadId, totalParts, chunkSize: CHUNK_SIZE });
@@ -312,7 +324,7 @@ router.post('/multipart/presign-part', authenticateToken, async (req: AuthReques
       return res.status(400).json({ error: 'uploadToken and partNumber are required' });
     }
 
-    const { pending, error, status } = validatePendingUpload(uploadToken, req.userId!);
+    const { pending, error, status } = await validatePendingUpload(uploadToken, req.userId!);
     if (!pending || !pending.multipart) {
       return res.status(status || 400).json({ error: error || 'Invalid multipart upload' });
     }
@@ -336,7 +348,7 @@ router.post('/multipart/presign-batch', authenticateToken, async (req: AuthReque
       return res.status(400).json({ error: 'uploadToken and partNumbers array are required' });
     }
 
-    const { pending, error, status } = validatePendingUpload(uploadToken, req.userId!);
+    const { pending, error, status } = await validatePendingUpload(uploadToken, req.userId!);
     if (!pending || !pending.multipart) {
       return res.status(status || 400).json({ error: error || 'Invalid multipart upload' });
     }
@@ -368,7 +380,7 @@ router.post('/multipart/complete', authenticateToken, async (req: AuthRequest, r
       return res.status(400).json({ error: 'uploadToken and parts array are required' });
     }
 
-    const { pending, error, status } = validatePendingUpload(uploadToken, req.userId!);
+    const { pending, error, status } = await validatePendingUpload(uploadToken, req.userId!);
     if (!pending || !pending.multipart) {
       return res.status(status || 400).json({ error: error || 'Invalid multipart upload' });
     }
@@ -378,7 +390,10 @@ router.post('/multipart/complete', authenticateToken, async (req: AuthRequest, r
     }
 
     await completeMultipartUpload(pending.s3Key, pending.multipart.uploadId, parts);
-    pending.multipart.completed = true;
+    await pool.query(
+      'UPDATE pending_uploads SET multipart_completed = TRUE WHERE token = $1',
+      [uploadToken]
+    );
     console.log(`[Multipart] Completed: ${pending.filename}, ${parts.length} parts`);
 
     res.json({ success: true });
@@ -395,13 +410,13 @@ router.post('/multipart/abort', authenticateToken, async (req: AuthRequest, res:
       return res.status(400).json({ error: 'uploadToken is required' });
     }
 
-    const { pending, error, status } = validatePendingUpload(uploadToken, req.userId!);
+    const { pending, error, status } = await validatePendingUpload(uploadToken, req.userId!);
     if (!pending || !pending.multipart) {
       return res.status(status || 400).json({ error: error || 'Invalid multipart upload' });
     }
 
     await abortMultipartUpload(pending.s3Key, pending.multipart.uploadId);
-    pendingUploads.delete(uploadToken);
+    await pool.query('DELETE FROM pending_uploads WHERE token = $1', [uploadToken]);
     console.log(`[Multipart] Aborted: ${pending.filename}`);
 
     res.json({ success: true });
@@ -418,7 +433,7 @@ router.post('/confirm-upload', authenticateToken, async (req: AuthRequest, res: 
       return res.status(400).json({ error: 'uploadToken is required' });
     }
 
-    const { pending, error, status } = validatePendingUpload(uploadToken, req.userId!);
+    const { pending, error, status } = await validatePendingUpload(uploadToken, req.userId!);
     if (!pending) {
       return res.status(status || 400).json({ error: error || 'Invalid or expired upload token' });
     }
@@ -427,7 +442,7 @@ router.post('/confirm-upload', authenticateToken, async (req: AuthRequest, res: 
       return res.status(400).json({ error: 'Multipart upload not yet completed. Call /multipart/complete first.' });
     }
 
-    pendingUploads.delete(uploadToken);
+    await pool.query('DELETE FROM pending_uploads WHERE token = $1', [uploadToken]);
 
     const fileUrl = `s3://${pending.s3Key}`;
     const fileType = pending.contentType.startsWith('video/') ? 'video' : 'audio';
