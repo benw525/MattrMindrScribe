@@ -47,7 +47,7 @@ export function generateCsrfToken(): string {
   return crypto.randomBytes(32).toString('hex');
 }
 
-const isProduction = process.env.NODE_ENV === 'production' || process.env.REPLIT_DEPLOYMENT === '1';
+const isProduction = process.env.NODE_ENV === 'production';
 
 export function setAuthCookies(res: Response, token: string, csrfToken: string) {
   res.cookie('auth_token', token, {

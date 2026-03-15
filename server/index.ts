@@ -24,7 +24,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-const isProduction = process.env.NODE_ENV === 'production' || process.env.REPLIT_DEPLOYMENT === '1';
+const isProduction = process.env.NODE_ENV === 'production';
 const PORT = isProduction ? 5000 : 3000;
 
 const allowedOrigins: string[] = [];
@@ -398,8 +398,8 @@ const server = app.listen(PORT, '0.0.0.0', () => {
   console.log(`Backend server running on http://0.0.0.0:${PORT}`);
   seedAdminAccounts();
 });
-server.timeout = 30 * 60 * 1000;
-server.requestTimeout = 30 * 60 * 1000;
+server.timeout = 2 * 60 * 1000;
+server.requestTimeout = 2 * 60 * 1000;
 
 async function cleanupExpiredTokens() {
   try {

@@ -1072,6 +1072,7 @@ router.get('/agents', (_req: AuthRequest, res: Response) => {
 });
 
 router.post('/:id/summarize', validate(summarizeSchema), async (req: AuthRequest, res: Response) => {
+  req.setTimeout(30 * 60 * 1000);
   try {
     const { id } = req.params;
     const { agentType, subType, customDescription } = req.body;
