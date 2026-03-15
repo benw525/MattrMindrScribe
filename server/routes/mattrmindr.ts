@@ -1,8 +1,8 @@
 import { Router, Response } from 'express';
 import pool from '../db.js';
 import { authenticateToken, AuthRequest } from '../middleware/auth.js';
-import { validate } from '../middleware/validate.js';
-import { mattrmindrConnectSchema, mattrmindrSendConfirmSchema, mattrmindrSendTranscriptSchema } from '../validation/schemas.js';
+import { validate, validateQuery } from '../middleware/validate.js';
+import { mattrmindrConnectSchema, mattrmindrSendConfirmSchema, mattrmindrSendTranscriptSchema, mattrmindrCasesQuerySchema } from '../validation/schemas.js';
 
 const router = Router();
 
@@ -135,7 +135,7 @@ async function getConnection(userId: string) {
   return rows.length > 0 ? rows[0] : null;
 }
 
-router.get('/cases', async (req: AuthRequest, res: Response) => {
+router.get('/cases', validateQuery(mattrmindrCasesQuerySchema), async (req: AuthRequest, res: Response) => {
   try {
     const conn = await getConnection(req.userId!);
     if (!conn) {

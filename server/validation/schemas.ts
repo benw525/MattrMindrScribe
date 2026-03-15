@@ -22,14 +22,14 @@ const practiceAreas = ['personal_injury', 'family_law', 'criminal_defense', 'wor
 export const presignedUploadSchema = z.object({
   filename: z.string().min(1, 'Filename is required'),
   contentType: z.string().min(1, 'Content type is required'),
-  fileSize: z.number().positive().optional(),
+  fileSize: z.coerce.number().positive().optional(),
 });
 
 export const confirmUploadSchema = z.object({
   uploadToken: z.string().min(1, 'Upload token is required'),
   description: z.string().optional().default(''),
   folderId: z.string().optional().nullable(),
-  expectedSpeakers: z.number().int().min(2).max(10).optional().nullable(),
+  expectedSpeakers: z.coerce.number().int().min(2).max(10).optional().nullable(),
   recordingType: z.enum(recordingTypes).optional().nullable(),
   practiceArea: z.enum(practiceAreas).optional().nullable(),
 });
@@ -37,23 +37,23 @@ export const confirmUploadSchema = z.object({
 export const initiateMultipartSchema = z.object({
   filename: z.string().min(1, 'Filename is required'),
   contentType: z.string().min(1, 'Content type is required'),
-  fileSize: z.number().positive('File size must be positive'),
+  fileSize: z.coerce.number().positive('File size must be positive'),
 });
 
 export const presignPartSchema = z.object({
   uploadToken: z.string().min(1, 'Upload token is required'),
-  partNumber: z.number().int().min(1).max(10000),
+  partNumber: z.coerce.number().int().min(1).max(10000),
 });
 
 export const presignBatchSchema = z.object({
   uploadToken: z.string().min(1, 'Upload token is required'),
-  partNumbers: z.array(z.number().int().min(1).max(10000)).min(1),
+  partNumbers: z.array(z.coerce.number().int().min(1).max(10000)).min(1),
 });
 
 export const completeMultipartSchema = z.object({
   uploadToken: z.string().min(1, 'Upload token is required'),
   parts: z.array(z.object({
-    PartNumber: z.number().int().min(1),
+    PartNumber: z.coerce.number().int().min(1),
     ETag: z.string().min(1),
   })).min(1),
 });
@@ -68,8 +68,8 @@ export const updateTranscriptSchema = z.object({
   status: z.string().optional(),
   folderId: z.string().optional().nullable(),
   segments: z.array(z.object({
-    startTime: z.number(),
-    endTime: z.number(),
+    startTime: z.coerce.number(),
+    endTime: z.coerce.number(),
     speaker: z.string(),
     text: z.string(),
   })).optional(),
@@ -98,7 +98,7 @@ export const createVersionSchema = z.object({
 export const createFolderSchema = z.object({
   name: z.string().min(1, 'Folder name is required'),
   caseNumber: z.string().optional().nullable(),
-  parentId: z.string().optional().nullable(),
+  parentId: z.string().uuid('Invalid parent folder ID').optional().nullable(),
   mattrmindrCaseId: z.string().optional().nullable(),
   mattrmindrCaseName: z.string().optional().nullable(),
 });
@@ -109,8 +109,8 @@ export const updateFolderSchema = z.object({
 });
 
 export const moveTranscriptsSchema = z.object({
-  transcriptIds: z.array(z.string()).min(1, 'At least one transcript ID is required'),
-  folderId: z.string().optional().nullable(),
+  transcriptIds: z.array(z.string().uuid('Invalid transcript ID')).min(1, 'At least one transcript ID is required'),
+  folderId: z.string().uuid('Invalid folder ID').nullable(),
 });
 
 export const mattrmindrConnectSchema = z.object({
@@ -137,11 +137,11 @@ export const externalReceiveSchema = z.object({
   filename: z.string().min(1, 'Filename is required'),
   fileUrl: z.string().url('Invalid file URL'),
   contentType: z.string().optional(),
-  fileSize: z.number().positive().optional(),
+  fileSize: z.coerce.number().positive().optional(),
   description: z.string().optional(),
   caseId: z.string().optional(),
   caseName: z.string().optional(),
-  expectedSpeakers: z.union([z.number(), z.string()]).optional(),
+  expectedSpeakers: z.union([z.coerce.number(), z.string()]).optional(),
 });
 
 export const mediaTokenSchema = z.object({
@@ -152,6 +152,15 @@ export const legacyUploadMetadataSchema = z.object({
   description: z.string().optional().default(''),
   folderId: z.string().optional().nullable(),
   expectedSpeakers: z.string().regex(/^\d+$/).transform(Number).pipe(z.number().int().min(2).max(10)).optional().nullable(),
-  recordingType: z.enum(['deposition', 'court_hearing', 'recorded_statement', 'police_interrogation', 'other']).optional().nullable(),
-  practiceArea: z.enum(['personal_injury', 'family_law', 'criminal_defense', 'workers_comp', 'insurance_defense', 'employment_law', 'medical_malpractice', 'real_estate', 'immigration', 'general_litigation']).optional().nullable(),
+  recordingType: z.enum(recordingTypes).optional().nullable(),
+  practiceArea: z.enum(practiceAreas).optional().nullable(),
 }).passthrough();
+
+export const mattrmindrCasesQuerySchema = z.object({
+  q: z.string().optional().default(''),
+});
+
+export const transcriptListQuerySchema = z.object({
+  folderId: z.string().uuid('Invalid folder ID').optional(),
+  status: z.string().optional(),
+});
