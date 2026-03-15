@@ -141,7 +141,7 @@ export const externalReceiveSchema = z.object({
   description: z.string().optional(),
   caseId: z.string().optional(),
   caseName: z.string().optional(),
-  expectedSpeakers: z.union([z.coerce.number(), z.string()]).optional(),
+  expectedSpeakers: z.coerce.number().int().min(2).max(10).optional(),
 });
 
 export const mediaTokenSchema = z.object({
