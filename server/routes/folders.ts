@@ -1,8 +1,6 @@
 import { Router, Response } from 'express';
 import pool from '../db.js';
 import { authenticateToken, AuthRequest } from '../middleware/auth.js';
-import { validate } from '../middleware/validate.js';
-import { createFolderSchema, updateFolderSchema, moveTranscriptsSchema } from '../validation/schemas.js';
 
 const router = Router();
 
@@ -11,7 +9,7 @@ router.use(authenticateToken);
 router.get('/', async (req: AuthRequest, res: Response) => {
   try {
     const result = await pool.query(
-      'SELECT * FROM folders WHERE user_id = $1 AND deleted_at IS NULL ORDER BY name ASC',
+      'SELECT * FROM folders WHERE user_id = $1 ORDER BY name ASC',
       [req.userId]
     );
 
@@ -31,9 +29,13 @@ router.get('/', async (req: AuthRequest, res: Response) => {
   }
 });
 
-router.post('/', validate(createFolderSchema), async (req: AuthRequest, res: Response) => {
+router.post('/', async (req: AuthRequest, res: Response) => {
   try {
     const { name, caseNumber, parentId, mattrmindrCaseId, mattrmindrCaseName } = req.body;
+
+    if (!name) {
+      return res.status(400).json({ error: 'Folder name is required' });
+    }
 
     const result = await pool.query(
       `INSERT INTO folders (name, case_number, parent_id, user_id, mattrmindr_case_id, mattrmindr_case_name)
@@ -56,14 +58,14 @@ router.post('/', validate(createFolderSchema), async (req: AuthRequest, res: Res
   }
 });
 
-router.patch('/:id', validate(updateFolderSchema), async (req: AuthRequest, res: Response) => {
+router.patch('/:id', async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
     const { name, caseNumber } = req.body;
 
     const result = await pool.query(
       `UPDATE folders SET name = COALESCE($1, name), case_number = COALESCE($2, case_number), updated_at = NOW()
-       WHERE id = $3 AND user_id = $4 AND deleted_at IS NULL RETURNING *`,
+       WHERE id = $3 AND user_id = $4 RETURNING *`,
       [name, caseNumber, id, req.userId]
     );
 
@@ -96,7 +98,7 @@ router.delete('/:id', async (req: AuthRequest, res: Response) => {
     );
 
     const result = await pool.query(
-      'UPDATE folders SET deleted_at = NOW() WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL RETURNING id',
+      'DELETE FROM folders WHERE id = $1 AND user_id = $2 RETURNING id',
       [id, req.userId]
     );
 
@@ -111,9 +113,13 @@ router.delete('/:id', async (req: AuthRequest, res: Response) => {
   }
 });
 
-router.post('/move-transcripts', validate(moveTranscriptsSchema), async (req: AuthRequest, res: Response) => {
+router.post('/move-transcripts', async (req: AuthRequest, res: Response) => {
   try {
     const { transcriptIds, folderId } = req.body;
+
+    if (!transcriptIds || !Array.isArray(transcriptIds)) {
+      return res.status(400).json({ error: 'Array of transcript IDs required' });
+    }
 
     const placeholders = transcriptIds.map((_: string, i: number) => `$${i + 1}`).join(', ');
     await pool.query(

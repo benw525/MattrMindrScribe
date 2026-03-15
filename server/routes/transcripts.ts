@@ -1,13 +1,9 @@
 import { Router, Response } from 'express';
-import rateLimit from 'express-rate-limit';
 import multer from 'multer';
 import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
 import pool from '../db.js';
 import { authenticateToken, AuthRequest } from '../middleware/auth.js';
-import { authenticateAdmin } from '../middleware/adminAuth.js';
-import { validate } from '../middleware/validate.js';
-import { presignedUploadSchema, initiateMultipartSchema, presignPartSchema, presignBatchSchema, completeMultipartSchema, abortMultipartSchema, confirmUploadSchema, updateTranscriptSchema, deleteTranscriptsSchema, mergeSpeakerSchema, summarizeSchema, createVersionSchema, legacyUploadMetadataSchema } from '../validation/schemas.js';
 import { processTranscription, deduplicateExistingSegments } from '../transcription.js';
 import { s3Configured, uploadFileToS3, deleteFromS3, isCloudStorageUrl, getKeyFromStorageUrl, getPresignedUploadUrl, createMultipartUpload, getPresignedPartUrl, completeMultipartUpload, abortMultipartUpload } from '../s3.js';
 import { LEGAL_AGENTS, getAgentById, RecordingSubType } from '../legalAgents.js';
@@ -57,13 +53,20 @@ const upload = multer({
   },
 });
 
-router.post('/admin/restart-processing', authenticateAdmin, async (req, res: Response) => {
+router.post('/admin/restart-processing', async (req, res: Response) => {
   try {
+    const adminKey = process.env.ADMIN_API_KEY;
+    const providedKey = req.headers['x-admin-key'];
+    if (!adminKey || providedKey !== adminKey) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+
     const { rows: stuck } = await pool.query(
       `SELECT t.id, t.filename, t.pipeline_log,
         (SELECT COUNT(*) FROM transcript_segments s WHERE s.transcript_id = t.id) as seg_count
        FROM transcripts t
-       WHERE t.status IN ('processing', 'resuming') AND t.deleted_at IS NULL`
+       WHERE t.status IN ('processing', 'resuming')`
     );
 
     if (stuck.length === 0) {
@@ -109,19 +112,6 @@ router.post('/admin/restart-processing', authenticateAdmin, async (req, res: Res
 
 router.use(authenticateToken);
 
-const uploadLimiter = rateLimit({
-  windowMs: 60 * 60 * 1000,
-  max: 20,
-  standardHeaders: true,
-  legacyHeaders: false,
-  keyGenerator: (req: AuthRequest) => {
-    return req.userId || req.ip || 'unknown';
-  },
-  message: { error: 'Upload limit reached, please try again later.' },
-});
-
-router.use('/multipart', uploadLimiter);
-
 router.get('/', async (req: AuthRequest, res: Response) => {
   try {
     const result = await pool.query(
@@ -132,7 +122,7 @@ router.get('/', async (req: AuthRequest, res: Response) => {
         ) FILTER (WHERE s.id IS NOT NULL), '[]') as segments
       FROM transcripts t
       LEFT JOIN transcript_segments s ON s.transcript_id = t.id
-      WHERE t.user_id = $1 AND t.deleted_at IS NULL
+      WHERE t.user_id = $1
       GROUP BY t.id
       ORDER BY t.created_at DESC`,
       [req.userId]
@@ -175,7 +165,7 @@ router.get('/:id/detail', async (req: AuthRequest, res: Response) => {
         ) FILTER (WHERE s.id IS NOT NULL), '[]') as segments
       FROM transcripts t
       LEFT JOIN transcript_segments s ON s.transcript_id = t.id
-      WHERE t.id = $1 AND t.user_id = $2 AND t.deleted_at IS NULL
+      WHERE t.id = $1 AND t.user_id = $2
       GROUP BY t.id`,
       [id, req.userId]
     );
@@ -209,61 +199,46 @@ router.get('/:id/detail', async (req: AuthRequest, res: Response) => {
   }
 });
 
-async function validatePendingUpload(uploadToken: string, userId: string): Promise<{ pending: any; error?: string; status?: number }> {
-  const { rows } = await pool.query(
-    'SELECT * FROM pending_uploads WHERE token = $1',
-    [uploadToken]
-  );
-  if (rows.length === 0) return { pending: null, error: 'Invalid or expired upload token', status: 400 };
-  const row = rows[0];
-  if (row.user_id !== userId) return { pending: null, error: 'Access denied', status: 403 };
-  if (new Date(row.expires) < new Date()) {
-    await pool.query('DELETE FROM pending_uploads WHERE token = $1', [uploadToken]);
+const pendingUploads = new Map<string, { userId: string; s3Key: string; filename: string; contentType: string; fileSize: number; expires: number; multipart?: { uploadId: string; totalParts: number; completed: boolean } }>();
+
+function validatePendingUpload(uploadToken: string, userId: string): { pending: any; error?: string; status?: number } {
+  const pending = pendingUploads.get(uploadToken);
+  if (!pending) return { pending: null, error: 'Invalid or expired upload token', status: 400 };
+  if (pending.userId !== userId) return { pending: null, error: 'Access denied', status: 403 };
+  if (pending.expires < Date.now()) {
+    pendingUploads.delete(uploadToken);
     return { pending: null, error: 'Upload token expired', status: 400 };
-  }
-  const pending: any = {
-    userId: row.user_id,
-    s3Key: row.s3_key,
-    filename: row.filename,
-    contentType: row.content_type,
-    fileSize: Number(row.file_size),
-    expires: new Date(row.expires).getTime(),
-  };
-  if (row.multipart_upload_id) {
-    pending.multipart = {
-      uploadId: row.multipart_upload_id,
-      totalParts: row.multipart_total_parts,
-      completed: row.multipart_completed,
-    };
   }
   return { pending };
 }
 
-router.post('/presigned-upload', uploadLimiter, validate(presignedUploadSchema), async (req: AuthRequest, res: Response) => {
+router.post('/presigned-upload', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
     if (!s3Configured) {
       return res.status(400).json({ error: 'Direct upload not available. S3 storage is not configured.' });
     }
 
     const { filename, contentType, fileSize } = req.body;
+    if (!filename || !contentType) {
+      return res.status(400).json({ error: 'filename and contentType are required' });
+    }
 
     const ext = path.extname(filename).toLowerCase();
-    if (!ext || !ALLOWED_EXTENSIONS.includes(ext)) {
-      return res.status(400).json({ error: 'Invalid file extension. Only audio and video files are allowed.' });
-    }
-    if (!ALLOWED_TYPES.includes(contentType)) {
-      return res.status(400).json({ error: 'Invalid content type. Only audio and video MIME types are allowed.' });
+    if (!ALLOWED_TYPES.includes(contentType) && !ALLOWED_EXTENSIONS.includes(ext)) {
+      return res.status(400).json({ error: 'Invalid file type. Only audio and video files are allowed.' });
     }
 
     const s3Key = `uploads/${uuidv4()}${ext}`;
     const uploadToken = uuidv4();
 
-    const expiresAt = new Date(Date.now() + 3600 * 1000);
-    await pool.query(
-      `INSERT INTO pending_uploads (token, user_id, s3_key, filename, content_type, file_size, expires)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-      [uploadToken, req.userId, s3Key, filename, contentType, fileSize || 0, expiresAt]
-    );
+    pendingUploads.set(uploadToken, {
+      userId: req.userId!,
+      s3Key,
+      filename,
+      contentType,
+      fileSize: fileSize || 0,
+      expires: Date.now() + 3600 * 1000,
+    });
 
     const presignedUrl = await getPresignedUploadUrl(s3Key, contentType);
 
@@ -274,22 +249,22 @@ router.post('/presigned-upload', uploadLimiter, validate(presignedUploadSchema),
   }
 });
 
-const CHUNK_SIZE = 25 * 1024 * 1024;
+const CHUNK_SIZE = 50 * 1024 * 1024;
 
-router.post('/multipart/initiate', validate(initiateMultipartSchema), async (req: AuthRequest, res: Response) => {
+router.post('/multipart/initiate', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
     if (!s3Configured) {
       return res.status(400).json({ error: 'Direct upload not available. S3 storage is not configured.' });
     }
 
     const { filename, contentType, fileSize } = req.body;
+    if (!filename || !contentType || !fileSize) {
+      return res.status(400).json({ error: 'filename, contentType, and fileSize are required' });
+    }
 
     const ext = path.extname(filename).toLowerCase();
-    if (!ext || !ALLOWED_EXTENSIONS.includes(ext)) {
-      return res.status(400).json({ error: 'Invalid file extension. Only audio and video files are allowed.' });
-    }
-    if (!ALLOWED_TYPES.includes(contentType)) {
-      return res.status(400).json({ error: 'Invalid content type. Only audio and video MIME types are allowed.' });
+    if (!ALLOWED_TYPES.includes(contentType) && !ALLOWED_EXTENSIONS.includes(ext)) {
+      return res.status(400).json({ error: 'Invalid file type. Only audio and video files are allowed.' });
     }
 
     const s3Key = `uploads/${uuidv4()}${ext}`;
@@ -298,12 +273,15 @@ router.post('/multipart/initiate', validate(initiateMultipartSchema), async (req
 
     const uploadId = await createMultipartUpload(s3Key, contentType);
 
-    const expiresAt = new Date(Date.now() + 24 * 3600 * 1000);
-    await pool.query(
-      `INSERT INTO pending_uploads (token, user_id, s3_key, filename, content_type, file_size, expires, multipart_upload_id, multipart_total_parts, multipart_completed)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
-      [uploadToken, req.userId, s3Key, filename, contentType, fileSize, expiresAt, uploadId, totalParts, false]
-    );
+    pendingUploads.set(uploadToken, {
+      userId: req.userId!,
+      s3Key,
+      filename,
+      contentType,
+      fileSize,
+      expires: Date.now() + 24 * 3600 * 1000,
+      multipart: { uploadId, totalParts, completed: false },
+    });
 
     console.log(`[Multipart] Initiated: ${filename}, ${totalParts} parts, uploadId=${uploadId}`);
     res.json({ uploadToken, s3Key, uploadId, totalParts, chunkSize: CHUNK_SIZE });
@@ -313,11 +291,14 @@ router.post('/multipart/initiate', validate(initiateMultipartSchema), async (req
   }
 });
 
-router.post('/multipart/presign-part', authenticateToken, validate(presignPartSchema), async (req: AuthRequest, res: Response) => {
+router.post('/multipart/presign-part', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
     const { uploadToken, partNumber } = req.body;
+    if (!uploadToken || !partNumber) {
+      return res.status(400).json({ error: 'uploadToken and partNumber are required' });
+    }
 
-    const { pending, error, status } = await validatePendingUpload(uploadToken, req.userId!);
+    const { pending, error, status } = validatePendingUpload(uploadToken, req.userId!);
     if (!pending || !pending.multipart) {
       return res.status(status || 400).json({ error: error || 'Invalid multipart upload' });
     }
@@ -334,11 +315,14 @@ router.post('/multipart/presign-part', authenticateToken, validate(presignPartSc
   }
 });
 
-router.post('/multipart/presign-batch', authenticateToken, validate(presignBatchSchema), async (req: AuthRequest, res: Response) => {
+router.post('/multipart/presign-batch', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
     const { uploadToken, partNumbers } = req.body;
+    if (!uploadToken || !partNumbers || !Array.isArray(partNumbers)) {
+      return res.status(400).json({ error: 'uploadToken and partNumbers array are required' });
+    }
 
-    const { pending, error, status } = await validatePendingUpload(uploadToken, req.userId!);
+    const { pending, error, status } = validatePendingUpload(uploadToken, req.userId!);
     if (!pending || !pending.multipart) {
       return res.status(status || 400).json({ error: error || 'Invalid multipart upload' });
     }
@@ -363,11 +347,14 @@ router.post('/multipart/presign-batch', authenticateToken, validate(presignBatch
   }
 });
 
-router.post('/multipart/complete', authenticateToken, validate(completeMultipartSchema), async (req: AuthRequest, res: Response) => {
+router.post('/multipart/complete', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
     const { uploadToken, parts } = req.body;
+    if (!uploadToken || !parts || !Array.isArray(parts)) {
+      return res.status(400).json({ error: 'uploadToken and parts array are required' });
+    }
 
-    const { pending, error, status } = await validatePendingUpload(uploadToken, req.userId!);
+    const { pending, error, status } = validatePendingUpload(uploadToken, req.userId!);
     if (!pending || !pending.multipart) {
       return res.status(status || 400).json({ error: error || 'Invalid multipart upload' });
     }
@@ -377,10 +364,7 @@ router.post('/multipart/complete', authenticateToken, validate(completeMultipart
     }
 
     await completeMultipartUpload(pending.s3Key, pending.multipart.uploadId, parts);
-    await pool.query(
-      'UPDATE pending_uploads SET multipart_completed = TRUE WHERE token = $1',
-      [uploadToken]
-    );
+    pending.multipart.completed = true;
     console.log(`[Multipart] Completed: ${pending.filename}, ${parts.length} parts`);
 
     res.json({ success: true });
@@ -390,17 +374,20 @@ router.post('/multipart/complete', authenticateToken, validate(completeMultipart
   }
 });
 
-router.post('/multipart/abort', authenticateToken, validate(abortMultipartSchema), async (req: AuthRequest, res: Response) => {
+router.post('/multipart/abort', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
     const { uploadToken } = req.body;
+    if (!uploadToken) {
+      return res.status(400).json({ error: 'uploadToken is required' });
+    }
 
-    const { pending, error, status } = await validatePendingUpload(uploadToken, req.userId!);
+    const { pending, error, status } = validatePendingUpload(uploadToken, req.userId!);
     if (!pending || !pending.multipart) {
       return res.status(status || 400).json({ error: error || 'Invalid multipart upload' });
     }
 
     await abortMultipartUpload(pending.s3Key, pending.multipart.uploadId);
-    await pool.query('DELETE FROM pending_uploads WHERE token = $1', [uploadToken]);
+    pendingUploads.delete(uploadToken);
     console.log(`[Multipart] Aborted: ${pending.filename}`);
 
     res.json({ success: true });
@@ -410,11 +397,14 @@ router.post('/multipart/abort', authenticateToken, validate(abortMultipartSchema
   }
 });
 
-router.post('/confirm-upload', authenticateToken, validate(confirmUploadSchema), async (req: AuthRequest, res: Response) => {
+router.post('/confirm-upload', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
     const { uploadToken, description, folderId, expectedSpeakers, recordingType, practiceArea } = req.body;
+    if (!uploadToken) {
+      return res.status(400).json({ error: 'uploadToken is required' });
+    }
 
-    const { pending, error, status } = await validatePendingUpload(uploadToken, req.userId!);
+    const { pending, error, status } = validatePendingUpload(uploadToken, req.userId!);
     if (!pending) {
       return res.status(status || 400).json({ error: error || 'Invalid or expired upload token' });
     }
@@ -423,7 +413,7 @@ router.post('/confirm-upload', authenticateToken, validate(confirmUploadSchema),
       return res.status(400).json({ error: 'Multipart upload not yet completed. Call /multipart/complete first.' });
     }
 
-    await pool.query('DELETE FROM pending_uploads WHERE token = $1', [uploadToken]);
+    pendingUploads.delete(uploadToken);
 
     const fileUrl = `s3://${pending.s3Key}`;
     const fileType = pending.contentType.startsWith('video/') ? 'video' : 'audio';
@@ -476,7 +466,7 @@ router.post('/confirm-upload', authenticateToken, validate(confirmUploadSchema),
   }
 });
 
-router.post('/upload', uploadLimiter, (req: AuthRequest, res: Response, next) => {
+router.post('/upload', (req, res: Response, next) => {
   console.log('[Upload] Request received (legacy)');
   req.setTimeout(30 * 60 * 1000);
   upload.single('file')(req, res, (err: any) => {
@@ -497,16 +487,7 @@ router.post('/upload', uploadLimiter, (req: AuthRequest, res: Response, next) =>
     }
     console.log('[Upload] File received:', req.file.originalname, req.file.size, 'bytes');
 
-    const metadataResult = legacyUploadMetadataSchema.safeParse(req.body);
-    if (!metadataResult.success) {
-      await fs.unlink(req.file.path).catch(() => {});
-      const details = metadataResult.error.errors.map(e => ({
-        field: e.path.join('.'),
-        message: e.message,
-      }));
-      return res.status(400).json({ error: 'Validation failed', details });
-    }
-    const { description, folderId, expectedSpeakers, recordingType, practiceArea } = metadataResult.data;
+    const { description, folderId, expectedSpeakers, recordingType, practiceArea } = req.body;
     const fileType = req.file.mimetype.startsWith('video/') ? 'video' : 'audio';
 
     let fileUrl: string;
@@ -536,7 +517,7 @@ router.post('/upload', uploadLimiter, (req: AuthRequest, res: Response, next) =>
         fileUrl,
         folderId || null,
         req.userId,
-        expectedSpeakers || null,
+        expectedSpeakers ? parseInt(expectedSpeakers, 10) : null,
         recordingType || null,
         practiceArea || null,
       ]
@@ -571,13 +552,13 @@ router.post('/upload', uploadLimiter, (req: AuthRequest, res: Response, next) =>
   }
 });
 
-router.patch('/:id', validate(updateTranscriptSchema), async (req: AuthRequest, res: Response) => {
+router.patch('/:id', async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
     const { filename, description, status, folderId, segments, speakers } = req.body;
 
     const existing = await pool.query(
-      'SELECT id FROM transcripts WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL',
+      'SELECT id FROM transcripts WHERE id = $1 AND user_id = $2',
       [id, req.userId]
     );
     if (existing.rows.length === 0) {
@@ -650,7 +631,7 @@ router.patch('/:id', validate(updateTranscriptSchema), async (req: AuthRequest, 
         ) FILTER (WHERE s.id IS NOT NULL), '[]') as segments
       FROM transcripts t
       LEFT JOIN transcript_segments s ON s.transcript_id = t.id
-      WHERE t.id = $1 AND t.deleted_at IS NULL
+      WHERE t.id = $1
       GROUP BY t.id`,
       [id]
     );
@@ -679,10 +660,14 @@ router.patch('/:id', validate(updateTranscriptSchema), async (req: AuthRequest, 
   }
 });
 
-router.post('/:id/merge-speaker', validate(mergeSpeakerSchema), async (req: AuthRequest, res: Response) => {
+router.post('/:id/merge-speaker', async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
     const { fromSpeaker, toSpeaker } = req.body;
+
+    if (!fromSpeaker || !toSpeaker) {
+      return res.status(400).json({ error: 'Both fromSpeaker and toSpeaker are required' });
+    }
     if (fromSpeaker === toSpeaker) {
       return res.status(400).json({ error: 'fromSpeaker and toSpeaker must be different' });
     }
@@ -692,7 +677,7 @@ router.post('/:id/merge-speaker', validate(mergeSpeakerSchema), async (req: Auth
       await client.query('BEGIN');
 
       const existing = await client.query(
-        'SELECT id FROM transcripts WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL',
+        'SELECT id FROM transcripts WHERE id = $1 AND user_id = $2',
         [id, req.userId]
       );
       if (existing.rows.length === 0) {
@@ -775,7 +760,7 @@ router.get('/:id/status', async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
     const result = await pool.query(
-      'SELECT status, error_message, duration, pipeline_log FROM transcripts WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL',
+      'SELECT status, error_message, duration, pipeline_log FROM transcripts WHERE id = $1 AND user_id = $2',
       [id, req.userId]
     );
     if (result.rows.length === 0) {
@@ -798,7 +783,7 @@ router.post('/:id/retranscribe', async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
     const existing = await pool.query(
-      'SELECT id, file_url FROM transcripts WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL',
+      'SELECT id, file_url FROM transcripts WHERE id = $1 AND user_id = $2',
       [id, req.userId]
     );
     if (existing.rows.length === 0) {
@@ -825,7 +810,7 @@ router.post('/:id/deduplicate', async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
     const existing = await pool.query(
-      'SELECT id FROM transcripts WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL',
+      'SELECT id FROM transcripts WHERE id = $1 AND user_id = $2',
       [id, req.userId]
     );
     if (existing.rows.length === 0) {
@@ -842,7 +827,7 @@ router.post('/:id/deduplicate', async (req: AuthRequest, res: Response) => {
         ) FILTER (WHERE s.id IS NOT NULL), '[]') as segments
       FROM transcripts t
       LEFT JOIN transcript_segments s ON s.transcript_id = t.id
-      WHERE t.id = $1 AND t.deleted_at IS NULL
+      WHERE t.id = $1
       GROUP BY t.id`,
       [id]
     );
@@ -874,21 +859,35 @@ router.post('/:id/deduplicate', async (req: AuthRequest, res: Response) => {
   }
 });
 
-router.delete('/', validate(deleteTranscriptsSchema), async (req: AuthRequest, res: Response) => {
+router.delete('/', async (req: AuthRequest, res: Response) => {
   try {
     const { ids } = req.body;
+    if (!ids || !Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ error: 'Array of transcript IDs required' });
+    }
 
     const placeholders = ids.map((_: string, i: number) => `$${i + 1}`).join(', ');
 
-    const result = await pool.query(
-      `UPDATE transcripts SET deleted_at = NOW()
-       WHERE id IN (${placeholders}) AND user_id = $${ids.length + 1} AND deleted_at IS NULL
-       RETURNING id`,
+    const fileResults = await pool.query(
+      `SELECT file_url FROM transcripts WHERE id IN (${placeholders}) AND user_id = $${ids.length + 1}`,
       [...ids, req.userId]
     );
 
-    if (result.rowCount === 0) {
-      return res.status(404).json({ error: 'No transcripts found' });
+    await pool.query(
+      `DELETE FROM transcripts WHERE id IN (${placeholders}) AND user_id = $${ids.length + 1}`,
+      [...ids, req.userId]
+    );
+
+    for (const row of fileResults.rows) {
+      if (row.file_url && isCloudStorageUrl(row.file_url)) {
+        deleteFromS3(getKeyFromStorageUrl(row.file_url)).catch(() => {});
+      } else if (row.file_url) {
+        try {
+          const localPath = path.join(process.cwd(), row.file_url.startsWith('/') ? row.file_url.slice(1) : row.file_url);
+          const fsModule = await import('fs');
+          if (fsModule.existsSync(localPath)) fsModule.unlinkSync(localPath);
+        } catch {}
+      }
     }
 
     res.json({ success: true });
@@ -898,102 +897,13 @@ router.delete('/', validate(deleteTranscriptsSchema), async (req: AuthRequest, r
   }
 });
 
-router.get('/trash', async (req: AuthRequest, res: Response) => {
-  try {
-    const result = await pool.query(
-      `SELECT id, filename, description, status, type, file_size, folder_id, deleted_at, created_at
-       FROM transcripts
-       WHERE user_id = $1 AND deleted_at IS NOT NULL
-       ORDER BY deleted_at DESC`,
-      [req.userId]
-    );
-
-    const transcripts = result.rows.map(row => ({
-      id: row.id,
-      filename: row.filename,
-      description: row.description,
-      status: row.status,
-      type: row.type,
-      fileSize: row.file_size,
-      folderId: row.folder_id,
-      deletedAt: row.deleted_at,
-      createdAt: row.created_at,
-    }));
-
-    res.json(transcripts);
-  } catch (err) {
-    console.error('Get trash error:', err);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-router.post('/:id/restore', async (req: AuthRequest, res: Response) => {
-  try {
-    const { id } = req.params;
-    const result = await pool.query(
-      `UPDATE transcripts SET deleted_at = NULL
-       WHERE id = $1 AND user_id = $2 AND deleted_at IS NOT NULL
-       RETURNING id`,
-      [id, req.userId]
-    );
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Transcript not found in trash' });
-    }
-    res.json({ success: true });
-  } catch (err) {
-    console.error('Restore transcript error:', err);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-router.post('/:id/permanent-delete', async (req: AuthRequest, res: Response) => {
-  try {
-    const { id } = req.params;
-
-    const { rows: userRows } = await pool.query('SELECT role FROM users WHERE id = $1', [req.userId]);
-    if (userRows.length === 0 || userRows[0].role !== 'admin') {
-      return res.status(403).json({ error: 'Admin access required' });
-    }
-
-    const existing = await pool.query(
-      `SELECT id, file_url FROM transcripts
-       WHERE id = $1 AND deleted_at IS NOT NULL`,
-      [id]
-    );
-    if (existing.rows.length === 0) {
-      return res.status(404).json({ error: 'Transcript not found in trash' });
-    }
-
-    const row = existing.rows[0];
-    if (row.file_url && isCloudStorageUrl(row.file_url)) {
-      try {
-        await deleteFromS3(getKeyFromStorageUrl(row.file_url));
-      } catch (err: any) {
-        console.error(`[Permanent Delete] S3 cleanup error for ${id}:`, err.message);
-      }
-    } else if (row.file_url) {
-      try {
-        const localPath = path.join(process.cwd(), row.file_url.startsWith('/') ? row.file_url.slice(1) : row.file_url);
-        const fsModule = await import('fs');
-        if (fsModule.existsSync(localPath)) fsModule.unlinkSync(localPath);
-      } catch {}
-    }
-
-    await pool.query('DELETE FROM transcripts WHERE id = $1', [id]);
-    res.json({ success: true });
-  } catch (err) {
-    console.error('Permanent delete error:', err);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-router.post('/:id/versions', validate(createVersionSchema), async (req: AuthRequest, res: Response) => {
+router.post('/:id/versions', async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
     const { changeDescription } = req.body;
 
     const existing = await pool.query(
-      'SELECT id FROM transcripts WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL',
+      'SELECT id FROM transcripts WHERE id = $1 AND user_id = $2',
       [id, req.userId]
     );
     if (existing.rows.length === 0) {
@@ -1030,7 +940,7 @@ router.get('/:id/versions', async (req: AuthRequest, res: Response) => {
     const { id } = req.params;
 
     const existing = await pool.query(
-      'SELECT id FROM transcripts WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL',
+      'SELECT id FROM transcripts WHERE id = $1 AND user_id = $2',
       [id, req.userId]
     );
     if (existing.rows.length === 0) {
@@ -1071,11 +981,14 @@ router.get('/agents', (_req: AuthRequest, res: Response) => {
   res.json(agents);
 });
 
-router.post('/:id/summarize', validate(summarizeSchema), async (req: AuthRequest, res: Response) => {
-  req.setTimeout(30 * 60 * 1000);
+router.post('/:id/summarize', async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
     const { agentType, subType, customDescription } = req.body;
+
+    if (!agentType) {
+      return res.status(400).json({ error: 'agentType is required' });
+    }
 
     const agent = getAgentById(agentType);
     if (!agent) {
@@ -1097,7 +1010,7 @@ router.post('/:id/summarize', validate(summarizeSchema), async (req: AuthRequest
     }
 
     const existing = await pool.query(
-      'SELECT id FROM transcripts WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL',
+      'SELECT id FROM transcripts WHERE id = $1 AND user_id = $2',
       [id, req.userId]
     );
     if (existing.rows.length === 0) {
@@ -1194,7 +1107,7 @@ router.get('/:id/summaries', async (req: AuthRequest, res: Response) => {
     const { id } = req.params;
 
     const existing = await pool.query(
-      'SELECT id FROM transcripts WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL',
+      'SELECT id FROM transcripts WHERE id = $1 AND user_id = $2',
       [id, req.userId]
     );
     if (existing.rows.length === 0) {
@@ -1240,7 +1153,7 @@ router.get('/:id/export/:format', async (req: AuthRequest, res: Response) => {
     }
 
     const tResult = await pool.query(
-      'SELECT id, filename, duration FROM transcripts WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL',
+      'SELECT id, filename, duration FROM transcripts WHERE id = $1 AND user_id = $2',
       [id, req.userId]
     );
     if (tResult.rows.length === 0) {

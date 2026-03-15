@@ -1,21 +1,16 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 
 async function getMediaUrl(fileUrl: string): Promise<string | null> {
-  if (!fileUrl) return null;
+  const token = localStorage.getItem('auth_token');
+  if (!token || !fileUrl) return null;
 
   try {
-    const csrfMatch = document.cookie.match(/(?:^|;\s*)csrf_token=([^;]*)/);
-    const csrfToken = csrfMatch ? decodeURIComponent(csrfMatch[1]) : null;
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-    };
-    if (csrfToken) {
-      headers['X-CSRF-Token'] = csrfToken;
-    }
     const res = await fetch('/api/media/token', {
       method: 'POST',
-      headers,
-      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
       body: JSON.stringify({ filename: fileUrl }),
     });
     if (!res.ok) return null;

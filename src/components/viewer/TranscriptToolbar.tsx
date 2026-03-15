@@ -92,8 +92,9 @@ export function TranscriptToolbar({
     setShowExportMenu(false);
     setExporting(true);
     try {
+      const token = localStorage.getItem('auth_token');
       const response = await fetch(`/api/transcripts/${transcriptId}/export/${format}`, {
-        credentials: 'include',
+        headers: { Authorization: `Bearer ${token}` },
       });
       if (!response.ok) {
         const err = await response.json().catch(() => ({ error: 'Export failed' }));

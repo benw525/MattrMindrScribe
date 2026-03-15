@@ -1,15 +1,17 @@
 import { Router, Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import pool from '../db.js';
-import { authenticateToken, generateToken, generateCsrfToken, setAuthCookies, clearAuthCookies, AuthRequest } from '../middleware/auth.js';
-import { validate } from '../middleware/validate.js';
-import { registerSchema, loginSchema, changePasswordSchema } from '../validation/schemas.js';
+import { authenticateToken, generateToken, AuthRequest } from '../middleware/auth.js';
 
 const router = Router();
 
-router.post('/register', validate(registerSchema), async (req: Request, res: Response) => {
+router.post('/register', async (req: Request, res: Response) => {
   try {
     const { email, password, fullName } = req.body;
+
+    if (!email || !password || !fullName) {
+      return res.status(400).json({ error: 'Email, password, and full name are required' });
+    }
 
     const existing = await pool.query('SELECT id FROM users WHERE email = $1', [email.toLowerCase()]);
     if (existing.rows.length > 0) {
@@ -24,11 +26,9 @@ router.post('/register', validate(registerSchema), async (req: Request, res: Res
 
     const user = result.rows[0];
     const token = generateToken(user.id);
-    const csrfToken = generateCsrfToken();
-
-    setAuthCookies(res, token, csrfToken);
 
     res.status(201).json({
+      token,
       user: {
         id: user.id,
         email: user.email,
@@ -43,9 +43,13 @@ router.post('/register', validate(registerSchema), async (req: Request, res: Res
   }
 });
 
-router.post('/login', validate(loginSchema), async (req: Request, res: Response) => {
+router.post('/login', async (req: Request, res: Response) => {
   try {
     const { email, password } = req.body;
+
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Email and password are required' });
+    }
 
     const result = await pool.query(
       'SELECT id, email, password_hash, full_name, role, subscription_tier FROM users WHERE email = $1',
@@ -64,11 +68,9 @@ router.post('/login', validate(loginSchema), async (req: Request, res: Response)
     }
 
     const token = generateToken(user.id);
-    const csrfToken = generateCsrfToken();
-
-    setAuthCookies(res, token, csrfToken);
 
     res.json({
+      token,
       user: {
         id: user.id,
         email: user.email,
@@ -81,11 +83,6 @@ router.post('/login', validate(loginSchema), async (req: Request, res: Response)
     console.error('Login error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
-});
-
-router.post('/logout', (_req: Request, res: Response) => {
-  clearAuthCookies(res);
-  res.json({ message: 'Logged out successfully' });
 });
 
 router.get('/me', authenticateToken, async (req: AuthRequest, res: Response) => {
@@ -114,9 +111,17 @@ router.get('/me', authenticateToken, async (req: AuthRequest, res: Response) => 
   }
 });
 
-router.put('/change-password', authenticateToken, validate(changePasswordSchema), async (req: AuthRequest, res: Response) => {
+router.put('/change-password', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
     const { currentPassword, newPassword } = req.body;
+
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ error: 'Current password and new password are required' });
+    }
+
+    if (newPassword.length < 6) {
+      return res.status(400).json({ error: 'New password must be at least 6 characters' });
+    }
 
     const result = await pool.query(
       'SELECT password_hash FROM users WHERE id = $1',

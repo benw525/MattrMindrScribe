@@ -401,8 +401,8 @@ class TranscriptionCancelledError extends Error {
 }
 
 async function isTranscriptDeleted(transcriptId: string): Promise<boolean> {
-  const { rows } = await pool.query('SELECT id, deleted_at FROM transcripts WHERE id = $1', [transcriptId]);
-  return rows.length === 0 || rows[0].deleted_at !== null;
+  const { rows } = await pool.query('SELECT id FROM transcripts WHERE id = $1', [transcriptId]);
+  return rows.length === 0;
 }
 
 export async function processTranscription(transcriptId: string): Promise<void> {
@@ -440,7 +440,7 @@ export async function processTranscription(transcriptId: string): Promise<void> 
     );
 
     const { rows } = await pool.query(
-      'SELECT file_url, type, filename, expected_speakers, recording_type, pipeline_log FROM transcripts WHERE id = $1 AND deleted_at IS NULL',
+      'SELECT file_url, type, filename, expected_speakers, recording_type, pipeline_log FROM transcripts WHERE id = $1',
       [transcriptId]
     );
 

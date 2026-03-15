@@ -1,30 +1,34 @@
 const API_BASE = '/api';
 
-function getCsrfToken(): string | null {
-  const match = document.cookie.match(/(?:^|;\s*)csrf_token=([^;]*)/);
-  return match ? decodeURIComponent(match[1]) : null;
+function getToken(): string | null {
+  return localStorage.getItem('auth_token');
 }
 
-export function isAuthenticated(): boolean {
-  return document.cookie.includes('csrf_token=');
+export function setToken(token: string) {
+  localStorage.setItem('auth_token', token);
 }
 
-export function clearAuthState() {
+export function clearToken() {
+  localStorage.removeItem('auth_token');
   window.dispatchEvent(new CustomEvent('auth_token_cleared'));
 }
 
+export function isAuthenticated(): boolean {
+  return !!getToken();
+}
+
 async function request(endpoint: string, options: RequestInit = {}) {
+  const token = getToken();
   const headers: Record<string, string> = {
     ...(options.headers as Record<string, string> || {}),
   };
 
-  if (!(options.body instanceof FormData)) {
-    headers['Content-Type'] = 'application/json';
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
   }
 
-  const csrfToken = getCsrfToken();
-  if (csrfToken && options.method && options.method !== 'GET') {
-    headers['X-CSRF-Token'] = csrfToken;
+  if (!(options.body instanceof FormData)) {
+    headers['Content-Type'] = 'application/json';
   }
 
   let res: Response;
@@ -32,14 +36,13 @@ async function request(endpoint: string, options: RequestInit = {}) {
     res = await fetch(`${API_BASE}${endpoint}`, {
       ...options,
       headers,
-      credentials: 'include',
     });
   } catch (networkErr) {
     throw new Error('Unable to connect to the server. Please try again in a moment.');
   }
 
-  if (res.status === 401) {
-    clearAuthState();
+  if (res.status === 401 || res.status === 403) {
+    clearToken();
     throw new Error('Authentication required');
   }
 
@@ -64,7 +67,6 @@ export const api = {
     register: (email: string, password: string, fullName: string) =>
       request('/auth/register', { method: 'POST', body: JSON.stringify({ email, password, fullName }) }),
     me: () => request('/auth/me'),
-    logout: () => request('/auth/logout', { method: 'POST' }),
     changePassword: (currentPassword: string, newPassword: string) =>
       request('/auth/change-password', { method: 'PUT', body: JSON.stringify({ currentPassword, newPassword }) }),
   },
@@ -89,7 +91,7 @@ export const api = {
       const { uploadToken, chunkSize, totalParts } = initRes;
       const completedParts: Array<{ PartNumber: number; ETag: string }> = [];
       const partBytesLoaded: Record<number, number> = {};
-      const CONCURRENT_UPLOADS = 5;
+      const CONCURRENT_UPLOADS = 3;
       const MAX_RETRIES = 3;
 
       const reportProgress = () => {
@@ -216,21 +218,17 @@ export const api = {
     getVersions: (id: string) => request(`/transcripts/${id}/versions`),
     getAgents: () => request('/transcripts/agents'),
     summarize: async (id: string, agentType: string, subType?: string, customDescription?: string) => {
-      const csrfToken = getCsrfToken();
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-      };
-      if (csrfToken) {
-        headers['X-CSRF-Token'] = csrfToken;
-      }
+      const token = getToken();
       const res = await fetch(`${API_BASE}/transcripts/${id}/summarize`, {
         method: 'POST',
-        headers,
-        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify({ agentType, subType, ...(customDescription ? { customDescription } : {}) }),
       });
-      if (res.status === 401) {
-        clearAuthState();
+      if (res.status === 401 || res.status === 403) {
+        clearToken();
         throw new Error('Authentication required');
       }
       return res;

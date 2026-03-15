@@ -8,8 +8,6 @@ import { Readable } from 'stream';
 import { pipeline } from 'stream/promises';
 import pool from '../db.js';
 import { generateToken, authenticateToken, AuthRequest } from '../middleware/auth.js';
-import { validate } from '../middleware/validate.js';
-import { externalAuthSchema, externalReceiveSchema } from '../validation/schemas.js';
 import { processTranscription } from '../transcription.js';
 import { s3Configured, uploadFileToS3 } from '../s3.js';
 
@@ -61,9 +59,13 @@ function validateExternalUrl(urlStr: string): string | null {
   return null;
 }
 
-router.post('/auth', validate(externalAuthSchema), async (req: Request, res: Response) => {
+router.post('/auth', async (req: Request, res: Response) => {
   try {
     const { email, password } = req.body;
+
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Email and password are required' });
+    }
 
     const result = await pool.query(
       'SELECT id, email, password_hash, full_name FROM users WHERE email = $1',
@@ -97,9 +99,13 @@ router.post('/auth', validate(externalAuthSchema), async (req: Request, res: Res
   }
 });
 
-router.post('/receive', authenticateToken, validate(externalReceiveSchema), async (req: AuthRequest, res: Response) => {
+router.post('/receive', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
     const { filename, fileUrl, contentType, fileSize, description, caseId, caseName, expectedSpeakers } = req.body;
+
+    if (!filename || !fileUrl) {
+      return res.status(400).json({ error: 'filename and fileUrl are required' });
+    }
 
     const ext = path.extname(filename).toLowerCase();
     if (!ALLOWED_EXTENSIONS.includes(ext)) {
@@ -109,7 +115,7 @@ router.post('/receive', authenticateToken, validate(externalReceiveSchema), asyn
     let folderId: string | null = null;
     if (caseId) {
       const folderResult = await pool.query(
-        'SELECT id FROM folders WHERE mattrmindr_case_id = $1 AND user_id = $2 AND deleted_at IS NULL LIMIT 1',
+        'SELECT id FROM folders WHERE mattrmindr_case_id = $1 AND user_id = $2 LIMIT 1',
         [caseId, req.userId]
       );
 
@@ -250,7 +256,7 @@ router.get('/transcripts/:id/status', authenticateToken, async (req: AuthRequest
         ) FILTER (WHERE s.id IS NOT NULL), '[]') as segments
       FROM transcripts t
       LEFT JOIN transcript_segments s ON s.transcript_id = t.id
-      WHERE t.id = $1 AND t.user_id = $2 AND t.deleted_at IS NULL
+      WHERE t.id = $1 AND t.user_id = $2
       GROUP BY t.id`,
       [id, req.userId]
     );

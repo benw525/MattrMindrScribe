@@ -26,7 +26,7 @@ A full-stack application for managing legal case recordings/transcripts. Feature
 - **Database**: PostgreSQL (Replit built-in)
 - **Cloud Storage**: Amazon S3 (via @aws-sdk/client-s3); backward-compatible with legacy R2 URLs in database
 - **Auth**: JWT (jsonwebtoken + bcryptjs)
-- **File Upload**: Chunked multipart direct-to-S3 uploads (25MB chunks, 5 concurrent, auto-retry with exponential backoff); survives tab suspension/background; no file size limit; legacy presigned single-PUT endpoint retained for backward compat; Multer fallback for non-S3 local storage
+- **File Upload**: Chunked multipart direct-to-S3 uploads (50MB chunks, 3 concurrent, auto-retry with exponential backoff); survives tab suspension/background; no file size limit; legacy presigned single-PUT endpoint retained for backward compat; Multer fallback for non-S3 local storage
 - **Animation**: Framer Motion
 - **Icons**: Lucide React
 - **Notifications**: Sonner
@@ -60,8 +60,6 @@ A full-stack application for managing legal case recordings/transcripts. Feature
 - `server/routes/folders.ts` - Folder CRUD + move transcripts + MattrMindr case linking
 - `server/routes/mattrmindr.ts` - MattrMindr integration API (connect, disconnect, status, case search proxy, send files)
 - `server/routes/external.ts` - External API for inbound integrations (auth, receive files for transcription, transcription status)
-- `server/validation/schemas.ts` - Zod validation schemas for all API request bodies
-- `server/middleware/validate.ts` - Generic Zod validation middleware factory
 - `server/replit_integrations/` - OpenAI AI Integrations (audio, chat, image, batch utilities)
 
 ## Routes
@@ -108,9 +106,6 @@ A full-stack application for managing legal case recordings/transcripts. Feature
 - `POST /api/external/auth` - External auth (for MattrMindr inbound connections)
 - `POST /api/external/receive` - Receive file URL from MattrMindr for transcription
 - `GET /api/external/transcripts/:id/status` - Poll transcription status (for external callers)
-- `GET /api/transcripts/trash` - List soft-deleted transcripts
-- `POST /api/transcripts/:id/restore` - Restore a soft-deleted transcript
-- `POST /api/transcripts/:id/permanent-delete` - Permanently delete a trashed transcript (admin only, with S3 cleanup)
 - `POST /api/media/token` - Get short-lived media access token (authenticated)
 - `GET /api/media/:filename?token=` - Serve media file with secure token
 
@@ -123,13 +118,8 @@ A full-stack application for managing legal case recordings/transcripts. Feature
 - `transcript_versions` - Version snapshots
 - `transcript_summaries` - AI-generated legal summaries (per-agent, per-transcript)
 - `transcripts.pipeline_log` - JSONB column storing per-step results (whisper, diarization, refinement) with status, stats, and errors
-- `pending_uploads` - Persisted pending upload tokens (token PK, user_id, s3_key, filename, content_type, file_size, expires, multipart fields); replaces former in-memory Map
-- `media_tokens` - Persisted media access tokens (token PK, user_id, filename, expires, is_cloud_storage, media_url); replaces former in-memory Map
 - `mattrmindr_connections` - MattrMindr integration connections (one per user, stores base_url, email, auth_token)
 - `folders.mattrmindr_case_id` / `folders.mattrmindr_case_name` - Links a folder to a MattrMindr case
-- Soft deletes: `transcripts.deleted_at` and `folders.deleted_at` (TIMESTAMPTZ, NULL = active); all SELECT queries filter `deleted_at IS NULL`; DELETE endpoints set `deleted_at = NOW()` instead of hard delete; 30-day auto-purge with S3 cleanup
-- `updated_at` triggers: automatic `BEFORE UPDATE` triggers on users, transcripts, folders, mattrmindr_connections via `update_updated_at_column()` function
-- Pool config: max=20, idleTimeoutMillis=30000, connectionTimeoutMillis=5000
 
 ## Amazon S3 Storage
 
@@ -176,8 +166,6 @@ A full-stack application for managing legal case recordings/transcripts. Feature
 
 ### Replit (Development)
 - Target: vm (always-on) — required because transcription pipelines run 20-30+ minutes; autoscale would kill them via SIGTERM
-- Production detection: `NODE_ENV === 'production'` (replaces legacy REPLIT_DEPLOYMENT flag)
-- Server timeouts: 2-minute global timeout; 30-minute per-route override on SSE summarize and legacy upload endpoints
 - Build: `npm run build`
 - Run: `npm run start`
 - In production, server runs on port 5000, serves static dist/ files
@@ -195,7 +183,7 @@ A full-stack application for managing legal case recordings/transcripts. Feature
 - Code repo: github.com/benw525/MattrMindrScribe (git pull to deploy)
 - `server/db.ts` imports `dotenv/config` directly to ensure DATABASE_URL is loaded before pool creation (ES module import hoisting)
 - S3 bucket `mattrmindrscribe-files` in `us-east-2` with CORS configured for `scribe.mattrmindr.com`
-- Env vars in `/home/ubuntu/mattrmindrscribe/.env`: DATABASE_URL, AWS keys, OPENAI_API_KEY, ANTHROPIC_API_KEY, ASSEMBLYAI_API_KEY, JWT_SECRET, ADMIN_ACCOUNTS, ADMIN_API_KEY, NODE_ENV=production
+- Env vars in `/home/ubuntu/mattrmindrscribe/.env`: DATABASE_URL, AWS keys, OPENAI_API_KEY, ANTHROPIC_API_KEY, ASSEMBLYAI_API_KEY, JWT_SECRET, ADMIN_ACCOUNTS, ADMIN_API_KEY, NODE_ENV=production, REPLIT_DEPLOYMENT=1
 
 ## Admin Accounts
 

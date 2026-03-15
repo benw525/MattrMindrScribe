@@ -1,22 +1,19 @@
 import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
-import cookieParser from 'cookie-parser';
-import helmet from 'helmet';
-import rateLimit from 'express-rate-limit';
 import path from 'path';
 import fs from 'fs';
 import os from 'os';
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import { fileURLToPath } from 'url';
-import { isCloudStorageUrl, getKeyFromStorageUrl, getS3PublicUrl, getPresignedDownloadUrl, deleteFromS3 } from './s3.js';
+import { isCloudStorageUrl, getKeyFromStorageUrl, getS3PublicUrl, getPresignedDownloadUrl } from './s3.js';
 import authRoutes from './routes/auth.js';
 import transcriptRoutes from './routes/transcripts.js';
 import folderRoutes from './routes/folders.js';
 import mattrmindrRoutes from './routes/mattrmindr.js';
 import externalRoutes from './routes/external.js';
-import { authenticateToken, csrfProtection } from './middleware/auth.js';
+import { authenticateToken } from './middleware/auth.js';
 import pool from './db.js';
 import { deduplicateExistingSegments, processTranscription } from './transcription.js';
 
@@ -24,88 +21,15 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-const isProduction = process.env.NODE_ENV === 'production';
+const isProduction = process.env.REPLIT_DEPLOYMENT === '1';
 const PORT = isProduction ? 5000 : 3000;
 
-const allowedOrigins: string[] = [];
-if (process.env.ALLOWED_ORIGINS) {
-  allowedOrigins.push(...process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim()).filter(Boolean));
-}
-if (isProduction && allowedOrigins.length === 0) {
-  allowedOrigins.push('https://scribe.mattrmindr.com');
-}
-if (!isProduction) {
-  allowedOrigins.push('http://localhost:5000', 'http://localhost:3000');
-  if (process.env.REPLIT_DEV_DOMAIN) {
-    allowedOrigins.push(`https://${process.env.REPLIT_DEV_DOMAIN}`);
-  }
-  if (process.env.REPLIT_DOMAINS) {
-    for (const domain of process.env.REPLIT_DOMAINS.split(',')) {
-      allowedOrigins.push(`https://${domain.trim()}`);
-    }
-  }
-}
 
 app.use(cors({
-  origin: (origin, callback) => {
-    if (!origin || allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(null, false);
-    }
-  },
+  origin: true,
   credentials: true,
 }));
 
-app.use(cookieParser());
-
-app.use(helmet({
-  contentSecurityPolicy: {
-    directives: {
-      defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'unsafe-inline'"],
-      styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
-      fontSrc: ["'self'", "https://fonts.gstatic.com"],
-      imgSrc: ["'self'", "data:", "blob:"],
-      connectSrc: ["'self'", "https://*.amazonaws.com"],
-      mediaSrc: ["'self'", "blob:", "https://*.amazonaws.com"],
-      frameSrc: ["'none'"],
-    },
-  },
-  crossOriginEmbedderPolicy: false,
-}));
-
-const generalLimiter = rateLimit({
-  windowMs: 60 * 1000,
-  max: 100,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { error: 'Too many requests, please try again later.' },
-});
-
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 5,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { error: 'Too many authentication attempts, please try again later.' },
-});
-
-
-const adminLimiter = rateLimit({
-  windowMs: 60 * 1000,
-  max: 1,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { error: 'Admin rate limit reached, please try again later.' },
-});
-
-app.use('/api/', generalLimiter);
-app.use('/api/auth/login', authLimiter);
-app.use('/api/auth/register', authLimiter);
-app.use('/api/transcripts/admin', adminLimiter);
-
-app.use(csrfProtection);
 
 app.get('/', (_req, res, next) => {
   if (isProduction) {
@@ -118,29 +42,19 @@ app.get('/', (_req, res, next) => {
   next();
 });
 
-const largeBodyRoutes: Array<{ method: string; pattern: RegExp }> = [
-  { method: 'POST', pattern: /^\/api\/transcripts\/[^/]+\/versions/ },
-  { method: 'PATCH', pattern: /^\/api\/transcripts\/[^/]+$/ },
-];
-app.use((req, res, next) => {
-  const cleanPath = req.originalUrl.split('?')[0];
-  for (const route of largeBodyRoutes) {
-    if (req.method === route.method && route.pattern.test(cleanPath)) {
-      return express.json({ limit: '10mb' })(req, res, next);
-    }
-  }
-  return express.json({ limit: '1mb' })(req, res, next);
-});
+app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true }));
 
 app.use('/uploads', authenticateToken as any, express.static(path.join(__dirname, '..', 'uploads')));
+
+const mediaTokens = new Map<string, { userId: string; filename: string; expires: number; isCloudStorage: boolean }>();
 
 app.post('/api/media/token', authenticateToken as any, async (req: any, res) => {
   const { filename } = req.body;
   if (!filename) return res.status(400).json({ error: 'Filename required' });
 
   const { rows } = await pool.query(
-    'SELECT id FROM transcripts WHERE file_url = $1 AND user_id = $2 AND deleted_at IS NULL LIMIT 1',
+    'SELECT id FROM transcripts WHERE file_url = $1 AND user_id = $2 LIMIT 1',
     [filename, req.userId]
   );
   if (rows.length === 0) {
@@ -159,41 +73,33 @@ app.post('/api/media/token', authenticateToken as any, async (req: any, res) => 
   }
 
   const token = crypto.randomBytes(32).toString('hex');
+  mediaTokens.set(token, {
+    userId: req.userId,
+    filename: path.basename(filename),
+    expires: Date.now() + 60 * 60 * 1000,
+    isCloudStorage: false,
+  });
+
   const mediaFilename = path.basename(filename);
-  const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
-
-  await pool.query(
-    `INSERT INTO media_tokens (token, user_id, filename, expires, is_cloud_storage)
-     VALUES ($1, $2, $3, $4, $5)`,
-    [token, req.userId, mediaFilename, expiresAt, false]
-  );
-
   res.json({ token, mediaFilename });
 });
 
 app.get('/api/media/:filename', async (req, res) => {
   const token = req.query.token as string;
   if (!token) return res.status(401).json({ error: 'Token required' });
-
-  const { rows } = await pool.query(
-    'SELECT user_id, filename, expires, is_cloud_storage FROM media_tokens WHERE token = $1',
-    [token]
-  );
-  if (rows.length === 0 || new Date(rows[0].expires) < new Date()) {
-    if (rows.length > 0) {
-      await pool.query('DELETE FROM media_tokens WHERE token = $1', [token]);
-    }
+  const entry = mediaTokens.get(token);
+  if (!entry || entry.expires < Date.now()) {
+    mediaTokens.delete(token);
     return res.status(401).json({ error: 'Invalid or expired token' });
   }
 
-  const entry = rows[0];
   const requestedFile = decodeURIComponent(req.params.filename);
 
   if (entry.filename !== requestedFile) {
     return res.status(403).json({ error: 'Access denied' });
   }
 
-  if (entry.is_cloud_storage) {
+  if (entry.isCloudStorage) {
     try {
       const { streamFromS3 } = await import('./s3.js');
       await streamFromS3(entry.filename, res);
@@ -247,18 +153,6 @@ process.on('unhandledRejection', (err) => {
 });
 
 pool.query(`
-  ALTER TABLE transcripts ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ DEFAULT NULL;
-  ALTER TABLE folders ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ DEFAULT NULL;
-`).then(() => {
-  pool.query(`
-    CREATE INDEX IF NOT EXISTS idx_transcripts_deleted_at ON transcripts(deleted_at) WHERE deleted_at IS NOT NULL;
-    CREATE INDEX IF NOT EXISTS idx_folders_deleted_at ON folders(deleted_at) WHERE deleted_at IS NOT NULL;
-  `).catch((err: any) => console.error('Migration error (soft delete indexes):', err.message));
-}).catch((err: any) => {
-  if (!err.message.includes('already exists')) console.error('Migration error (soft delete columns):', err.message);
-});
-
-pool.query(`
   CREATE TABLE IF NOT EXISTS transcript_summaries (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     transcript_id UUID NOT NULL REFERENCES transcripts(id) ON DELETE CASCADE,
@@ -297,32 +191,6 @@ pool.query(`
 `).catch((err: any) => console.error('Migration error (mattrmindr_connections):', err.message));
 
 pool.query(`
-  CREATE OR REPLACE FUNCTION update_updated_at_column()
-  RETURNS TRIGGER AS $$
-  BEGIN
-    NEW.updated_at = NOW();
-    RETURN NEW;
-  END;
-  $$ LANGUAGE plpgsql;
-`).then(() => {
-  const tables = ['users', 'transcripts', 'folders', 'mattrmindr_connections'];
-  for (const table of tables) {
-    pool.query(`
-      DO $$ BEGIN
-        IF NOT EXISTS (
-          SELECT 1 FROM pg_trigger WHERE tgname = 'set_updated_at_${table}'
-        ) THEN
-          CREATE TRIGGER set_updated_at_${table}
-            BEFORE UPDATE ON ${table}
-            FOR EACH ROW
-            EXECUTE FUNCTION update_updated_at_column();
-        END IF;
-      END $$;
-    `).catch((err: any) => console.error(`Migration error (trigger ${table}):`, err.message));
-  }
-}).catch((err: any) => console.error('Migration error (update_updated_at_column):', err.message));
-
-pool.query(`
   ALTER TABLE folders ADD COLUMN IF NOT EXISTS mattrmindr_case_id VARCHAR(255) DEFAULT NULL;
   ALTER TABLE folders ADD COLUMN IF NOT EXISTS mattrmindr_case_name VARCHAR(255) DEFAULT NULL;
 `).catch((err: any) => {
@@ -335,36 +203,6 @@ pool.query(`
 `).catch((err: any) => {
   if (!err.message.includes('already exists')) console.error('Migration error (transcripts recording_type/practice_area):', err.message);
 });
-
-pool.query(`
-  CREATE TABLE IF NOT EXISTS pending_uploads (
-    token TEXT PRIMARY KEY,
-    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    s3_key TEXT NOT NULL,
-    filename TEXT NOT NULL,
-    content_type TEXT NOT NULL,
-    file_size BIGINT DEFAULT 0,
-    expires TIMESTAMPTZ NOT NULL,
-    multipart_upload_id TEXT,
-    multipart_total_parts INTEGER,
-    multipart_completed BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMPTZ DEFAULT NOW()
-  );
-  CREATE INDEX IF NOT EXISTS idx_pending_uploads_expires ON pending_uploads(expires);
-`).catch((err: any) => console.error('Migration error (pending_uploads):', err.message));
-
-pool.query(`
-  CREATE TABLE IF NOT EXISTS media_tokens (
-    token TEXT PRIMARY KEY,
-    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    filename TEXT NOT NULL,
-    expires TIMESTAMPTZ NOT NULL,
-    is_cloud_storage BOOLEAN DEFAULT FALSE,
-    media_url TEXT,
-    created_at TIMESTAMPTZ DEFAULT NOW()
-  );
-  CREATE INDEX IF NOT EXISTS idx_media_tokens_expires ON media_tokens(expires);
-`).catch((err: any) => console.error('Migration error (media_tokens):', err.message));
 
 async function seedAdminAccounts() {
   const raw = process.env.ADMIN_ACCOUNTS;
@@ -398,87 +236,8 @@ const server = app.listen(PORT, '0.0.0.0', () => {
   console.log(`Backend server running on http://0.0.0.0:${PORT}`);
   seedAdminAccounts();
 });
-server.timeout = 2 * 60 * 1000;
-server.requestTimeout = 2 * 60 * 1000;
-
-async function cleanupExpiredTokens() {
-  try {
-    const { rows: expiredUploads } = await pool.query(
-      `SELECT token, s3_key, multipart_upload_id, multipart_completed
-       FROM pending_uploads WHERE expires < NOW()`
-    );
-
-    let deletedUploads = 0;
-    let skippedUploads = 0;
-    for (const upload of expiredUploads) {
-      if (upload.multipart_upload_id && !upload.multipart_completed) {
-        try {
-          const { abortMultipartUpload } = await import('./s3.js');
-          await abortMultipartUpload(upload.s3_key, upload.multipart_upload_id);
-          console.log(`[Cleanup] Aborted expired multipart upload: ${upload.s3_key}`);
-        } catch (err: any) {
-          console.error(`[Cleanup] Failed to abort multipart for ${upload.s3_key}:`, err.message);
-          skippedUploads++;
-          continue;
-        }
-      }
-      await pool.query('DELETE FROM pending_uploads WHERE token = $1', [upload.token]);
-      deletedUploads++;
-    }
-    if (deletedUploads > 0 || skippedUploads > 0) {
-      console.log(`[Cleanup] Pending uploads: ${deletedUploads} removed, ${skippedUploads} skipped (abort failed)`);
-    }
-
-    const { rowCount: mediaCount } = await pool.query('DELETE FROM media_tokens WHERE expires < NOW()');
-    if (mediaCount && mediaCount > 0) {
-      console.log(`[Cleanup] Removed ${mediaCount} expired media token(s)`);
-    }
-  } catch (err: any) {
-    console.error('[Cleanup] Error during token cleanup:', err.message);
-  }
-}
-
-setTimeout(() => cleanupExpiredTokens(), 10_000);
-setInterval(cleanupExpiredTokens, 15 * 60 * 1000);
-
-async function purgeOldSoftDeletes() {
-  try {
-    const { rows: oldTranscripts } = await pool.query(
-      `SELECT id, file_url FROM transcripts
-       WHERE deleted_at IS NOT NULL AND deleted_at < NOW() - INTERVAL '30 days'`
-    );
-    if (oldTranscripts.length > 0) {
-      for (const t of oldTranscripts) {
-        if (t.file_url && isCloudStorageUrl(t.file_url)) {
-          try {
-            await deleteFromS3(getKeyFromStorageUrl(t.file_url));
-          } catch (err: any) {
-            console.error(`[Purge] Failed to delete S3 object for transcript ${t.id}:`, err.message);
-          }
-        } else if (t.file_url) {
-          try {
-            const localPath = path.join(process.cwd(), t.file_url.startsWith('/') ? t.file_url.slice(1) : t.file_url);
-            if (fs.existsSync(localPath)) fs.unlinkSync(localPath);
-          } catch {}
-        }
-        await pool.query('DELETE FROM transcripts WHERE id = $1', [t.id]);
-      }
-      console.log(`[Purge] Permanently deleted ${oldTranscripts.length} transcript(s) older than 30 days`);
-    }
-
-    const { rowCount: folderCount } = await pool.query(
-      `DELETE FROM folders WHERE deleted_at IS NOT NULL AND deleted_at < NOW() - INTERVAL '30 days'`
-    );
-    if (folderCount && folderCount > 0) {
-      console.log(`[Purge] Permanently deleted ${folderCount} folder(s) older than 30 days`);
-    }
-  } catch (err: any) {
-    console.error('[Purge] Error during soft-delete cleanup:', err.message);
-  }
-}
-
-setTimeout(() => purgeOldSoftDeletes(), 15_000);
-setInterval(purgeOldSoftDeletes, 24 * 60 * 60 * 1000);
+server.timeout = 30 * 60 * 1000;
+server.requestTimeout = 30 * 60 * 1000;
 
 const serverBootTime = new Date().toISOString();
 
@@ -506,7 +265,7 @@ setTimeout(async () => {
       `SELECT t.id, t.filename, t.pipeline_log,
         (SELECT COUNT(*) FROM transcript_segments s WHERE s.transcript_id = t.id) as seg_count
        FROM transcripts t
-       WHERE t.status IN ('processing', 'resuming') AND t.updated_at < $1 AND t.deleted_at IS NULL`,
+       WHERE t.status IN ('processing', 'resuming') AND t.updated_at < $1`,
       [serverBootTime]
     );
     if (stuck.length > 0) {

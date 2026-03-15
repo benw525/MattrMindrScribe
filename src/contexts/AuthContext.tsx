@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
-import { api, isAuthenticated, clearAuthState } from '../utils/api';
+import { api, setToken, clearToken, isAuthenticated } from '../utils/api';
 
 interface User {
   id: string;
@@ -25,12 +25,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    api.auth.me()
-      .then(userData => setUser(userData))
-      .catch(() => {
-        setUser(null);
-      })
-      .finally(() => setLoading(false));
+    if (isAuthenticated()) {
+      api.auth.me()
+        .then(userData => setUser(userData))
+        .catch(() => {
+          clearToken();
+          setUser(null);
+        })
+        .finally(() => setLoading(false));
+    } else {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => {
@@ -41,18 +46,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = useCallback(async (email: string, password: string) => {
     const data = await api.auth.login(email, password);
+    setToken(data.token);
     setUser(data.user);
   }, []);
 
   const register = useCallback(async (email: string, password: string, fullName: string) => {
     const data = await api.auth.register(email, password, fullName);
+    setToken(data.token);
     setUser(data.user);
   }, []);
 
-  const logout = useCallback(async () => {
-    try {
-      await api.auth.logout();
-    } catch {}
+  const logout = useCallback(() => {
+    clearToken();
     setUser(null);
   }, []);
 

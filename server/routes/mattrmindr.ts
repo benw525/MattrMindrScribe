@@ -1,8 +1,6 @@
 import { Router, Response } from 'express';
 import pool from '../db.js';
 import { authenticateToken, AuthRequest } from '../middleware/auth.js';
-import { validate, validateQuery } from '../middleware/validate.js';
-import { mattrmindrConnectSchema, mattrmindrSendConfirmSchema, mattrmindrSendTranscriptSchema, mattrmindrCasesQuerySchema } from '../validation/schemas.js';
 
 const router = Router();
 
@@ -34,9 +32,13 @@ function validateBaseUrl(url: string): string | null {
   }
 }
 
-router.post('/connect', validate(mattrmindrConnectSchema), async (req: AuthRequest, res: Response) => {
+router.post('/connect', async (req: AuthRequest, res: Response) => {
   try {
     const { baseUrl, email, password } = req.body;
+
+    if (!baseUrl || !email || !password) {
+      return res.status(400).json({ error: 'Base URL, email, and password are required' });
+    }
 
     const cleanUrl = validateBaseUrl(baseUrl);
     if (!cleanUrl) {
@@ -135,7 +137,7 @@ async function getConnection(userId: string) {
   return rows.length > 0 ? rows[0] : null;
 }
 
-router.get('/cases', validateQuery(mattrmindrCasesQuerySchema), async (req: AuthRequest, res: Response) => {
+router.get('/cases', async (req: AuthRequest, res: Response) => {
   try {
     const conn = await getConnection(req.userId!);
     if (!conn) {
@@ -180,7 +182,7 @@ router.post('/send/:folderId', async (req: AuthRequest, res: Response) => {
     const { folderId } = req.params;
 
     const folderResult = await pool.query(
-      'SELECT mattrmindr_case_id, mattrmindr_case_name, name FROM folders WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL',
+      'SELECT mattrmindr_case_id, mattrmindr_case_name, name FROM folders WHERE id = $1 AND user_id = $2',
       [folderId, req.userId]
     );
 
@@ -203,7 +205,7 @@ router.post('/send/:folderId', async (req: AuthRequest, res: Response) => {
         ) FILTER (WHERE s.id IS NOT NULL), '[]') as segments
       FROM transcripts t
       LEFT JOIN transcript_segments s ON s.transcript_id = t.id
-      WHERE t.folder_id = $1 AND t.user_id = $2 AND t.status = 'completed' AND t.deleted_at IS NULL
+      WHERE t.folder_id = $1 AND t.user_id = $2 AND t.status = 'completed'
       GROUP BY t.id
       ORDER BY t.created_at ASC`,
       [folderId, req.userId]
@@ -266,7 +268,7 @@ router.post('/send/:folderId', async (req: AuthRequest, res: Response) => {
   }
 });
 
-router.post('/send/:folderId/confirm', validate(mattrmindrSendConfirmSchema), async (req: AuthRequest, res: Response) => {
+router.post('/send/:folderId/confirm', async (req: AuthRequest, res: Response) => {
   try {
     const conn = await getConnection(req.userId!);
     if (!conn) {
@@ -277,7 +279,7 @@ router.post('/send/:folderId/confirm', validate(mattrmindrSendConfirmSchema), as
     const { replaceFileIds } = req.body;
 
     const folderResult = await pool.query(
-      'SELECT mattrmindr_case_id FROM folders WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL',
+      'SELECT mattrmindr_case_id FROM folders WHERE id = $1 AND user_id = $2',
       [folderId, req.userId]
     );
 
@@ -298,7 +300,7 @@ router.post('/send/:folderId/confirm', validate(mattrmindrSendConfirmSchema), as
         ) FILTER (WHERE s.id IS NOT NULL), '[]') as segments
       FROM transcripts t
       LEFT JOIN transcript_segments s ON s.transcript_id = t.id
-      WHERE t.folder_id = $1 AND t.user_id = $2 AND t.status = 'completed' AND t.deleted_at IS NULL
+      WHERE t.folder_id = $1 AND t.user_id = $2 AND t.status = 'completed'
       GROUP BY t.id
       ORDER BY t.created_at ASC`,
       [folderId, req.userId]
@@ -354,7 +356,7 @@ router.post('/send/:folderId/confirm', validate(mattrmindrSendConfirmSchema), as
   }
 });
 
-router.post('/send-transcript/:transcriptId', validate(mattrmindrSendTranscriptSchema), async (req: AuthRequest, res: Response) => {
+router.post('/send-transcript/:transcriptId', async (req: AuthRequest, res: Response) => {
   try {
     const conn = await getConnection(req.userId!);
     if (!conn) {
@@ -364,6 +366,10 @@ router.post('/send-transcript/:transcriptId', validate(mattrmindrSendTranscriptS
     const { transcriptId } = req.params;
     const { caseId, caseName } = req.body;
 
+    if (!caseId) {
+      return res.status(400).json({ error: 'caseId is required' });
+    }
+
     const transcriptResult = await pool.query(
       `SELECT t.id, t.filename, t.description, t.type, t.duration, t.pipeline_log, t.folder_id,
         COALESCE(json_agg(
@@ -372,7 +378,7 @@ router.post('/send-transcript/:transcriptId', validate(mattrmindrSendTranscriptS
         ) FILTER (WHERE s.id IS NOT NULL), '[]') as segments
       FROM transcripts t
       LEFT JOIN transcript_segments s ON s.transcript_id = t.id
-      WHERE t.id = $1 AND t.user_id = $2 AND t.status = 'completed' AND t.deleted_at IS NULL
+      WHERE t.id = $1 AND t.user_id = $2 AND t.status = 'completed'
       GROUP BY t.id`,
       [transcriptId, req.userId]
     );
@@ -386,7 +392,7 @@ router.post('/send-transcript/:transcriptId', validate(mattrmindrSendTranscriptS
     let folderLinked = false;
     if (t.folder_id) {
       const folderCheck = await pool.query(
-        'SELECT mattrmindr_case_id FROM folders WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL',
+        'SELECT mattrmindr_case_id FROM folders WHERE id = $1 AND user_id = $2',
         [t.folder_id, req.userId]
       );
       if (folderCheck.rows.length > 0 && !folderCheck.rows[0].mattrmindr_case_id) {
@@ -402,7 +408,7 @@ router.post('/send-transcript/:transcriptId', validate(mattrmindrSendTranscriptS
 
     if (!folderLinked) {
       const existingFolder = await pool.query(
-        'SELECT id FROM folders WHERE mattrmindr_case_id = $1 AND user_id = $2 AND deleted_at IS NULL LIMIT 1',
+        'SELECT id FROM folders WHERE mattrmindr_case_id = $1 AND user_id = $2 LIMIT 1',
         [caseId, req.userId]
       );
 
