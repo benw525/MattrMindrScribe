@@ -19,8 +19,11 @@ export function authenticateToken(req: AuthRequest, res: Response, next: NextFun
   }
 
   if (!token) {
-    const authHeader = req.headers['authorization'];
-    token = authHeader && authHeader.split(' ')[1] || undefined;
+    const isExternalRoute = req.path.startsWith('/api/external/') || req.originalUrl.startsWith('/api/external/');
+    if (isExternalRoute) {
+      const authHeader = req.headers['authorization'];
+      token = authHeader && authHeader.split(' ')[1] || undefined;
+    }
   }
 
   if (!token) {
