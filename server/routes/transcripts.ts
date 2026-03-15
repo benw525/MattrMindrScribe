@@ -915,7 +915,7 @@ router.delete('/', async (req: AuthRequest, res: Response) => {
   }
 });
 
-router.get('/trash/list', async (req: AuthRequest, res: Response) => {
+router.get('/trash', async (req: AuthRequest, res: Response) => {
   try {
     const result = await pool.query(
       `SELECT id, filename, description, status, type, file_size, folder_id, deleted_at, created_at
@@ -967,10 +967,15 @@ router.post('/:id/permanent-delete', async (req: AuthRequest, res: Response) => 
   try {
     const { id } = req.params;
 
+    const { rows: userRows } = await pool.query('SELECT role FROM users WHERE id = $1', [req.userId]);
+    if (userRows.length === 0 || userRows[0].role !== 'admin') {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+
     const existing = await pool.query(
       `SELECT id, file_url FROM transcripts
-       WHERE id = $1 AND user_id = $2 AND deleted_at IS NOT NULL`,
-      [id, req.userId]
+       WHERE id = $1 AND deleted_at IS NOT NULL`,
+      [id]
     );
     if (existing.rows.length === 0) {
       return res.status(404).json({ error: 'Transcript not found in trash' });
