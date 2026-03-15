@@ -106,6 +106,9 @@ A full-stack application for managing legal case recordings/transcripts. Feature
 - `POST /api/external/auth` - External auth (for MattrMindr inbound connections)
 - `POST /api/external/receive` - Receive file URL from MattrMindr for transcription
 - `GET /api/external/transcripts/:id/status` - Poll transcription status (for external callers)
+- `GET /api/transcripts/trash/list` - List soft-deleted transcripts
+- `POST /api/transcripts/:id/restore` - Restore a soft-deleted transcript
+- `POST /api/transcripts/:id/permanent-delete` - Permanently delete a trashed transcript (with S3 cleanup)
 - `POST /api/media/token` - Get short-lived media access token (authenticated)
 - `GET /api/media/:filename?token=` - Serve media file with secure token
 
@@ -122,6 +125,9 @@ A full-stack application for managing legal case recordings/transcripts. Feature
 - `media_tokens` - Persisted media access tokens (token PK, user_id, filename, expires, is_cloud_storage, media_url); replaces former in-memory Map
 - `mattrmindr_connections` - MattrMindr integration connections (one per user, stores base_url, email, auth_token)
 - `folders.mattrmindr_case_id` / `folders.mattrmindr_case_name` - Links a folder to a MattrMindr case
+- Soft deletes: `transcripts.deleted_at` and `folders.deleted_at` (TIMESTAMPTZ, NULL = active); all SELECT queries filter `deleted_at IS NULL`; DELETE endpoints set `deleted_at = NOW()` instead of hard delete; 30-day auto-purge with S3 cleanup
+- `updated_at` triggers: automatic `BEFORE UPDATE` triggers on users, transcripts, folders, mattrmindr_connections via `update_updated_at_column()` function
+- Pool config: max=20, idleTimeoutMillis=30000, connectionTimeoutMillis=5000
 
 ## Amazon S3 Storage
 

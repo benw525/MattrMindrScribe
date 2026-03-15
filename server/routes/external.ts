@@ -115,7 +115,7 @@ router.post('/receive', authenticateToken, async (req: AuthRequest, res: Respons
     let folderId: string | null = null;
     if (caseId) {
       const folderResult = await pool.query(
-        'SELECT id FROM folders WHERE mattrmindr_case_id = $1 AND user_id = $2 LIMIT 1',
+        'SELECT id FROM folders WHERE mattrmindr_case_id = $1 AND user_id = $2 AND deleted_at IS NULL LIMIT 1',
         [caseId, req.userId]
       );
 
@@ -256,7 +256,7 @@ router.get('/transcripts/:id/status', authenticateToken, async (req: AuthRequest
         ) FILTER (WHERE s.id IS NOT NULL), '[]') as segments
       FROM transcripts t
       LEFT JOIN transcript_segments s ON s.transcript_id = t.id
-      WHERE t.id = $1 AND t.user_id = $2
+      WHERE t.id = $1 AND t.user_id = $2 AND t.deleted_at IS NULL
       GROUP BY t.id`,
       [id, req.userId]
     );

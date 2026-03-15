@@ -9,7 +9,7 @@ router.use(authenticateToken);
 router.get('/', async (req: AuthRequest, res: Response) => {
   try {
     const result = await pool.query(
-      'SELECT * FROM folders WHERE user_id = $1 ORDER BY name ASC',
+      'SELECT * FROM folders WHERE user_id = $1 AND deleted_at IS NULL ORDER BY name ASC',
       [req.userId]
     );
 
@@ -65,7 +65,7 @@ router.patch('/:id', async (req: AuthRequest, res: Response) => {
 
     const result = await pool.query(
       `UPDATE folders SET name = COALESCE($1, name), case_number = COALESCE($2, case_number), updated_at = NOW()
-       WHERE id = $3 AND user_id = $4 RETURNING *`,
+       WHERE id = $3 AND user_id = $4 AND deleted_at IS NULL RETURNING *`,
       [name, caseNumber, id, req.userId]
     );
 
@@ -98,7 +98,7 @@ router.delete('/:id', async (req: AuthRequest, res: Response) => {
     );
 
     const result = await pool.query(
-      'DELETE FROM folders WHERE id = $1 AND user_id = $2 RETURNING id',
+      'UPDATE folders SET deleted_at = NOW() WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL RETURNING id',
       [id, req.userId]
     );
 

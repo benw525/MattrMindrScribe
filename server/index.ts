@@ -10,7 +10,7 @@ import os from 'os';
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import { fileURLToPath } from 'url';
-import { isCloudStorageUrl, getKeyFromStorageUrl, getS3PublicUrl, getPresignedDownloadUrl } from './s3.js';
+import { isCloudStorageUrl, getKeyFromStorageUrl, getS3PublicUrl, getPresignedDownloadUrl, deleteFromS3 } from './s3.js';
 import authRoutes from './routes/auth.js';
 import transcriptRoutes from './routes/transcripts.js';
 import folderRoutes from './routes/folders.js';
@@ -140,7 +140,7 @@ app.post('/api/media/token', authenticateToken as any, async (req: any, res) => 
   if (!filename) return res.status(400).json({ error: 'Filename required' });
 
   const { rows } = await pool.query(
-    'SELECT id FROM transcripts WHERE file_url = $1 AND user_id = $2 LIMIT 1',
+    'SELECT id FROM transcripts WHERE file_url = $1 AND user_id = $2 AND deleted_at IS NULL LIMIT 1',
     [filename, req.userId]
   );
   if (rows.length === 0) {
@@ -244,6 +244,44 @@ process.on('uncaughtException', (err) => {
 
 process.on('unhandledRejection', (err) => {
   console.error('Unhandled rejection:', err);
+});
+
+pool.query(`
+  CREATE OR REPLACE FUNCTION update_updated_at_column()
+  RETURNS TRIGGER AS $$
+  BEGIN
+    NEW.updated_at = NOW();
+    RETURN NEW;
+  END;
+  $$ LANGUAGE plpgsql;
+`).then(() => {
+  const tables = ['users', 'transcripts', 'folders', 'mattrmindr_connections'];
+  for (const table of tables) {
+    pool.query(`
+      DO $$ BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_trigger WHERE tgname = 'set_updated_at_${table}'
+        ) THEN
+          CREATE TRIGGER set_updated_at_${table}
+            BEFORE UPDATE ON ${table}
+            FOR EACH ROW
+            EXECUTE FUNCTION update_updated_at_column();
+        END IF;
+      END $$;
+    `).catch((err: any) => console.error(`Migration error (trigger ${table}):`, err.message));
+  }
+}).catch((err: any) => console.error('Migration error (update_updated_at_column):', err.message));
+
+pool.query(`
+  ALTER TABLE transcripts ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ DEFAULT NULL;
+  ALTER TABLE folders ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ DEFAULT NULL;
+`).then(() => {
+  pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_transcripts_deleted_at ON transcripts(deleted_at) WHERE deleted_at IS NOT NULL;
+    CREATE INDEX IF NOT EXISTS idx_folders_deleted_at ON folders(deleted_at) WHERE deleted_at IS NOT NULL;
+  `).catch((err: any) => console.error('Migration error (soft delete indexes):', err.message));
+}).catch((err: any) => {
+  if (!err.message.includes('already exists')) console.error('Migration error (soft delete columns):', err.message);
 });
 
 pool.query(`
@@ -403,6 +441,40 @@ async function cleanupExpiredTokens() {
 setTimeout(() => cleanupExpiredTokens(), 10_000);
 setInterval(cleanupExpiredTokens, 15 * 60 * 1000);
 
+async function purgeOldSoftDeletes() {
+  try {
+    const { rows: oldTranscripts } = await pool.query(
+      `SELECT id, file_url FROM transcripts
+       WHERE deleted_at IS NOT NULL AND deleted_at < NOW() - INTERVAL '30 days'`
+    );
+    if (oldTranscripts.length > 0) {
+      for (const t of oldTranscripts) {
+        if (t.file_url && isCloudStorageUrl(t.file_url)) {
+          try {
+            await deleteFromS3(getKeyFromStorageUrl(t.file_url));
+          } catch (err: any) {
+            console.error(`[Purge] Failed to delete S3 object for transcript ${t.id}:`, err.message);
+          }
+        }
+        await pool.query('DELETE FROM transcripts WHERE id = $1', [t.id]);
+      }
+      console.log(`[Purge] Permanently deleted ${oldTranscripts.length} transcript(s) older than 30 days`);
+    }
+
+    const { rowCount: folderCount } = await pool.query(
+      `DELETE FROM folders WHERE deleted_at IS NOT NULL AND deleted_at < NOW() - INTERVAL '30 days'`
+    );
+    if (folderCount && folderCount > 0) {
+      console.log(`[Purge] Permanently deleted ${folderCount} folder(s) older than 30 days`);
+    }
+  } catch (err: any) {
+    console.error('[Purge] Error during soft-delete cleanup:', err.message);
+  }
+}
+
+setTimeout(() => purgeOldSoftDeletes(), 15_000);
+setInterval(purgeOldSoftDeletes, 24 * 60 * 60 * 1000);
+
 const serverBootTime = new Date().toISOString();
 
 setTimeout(async () => {
@@ -429,7 +501,7 @@ setTimeout(async () => {
       `SELECT t.id, t.filename, t.pipeline_log,
         (SELECT COUNT(*) FROM transcript_segments s WHERE s.transcript_id = t.id) as seg_count
        FROM transcripts t
-       WHERE t.status IN ('processing', 'resuming') AND t.updated_at < $1`,
+       WHERE t.status IN ('processing', 'resuming') AND t.updated_at < $1 AND t.deleted_at IS NULL`,
       [serverBootTime]
     );
     if (stuck.length > 0) {

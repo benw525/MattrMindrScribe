@@ -61,7 +61,7 @@ router.post('/admin/restart-processing', authenticateAdmin, async (req, res: Res
       `SELECT t.id, t.filename, t.pipeline_log,
         (SELECT COUNT(*) FROM transcript_segments s WHERE s.transcript_id = t.id) as seg_count
        FROM transcripts t
-       WHERE t.status IN ('processing', 'resuming')`
+       WHERE t.status IN ('processing', 'resuming') AND t.deleted_at IS NULL`
     );
 
     if (stuck.length === 0) {
@@ -130,7 +130,7 @@ router.get('/', async (req: AuthRequest, res: Response) => {
         ) FILTER (WHERE s.id IS NOT NULL), '[]') as segments
       FROM transcripts t
       LEFT JOIN transcript_segments s ON s.transcript_id = t.id
-      WHERE t.user_id = $1
+      WHERE t.user_id = $1 AND t.deleted_at IS NULL
       GROUP BY t.id
       ORDER BY t.created_at DESC`,
       [req.userId]
@@ -173,7 +173,7 @@ router.get('/:id/detail', async (req: AuthRequest, res: Response) => {
         ) FILTER (WHERE s.id IS NOT NULL), '[]') as segments
       FROM transcripts t
       LEFT JOIN transcript_segments s ON s.transcript_id = t.id
-      WHERE t.id = $1 AND t.user_id = $2
+      WHERE t.id = $1 AND t.user_id = $2 AND t.deleted_at IS NULL
       GROUP BY t.id`,
       [id, req.userId]
     );
@@ -587,7 +587,7 @@ router.patch('/:id', async (req: AuthRequest, res: Response) => {
     const { filename, description, status, folderId, segments, speakers } = req.body;
 
     const existing = await pool.query(
-      'SELECT id FROM transcripts WHERE id = $1 AND user_id = $2',
+      'SELECT id FROM transcripts WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL',
       [id, req.userId]
     );
     if (existing.rows.length === 0) {
@@ -660,7 +660,7 @@ router.patch('/:id', async (req: AuthRequest, res: Response) => {
         ) FILTER (WHERE s.id IS NOT NULL), '[]') as segments
       FROM transcripts t
       LEFT JOIN transcript_segments s ON s.transcript_id = t.id
-      WHERE t.id = $1
+      WHERE t.id = $1 AND t.deleted_at IS NULL
       GROUP BY t.id`,
       [id]
     );
@@ -706,7 +706,7 @@ router.post('/:id/merge-speaker', async (req: AuthRequest, res: Response) => {
       await client.query('BEGIN');
 
       const existing = await client.query(
-        'SELECT id FROM transcripts WHERE id = $1 AND user_id = $2',
+        'SELECT id FROM transcripts WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL',
         [id, req.userId]
       );
       if (existing.rows.length === 0) {
@@ -789,7 +789,7 @@ router.get('/:id/status', async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
     const result = await pool.query(
-      'SELECT status, error_message, duration, pipeline_log FROM transcripts WHERE id = $1 AND user_id = $2',
+      'SELECT status, error_message, duration, pipeline_log FROM transcripts WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL',
       [id, req.userId]
     );
     if (result.rows.length === 0) {
@@ -812,7 +812,7 @@ router.post('/:id/retranscribe', async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
     const existing = await pool.query(
-      'SELECT id, file_url FROM transcripts WHERE id = $1 AND user_id = $2',
+      'SELECT id, file_url FROM transcripts WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL',
       [id, req.userId]
     );
     if (existing.rows.length === 0) {
@@ -839,7 +839,7 @@ router.post('/:id/deduplicate', async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
     const existing = await pool.query(
-      'SELECT id FROM transcripts WHERE id = $1 AND user_id = $2',
+      'SELECT id FROM transcripts WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL',
       [id, req.userId]
     );
     if (existing.rows.length === 0) {
@@ -856,7 +856,7 @@ router.post('/:id/deduplicate', async (req: AuthRequest, res: Response) => {
         ) FILTER (WHERE s.id IS NOT NULL), '[]') as segments
       FROM transcripts t
       LEFT JOIN transcript_segments s ON s.transcript_id = t.id
-      WHERE t.id = $1
+      WHERE t.id = $1 AND t.deleted_at IS NULL
       GROUP BY t.id`,
       [id]
     );
@@ -897,31 +897,98 @@ router.delete('/', async (req: AuthRequest, res: Response) => {
 
     const placeholders = ids.map((_: string, i: number) => `$${i + 1}`).join(', ');
 
-    const fileResults = await pool.query(
-      `SELECT file_url FROM transcripts WHERE id IN (${placeholders}) AND user_id = $${ids.length + 1}`,
+    const result = await pool.query(
+      `UPDATE transcripts SET deleted_at = NOW()
+       WHERE id IN (${placeholders}) AND user_id = $${ids.length + 1} AND deleted_at IS NULL
+       RETURNING id`,
       [...ids, req.userId]
     );
 
-    await pool.query(
-      `DELETE FROM transcripts WHERE id IN (${placeholders}) AND user_id = $${ids.length + 1}`,
-      [...ids, req.userId]
-    );
-
-    for (const row of fileResults.rows) {
-      if (row.file_url && isCloudStorageUrl(row.file_url)) {
-        deleteFromS3(getKeyFromStorageUrl(row.file_url)).catch(() => {});
-      } else if (row.file_url) {
-        try {
-          const localPath = path.join(process.cwd(), row.file_url.startsWith('/') ? row.file_url.slice(1) : row.file_url);
-          const fsModule = await import('fs');
-          if (fsModule.existsSync(localPath)) fsModule.unlinkSync(localPath);
-        } catch {}
-      }
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: 'No transcripts found' });
     }
 
     res.json({ success: true });
   } catch (err) {
     console.error('Delete transcripts error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.get('/trash/list', async (req: AuthRequest, res: Response) => {
+  try {
+    const result = await pool.query(
+      `SELECT id, filename, description, status, type, file_size, folder_id, deleted_at, created_at
+       FROM transcripts
+       WHERE user_id = $1 AND deleted_at IS NOT NULL
+       ORDER BY deleted_at DESC`,
+      [req.userId]
+    );
+
+    const transcripts = result.rows.map(row => ({
+      id: row.id,
+      filename: row.filename,
+      description: row.description,
+      status: row.status,
+      type: row.type,
+      fileSize: row.file_size,
+      folderId: row.folder_id,
+      deletedAt: row.deleted_at,
+      createdAt: row.created_at,
+    }));
+
+    res.json(transcripts);
+  } catch (err) {
+    console.error('Get trash error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.post('/:id/restore', async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const result = await pool.query(
+      `UPDATE transcripts SET deleted_at = NULL
+       WHERE id = $1 AND user_id = $2 AND deleted_at IS NOT NULL
+       RETURNING id`,
+      [id, req.userId]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Transcript not found in trash' });
+    }
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Restore transcript error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.post('/:id/permanent-delete', async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+
+    const existing = await pool.query(
+      `SELECT id, file_url FROM transcripts
+       WHERE id = $1 AND user_id = $2 AND deleted_at IS NOT NULL`,
+      [id, req.userId]
+    );
+    if (existing.rows.length === 0) {
+      return res.status(404).json({ error: 'Transcript not found in trash' });
+    }
+
+    const row = existing.rows[0];
+    if (row.file_url && isCloudStorageUrl(row.file_url)) {
+      try {
+        await deleteFromS3(getKeyFromStorageUrl(row.file_url));
+      } catch (err: any) {
+        console.error(`[Permanent Delete] S3 cleanup error for ${id}:`, err.message);
+      }
+    }
+
+    await pool.query('DELETE FROM transcripts WHERE id = $1', [id]);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Permanent delete error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -932,7 +999,7 @@ router.post('/:id/versions', async (req: AuthRequest, res: Response) => {
     const { changeDescription } = req.body;
 
     const existing = await pool.query(
-      'SELECT id FROM transcripts WHERE id = $1 AND user_id = $2',
+      'SELECT id FROM transcripts WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL',
       [id, req.userId]
     );
     if (existing.rows.length === 0) {
@@ -969,7 +1036,7 @@ router.get('/:id/versions', async (req: AuthRequest, res: Response) => {
     const { id } = req.params;
 
     const existing = await pool.query(
-      'SELECT id FROM transcripts WHERE id = $1 AND user_id = $2',
+      'SELECT id FROM transcripts WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL',
       [id, req.userId]
     );
     if (existing.rows.length === 0) {
@@ -1039,7 +1106,7 @@ router.post('/:id/summarize', async (req: AuthRequest, res: Response) => {
     }
 
     const existing = await pool.query(
-      'SELECT id FROM transcripts WHERE id = $1 AND user_id = $2',
+      'SELECT id FROM transcripts WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL',
       [id, req.userId]
     );
     if (existing.rows.length === 0) {
@@ -1136,7 +1203,7 @@ router.get('/:id/summaries', async (req: AuthRequest, res: Response) => {
     const { id } = req.params;
 
     const existing = await pool.query(
-      'SELECT id FROM transcripts WHERE id = $1 AND user_id = $2',
+      'SELECT id FROM transcripts WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL',
       [id, req.userId]
     );
     if (existing.rows.length === 0) {
@@ -1182,7 +1249,7 @@ router.get('/:id/export/:format', async (req: AuthRequest, res: Response) => {
     }
 
     const tResult = await pool.query(
-      'SELECT id, filename, duration FROM transcripts WHERE id = $1 AND user_id = $2',
+      'SELECT id, filename, duration FROM transcripts WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL',
       [id, req.userId]
     );
     if (tResult.rows.length === 0) {
