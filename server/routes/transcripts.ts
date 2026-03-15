@@ -42,7 +42,7 @@ const ALLOWED_EXTENSIONS = [
 
 const upload = multer({
   storage,
-  limits: { fileSize: s3Configured ? 2 * 1024 * 1024 * 1024 : 500 * 1024 * 1024 },
+  limits: { fileSize: s3Configured ? 5 * 1024 * 1024 * 1024 : 500 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
     const ext = path.extname(file.originalname).toLowerCase();
     if (ALLOWED_TYPES.includes(file.mimetype) || ALLOWED_EXTENSIONS.includes(ext)) {
@@ -199,7 +199,7 @@ router.get('/:id/detail', async (req: AuthRequest, res: Response) => {
   }
 });
 
-const MAX_FILE_SIZE = 2 * 1024 * 1024 * 1024;
+const MAX_FILE_SIZE = 5 * 1024 * 1024 * 1024;
 const pendingUploads = new Map<string, { userId: string; s3Key: string; filename: string; contentType: string; fileSize: number; expires: number }>();
 
 router.post('/presigned-upload', authenticateToken, async (req: AuthRequest, res: Response) => {
@@ -219,7 +219,7 @@ router.post('/presigned-upload', authenticateToken, async (req: AuthRequest, res
     }
 
     if (fileSize && fileSize > MAX_FILE_SIZE) {
-      return res.status(400).json({ error: 'File too large. Maximum size is 2GB.' });
+      return res.status(400).json({ error: 'File too large. Maximum size is 5GB.' });
     }
 
     const s3Key = `uploads/${uuidv4()}${ext}`;
