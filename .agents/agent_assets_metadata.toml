@@ -1,0 +1,8 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "FiVknkbvufpY2ZGAMz_Jb"
+uri = "file://MattrMindrScribe_Technical_Documentation.rtf"
+type = "unspecified"
+title = "MattrMindrScribe Complete Technical Documentation"

@@ -1,0 +1,600 @@
+{\rtf1\ansi\ansicpg1252\deff0
+  {\fonttbl{\f0\fswiss\fcharset0 Helvetica;}{\f1\fmodern\fcharset0 Courier New;}}
+  {\colortbl;\red0\green0\blue0;\red51\green51\blue51;\red100\green100\blue100;\red0\green82\blue164;\red220\green220\blue220;}
+
+  \paperw12240\paperh15840\margl1440\margr1440\margt1440\margb1440
+  \widowctrl\ftnbj\ftnrstcont
+
+  {\pard\sb400\sa200\keepn\f0\fs48\b MATTRMINDRSCRIBE \endash  Complete Technical Documentation\b0\par}
+  {\pard\sa100\f0\fs24\cf3 A comprehensive guide for rebuilding the application from scratch\par}
+  {\pard\sa100\f0\fs24\cf3 Generated: March 15, 2026\par}
+  {\pard\sa200\f0\fs24\cf3 Target Audience: Full-Stack Developer\par}
+
+  \pard\sa100\f0\fs24\cf1
+  {\pard\brdrb\brdrs\brdrw10\brsp20\par}
+
+  {\pard\sb400\sa200\keepn\f0\fs40\b TABLE OF CONTENTS\b0\par}
+  {\pard\sa60\f0\fs24 1. Architecture Overview\par}
+  {\pard\sa60\f0\fs24 2. Dependencies & Build Configuration\par}
+  {\pard\sa60\f0\fs24 3. Database Schema (PostgreSQL)\par}
+  {\pard\sa60\f0\fs24 4. Authentication System\par}
+  {\pard\sa60\f0\fs24 5. File Upload System\par}
+  {\pard\sa60\f0\fs24 6. Amazon S3 Storage Layer\par}
+  {\pard\sa60\f0\fs24 7. AI Transcription Pipeline (3 Steps)\par}
+  {\pard\sa60\f0\fs24 8. Legal Agents & AI Summarization System\par}
+  {\pard\sa60\f0\fs24 9. Transcript Viewer & Editor\par}
+  {\pard\sa60\f0\fs24 10. Folder & Case Management\par}
+  {\pard\sa60\f0\fs24 11. MattrMindr Integration\par}
+  {\pard\sa60\f0\fs24 12. Server Startup, Recovery & Administration\par}
+  {\pard\sa60\f0\fs24 13. Frontend Architecture\par}
+  {\pard\sa60\f0\fs24 14. Deployment & Infrastructure\par}
+  {\pard\sa60\f0\fs24 15. Environment Variables Reference\par}
+
+  {\pard\brdrb\brdrs\brdrw10\brsp20\par}
+
+  
+  {\pard\sb400\sa200\keepn\f0\fs40\b 1. ARCHITECTURE OVERVIEW\b0\par}
+
+  {\pard\sb200\sa100\f0\fs28\b 1.1 Stack Summary\b0\par}
+  {\pard\sa100\f0\fs24 MattrMindrScribe is a full-stack legal transcript management application:\par}
+  {\pard\li360\sa60\f0\fs24 \bullet  \b Frontend:\b0  React 18 + TypeScript + Vite 5 + Tailwind CSS 3.4\par}
+  {\pard\li360\sa60\f0\fs24 \bullet  \b Backend:\b0  Express.js v5 + TypeScript (compiled with tsx at runtime)\par}
+  {\pard\li360\sa60\f0\fs24 \bullet  \b Database:\b0  PostgreSQL (local instance)\par}
+  {\pard\li360\sa60\f0\fs24 \bullet  \b Cloud Storage:\b0  Amazon S3 (us-east-2) via @aws-sdk/client-s3 v3\par}
+  {\pard\li360\sa60\f0\fs24 \bullet  \b AI Services:\b0  OpenAI Whisper (speech-to-text), AssemblyAI (speaker diarization), Anthropic Claude Opus 4 (speaker refinement)\par}
+  {\pard\li360\sa60\f0\fs24 \bullet  \b Authentication:\b0  JWT (jsonwebtoken + bcryptjs)\par}
+  {\pard\li360\sa60\f0\fs24 \bullet  \b Process Manager:\b0  PM2 (production)\par}
+  {\pard\li360\sa60\f0\fs24 \bullet  \b Reverse Proxy:\b0  Nginx (production)\par}
+
+  {\pard\sb200\sa100\f0\fs28\b 1.2 Development Mode\b0\par}
+  {\pard\sa100\f0\fs24 In development, two servers run simultaneously via start.sh:\par}
+  {\pard\li360\sa60\f0\fs24 \bullet  \b Express backend\b0  on port 3000 (started with \f1 npx tsx server/index.ts\f0 )\par}
+  {\pard\li360\sa60\f0\fs24 \bullet  \b Vite dev server\b0  on port 5000 (started with \f1 npx vite\f0 )\par}
+  {\pard\sa100\f0\fs24 Vite proxies /api and /uploads requests to the Express backend. The start.sh script polls http://localhost:3000/api/health until the backend is ready (up to 30 seconds), then starts Vite. A trap ensures both PIDs are killed on exit.\par}
+
+  {\pard\sb200\sa100\f0\fs28\b 1.3 Production Mode\b0\par}
+  {\pard\sa100\f0\fs24 In production (detected by process.env.REPLIT_DEPLOYMENT === '1'), Express runs on port 5000 and serves the pre-built dist/ folder directly. A splat route (/{*splat}) catches all non-API requests and serves index.html for client-side routing. There is no separate Vite process.\par}
+
+  {\pard\sb200\sa100\f0\fs28\b 1.4 Vite Configuration (vite.config.ts)\b0\par}
+  {\pard\sa60\f1\fs20 import \{ defineConfig \} from 'vite'\par}
+  {\pard\sa60\f1\fs20 import react from '@vitejs/plugin-react'\par}
+  {\pard\sa60\f1\fs20 export default defineConfig(\{\par}
+  {\pard\li360\sa60\f1\fs20   plugins: [react()],\par}
+  {\pard\li360\sa60\f1\fs20   server: \{\par}
+  {\pard\li720\sa60\f1\fs20     host: '0.0.0.0',\par}
+  {\pard\li720\sa60\f1\fs20     port: 5000,\par}
+  {\pard\li720\sa60\f1\fs20     allowedHosts: true,\par}
+  {\pard\li720\sa60\f1\fs20     proxy: \{\par}
+  {\pard\li1080\sa60\f1\fs20       '/api': \{ target: 'http://localhost:3000', changeOrigin: true, timeout: 30 * 60 * 1000 \},\par}
+  {\pard\li1080\sa60\f1\fs20       '/uploads': \{ target: 'http://localhost:3000', changeOrigin: true \}\par}
+  {\pard\li720\sa60\f1\fs20     \}\par}
+  {\pard\li360\sa60\f1\fs20   \}\par}
+  {\pard\sa60\f1\fs20 \})\par}
+
+  {\pard\sb200\sa100\f0\fs28\b 1.5 TypeScript Configuration\b0\par}
+  {\pard\sa100\f0\fs24 The tsconfig.json targets ES2020, uses bundler module resolution, react-jsx transform, and strict mode. It only includes the src/ directory (frontend). The backend runs via tsx which handles TypeScript compilation at runtime without a separate tsconfig.\par}
+
+  {\pard\sb200\sa100\f0\fs28\b 1.6 Middleware Chain Order (server/index.ts)\b0\par}
+  {\pard\sa60\f0\fs24 1. CORS (origin: true, credentials: true)\par}
+  {\pard\sa60\f0\fs24 2. Static index.html handler (production only)\par}
+  {\pard\sa60\f0\fs24 3. express.json (50MB limit) + express.urlencoded (extended: true)\par}
+  {\pard\sa60\f0\fs24 4. Static /uploads directory (protected by authenticateToken)\par}
+  {\pard\sa60\f0\fs24 5. API routes (/api/auth, /api/transcripts, /api/folders, /api/mattrmindr, /api/external, /api/media, /api/health)\par}
+  {\pard\sa60\f0\fs24 6. express.static(dist) + SPA fallback (production only)\par}
+  {\pard\sa100\f0\fs24 Server and request timeouts are set to 30 minutes to accommodate long-running AI transcription pipelines.\par}
+
+  
+  {\pard\brdrb\brdrs\brdrw10\brsp20\par}
+
+  {\pard\sb400\sa200\keepn\f0\fs40\b 2. DEPENDENCIES & BUILD CONFIGURATION\b0\par}
+
+  {\pard\sb200\sa100\f0\fs28\b 2.1 Runtime Dependencies\b0\par}
+  {\pard\li360\sa60\f0\fs24 \bullet  \b @anthropic-ai/sdk\b0  \endash  Claude Opus API client for speaker refinement (Step 3)\par}
+  {\pard\li360\sa60\f0\fs24 \bullet  \b @aws-sdk/client-s3\b0  \endash  S3 operations (upload, download, delete, multipart)\par}
+  {\pard\li360\sa60\f0\fs24 \bullet  \b @aws-sdk/s3-request-presigner\b0  \endash  Generate presigned URLs for direct browser uploads\par}
+  {\pard\li360\sa60\f0\fs24 \bullet  \b assemblyai\b0  \endash  AssemblyAI SDK for speaker diarization (Step 2)\par}
+  {\pard\li360\sa60\f0\fs24 \bullet  \b bcryptjs\b0  \endash  Password hashing (12 salt rounds)\par}
+  {\pard\li360\sa60\f0\fs24 \bullet  \b cookie-parser\b0  \endash  Cookie parsing middleware\par}
+  {\pard\li360\sa60\f0\fs24 \bullet  \b cors\b0  \endash  Cross-origin resource sharing\par}
+  {\pard\li360\sa60\f0\fs24 \bullet  \b docx\b0  \endash  DOCX export generation for transcripts\par}
+  {\pard\li360\sa60\f0\fs24 \bullet  \b dotenv\b0  \endash  Environment variable loading from .env files\par}
+  {\pard\li360\sa60\f0\fs24 \bullet  \b express\b0  v5 \endash  HTTP server framework\par}
+  {\pard\li360\sa60\f0\fs24 \bullet  \b framer-motion\b0  \endash  React animation library (modals, toasts, transitions)\par}
+  {\pard\li360\sa60\f0\fs24 \bullet  \b jsonwebtoken\b0  \endash  JWT token generation and verification\par}
+  {\pard\li360\sa60\f0\fs24 \bullet  \b lucide-react\b0  \endash  Icon library (consistent SVG icons throughout UI)\par}
+  {\pard\li360\sa60\f0\fs24 \bullet  \b multer\b0  v2 \endash  File upload middleware (legacy fallback)\par}
+  {\pard\li360\sa60\f0\fs24 \bullet  \b openai\b0  \endash  OpenAI SDK for Whisper transcription and GPT summarization\par}
+  {\pard\li360\sa60\f0\fs24 \bullet  \b p-limit\b0  \endash  Concurrency limiter for parallel API calls\par}
+  {\pard\li360\sa60\f0\fs24 \bullet  \b p-retry\b0  \endash  Retry utility with backoff for API calls\par}
+  {\pard\li360\sa60\f0\fs24 \bullet  \b pdfkit\b0  \endash  PDF export generation for transcripts\par}
+  {\pard\li360\sa60\f0\fs24 \bullet  \b pg\b0  \endash  PostgreSQL client for Node.js\par}
+  {\pard\li360\sa60\f0\fs24 \bullet  \b react / react-dom\b0  v18 \endash  UI framework\par}
+  {\pard\li360\sa60\f0\fs24 \bullet  \b react-router-dom\b0  v6 \endash  Client-side routing\par}
+  {\pard\li360\sa60\f0\fs24 \bullet  \b sonner\b0  \endash  Toast notification library\par}
+  {\pard\li360\sa60\f0\fs24 \bullet  \b tsx\b0  \endash  TypeScript execution engine (runs .ts files directly, no build step for backend)\par}
+  {\pard\li360\sa60\f0\fs24 \bullet  \b uuid\b0  \endash  UUID generation for IDs and tokens\par}
+  {\pard\li360\sa60\f0\fs24 \bullet  \b zod\b0  \endash  Schema validation library\par}
+
+  {\pard\sb200\sa100\f0\fs28\b 2.2 Dev Dependencies\b0\par}
+  {\pard\li360\sa60\f0\fs24 \bullet  \b @vitejs/plugin-react\b0  \endash  React HMR and JSX support for Vite\par}
+  {\pard\li360\sa60\f0\fs24 \bullet  \b tailwindcss\b0  3.4.17 + \b autoprefixer\b0  + \b postcss\b0  \endash  Utility-first CSS framework\par}
+  {\pard\li360\sa60\f0\fs24 \bullet  \b typescript\b0  5.5+ \endash  Type system\par}
+  {\pard\li360\sa60\f0\fs24 \bullet  \b eslint\b0  + plugins \endash  Code linting\par}
+  {\pard\li360\sa60\f0\fs24 \bullet  \b @types/*\b0  packages \endash  TypeScript type definitions for bcryptjs, cors, express, jsonwebtoken, multer, pg, uuid, node, react, react-dom\par}
+
+  {\pard\sb200\sa100\f0\fs28\b 2.3 System Dependencies\b0\par}
+  {\pard\li360\sa60\f0\fs24 \bullet  \b ffmpeg / ffprobe\b0  \endash  Required for audio duration detection and chunking (called via child_process spawn)\par}
+
+  
+  {\pard\brdrb\brdrs\brdrw10\brsp20\par}
+
+  {\pard\sb400\sa200\keepn\f0\fs40\b 3. DATABASE SCHEMA (POSTGRESQL)\b0\par}
+
+  {\pard\sa100\f0\fs24 The database uses PostgreSQL with the pg library. Connection is configured via DATABASE_URL environment variable in server/db.ts. Importantly, server/db.ts must import 'dotenv/config' as its very first line to ensure DATABASE_URL is loaded before the Pool is created (ES module import hoisting issue).\par}
+
+  {\pard\sb200\sa100\f0\fs28\b 3.1 users\b0\par}
+  {\pard\sa60\f1\fs20 id            uuid PRIMARY KEY DEFAULT gen_random_uuid()\par}
+  {\pard\sa60\f1\fs20 email         varchar(255) UNIQUE NOT NULL\par}
+  {\pard\sa60\f1\fs20 password_hash varchar(255) NOT NULL\par}
+  {\pard\sa60\f1\fs20 full_name     varchar(255) NOT NULL\par}
+  {\pard\sa60\f1\fs20 role          varchar(50) DEFAULT 'user'     -- 'admin' or 'user'\par}
+  {\pard\sa60\f1\fs20 subscription_tier varchar(50) DEFAULT 'free' -- 'free' or 'unlimited'\par}
+  {\pard\sa60\f1\fs20 stripe_customer_id     varchar(255) NULLABLE\par}
+  {\pard\sa60\f1\fs20 stripe_subscription_id varchar(255) NULLABLE\par}
+  {\pard\sa60\f1\fs20 created_at    timestamp DEFAULT now()\par}
+  {\pard\sa60\f1\fs20 updated_at    timestamp DEFAULT now()\par}
+  {\pard\sa60\f0\fs24 \b Indexes:\b0  users_pkey (id), users_email_key (UNIQUE on email)\par}
+
+  {\pard\sb200\sa100\f0\fs28\b 3.2 transcripts\b0\par}
+  {\pard\sa60\f1\fs20 id              uuid PRIMARY KEY DEFAULT gen_random_uuid()\par}
+  {\pard\sa60\f1\fs20 filename        varchar(255) NOT NULL\par}
+  {\pard\sa60\f1\fs20 description     text DEFAULT ''\par}
+  {\pard\sa60\f1\fs20 status          varchar(50) DEFAULT 'pending'\par}
+  {\pard\sa60\f1\fs20                 -- States: pending, processing, completed, error, resuming\par}
+  {\pard\sa60\f1\fs20 type            varchar(20) DEFAULT 'audio'   -- 'audio' or 'video'\par}
+  {\pard\sa60\f1\fs20 duration        real DEFAULT 0                -- seconds\par}
+  {\pard\sa60\f1\fs20 file_size       bigint DEFAULT 0              -- bytes\par}
+  {\pard\sa60\f1\fs20 file_url        text DEFAULT ''               -- 's3://uploads/<uuid>.<ext>' or '/uploads/<file>'\par}
+  {\pard\sa60\f1\fs20 folder_id       uuid FK -> folders.id ON DELETE SET NULL\par}
+  {\pard\sa60\f1\fs20 user_id         uuid FK -> users.id NOT NULL ON DELETE CASCADE\par}
+  {\pard\sa60\f1\fs20 error_message   text NULLABLE\par}
+  {\pard\sa60\f1\fs20 expected_speakers integer NULLABLE\par}
+  {\pard\sa60\f1\fs20 pipeline_log    jsonb NULLABLE    -- \{whisper:\{status,stats\}, diarization:\{...\}, refinement:\{...\}\}\par}
+  {\pard\sa60\f1\fs20 recording_type  varchar(50)       -- deposition, court_hearing, etc.\par}
+  {\pard\sa60\f1\fs20 practice_area   varchar(100)      -- personal_injury, family_law, etc.\par}
+  {\pard\sa60\f1\fs20 created_at      timestamp DEFAULT now()\par}
+  {\pard\sa60\f1\fs20 updated_at      timestamp DEFAULT now()\par}
+  {\pard\sa60\f0\fs24 \b Indexes:\b0  transcripts_pkey (id), idx_transcripts_folder (folder_id), idx_transcripts_user (user_id)\par}
+
+  {\pard\sb200\sa100\f0\fs28\b 3.3 transcript_segments\b0\par}
+  {\pard\sa60\f1\fs20 id              uuid PRIMARY KEY DEFAULT gen_random_uuid()\par}
+  {\pard\sa60\f1\fs20 transcript_id   uuid FK -> transcripts.id NOT NULL ON DELETE CASCADE\par}
+  {\pard\sa60\f1\fs20 start_time      real NOT NULL\par}
+  {\pard\sa60\f1\fs20 end_time        real NOT NULL\par}
+  {\pard\sa60\f1\fs20 speaker         varchar(255) DEFAULT 'Speaker 1'\par}
+  {\pard\sa60\f1\fs20 text            text NOT NULL\par}
+  {\pard\sa60\f1\fs20 segment_order   integer NOT NULL\par}
+  {\pard\sa60\f1\fs20 created_at      timestamp DEFAULT now()\par}
+  {\pard\sa60\f0\fs24 \b Indexes:\b0  transcript_segments_pkey (id), idx_segments_transcript (transcript_id), idx_segments_unique_order (UNIQUE on transcript_id + segment_order)\par}
+
+  {\pard\sb200\sa100\f0\fs28\b 3.4 folders\b0\par}
+  {\pard\sa60\f1\fs20 id                    uuid PRIMARY KEY DEFAULT gen_random_uuid()\par}
+  {\pard\sa60\f1\fs20 name                  varchar(255) NOT NULL\par}
+  {\pard\sa60\f1\fs20 case_number           varchar(100) NULLABLE\par}
+  {\pard\sa60\f1\fs20 parent_id             uuid FK -> folders.id NULLABLE ON DELETE SET NULL\par}
+  {\pard\sa60\f1\fs20 user_id               uuid FK -> users.id NOT NULL ON DELETE CASCADE\par}
+  {\pard\sa60\f1\fs20 mattrmindr_case_id    varchar(255) NULLABLE\par}
+  {\pard\sa60\f1\fs20 mattrmindr_case_name  varchar(255) NULLABLE\par}
+  {\pard\sa60\f1\fs20 created_at            timestamp DEFAULT now()\par}
+  {\pard\sa60\f1\fs20 updated_at            timestamp DEFAULT now()\par}
+  {\pard\sa60\f0\fs24 \b Indexes:\b0  folders_pkey (id), idx_folders_user (user_id)\par}
+
+  {\pard\sb200\sa100\f0\fs28\b 3.5 transcript_summaries\b0\par}
+  {\pard\sa60\f1\fs20 id              uuid PRIMARY KEY DEFAULT gen_random_uuid()\par}
+  {\pard\sa60\f1\fs20 transcript_id   uuid FK -> transcripts.id NOT NULL ON DELETE CASCADE\par}
+  {\pard\sa60\f1\fs20 user_id         uuid FK -> users.id NOT NULL ON DELETE CASCADE\par}
+  {\pard\sa60\f1\fs20 agent_type      varchar(100) NOT NULL\par}
+  {\pard\sa60\f1\fs20 sub_type        varchar(100) NULLABLE\par}
+  {\pard\sa60\f1\fs20 summary         text NOT NULL\par}
+  {\pard\sa60\f1\fs20 model_used      varchar(100) DEFAULT 'gpt-4o-mini'\par}
+  {\pard\sa60\f1\fs20 created_at      timestamp DEFAULT now()\par}
+  {\pard\sa60\f0\fs24 \b Indexes:\b0  transcript_summaries_pkey (id), idx_summaries_transcript (transcript_id)\par}
+
+  {\pard\sb200\sa100\f0\fs28\b 3.6 transcript_versions\b0\par}
+  {\pard\sa60\f1\fs20 id                  uuid PRIMARY KEY DEFAULT gen_random_uuid()\par}
+  {\pard\sa60\f1\fs20 transcript_id       uuid FK -> transcripts.id NOT NULL ON DELETE CASCADE\par}
+  {\pard\sa60\f1\fs20 segments            jsonb NOT NULL        -- full segment snapshot array\par}
+  {\pard\sa60\f1\fs20 change_description  varchar(500) DEFAULT ''\par}
+  {\pard\sa60\f1\fs20 created_at          timestamp DEFAULT now()\par}
+  {\pard\sa60\f0\fs24 \b Indexes:\b0  transcript_versions_pkey (id), idx_versions_transcript (transcript_id)\par}
+
+  {\pard\sb200\sa100\f0\fs28\b 3.7 mattrmindr_connections\b0\par}
+  {\pard\sa60\f1\fs20 id          uuid PRIMARY KEY DEFAULT gen_random_uuid()\par}
+  {\pard\sa60\f1\fs20 user_id     uuid FK -> users.id NOT NULL UNIQUE ON DELETE CASCADE\par}
+  {\pard\sa60\f1\fs20 base_url    text NOT NULL\par}
+  {\pard\sa60\f1\fs20 email       varchar(255) NOT NULL\par}
+  {\pard\sa60\f1\fs20 auth_token  text NOT NULL\par}
+  {\pard\sa60\f1\fs20 connected_at timestamp DEFAULT now()\par}
+  {\pard\sa60\f1\fs20 updated_at   timestamp DEFAULT now()\par}
+
+  {\pard\sb200\sa100\f0\fs28\b 3.8 _migrations\b0\par}
+  {\pard\sa60\f1\fs20 key     varchar(100) PRIMARY KEY  -- e.g., 'dedup_segments_v1'\par}
+  {\pard\sa60\f1\fs20 ran_at  timestamp DEFAULT now()\par}
+
+  {\pard\sb200\sa100\f0\fs28\b 3.9 Inline Migration System\b0\par}
+  {\pard\sa100\f0\fs24 All schema migrations run inline in server/index.ts on every server boot. Each migration is wrapped in pool.query().catch() to ignore "already exists" errors, making them fully idempotent. This approach avoids a separate migration tool. Migrations include: adding columns (expected_speakers, pipeline_log, recording_type, practice_area, sub_type, mattrmindr_case_id, mattrmindr_case_name, change_description), creating tables (transcript_summaries, mattrmindr_connections, _migrations), and creating indexes. Data migrations (deduplication) use the _migrations table to run only once.\par}
+
+  
+  {\pard\brdrb\brdrs\brdrw10\brsp20\par}
+
+  {\pard\sb400\sa200\keepn\f0\fs40\b 4. AUTHENTICATION SYSTEM\b0\par}
+
+  {\pard\sb200\sa100\f0\fs28\b 4.1 Password Hashing\b0\par}
+  {\pard\sa100\f0\fs24 Uses bcryptjs with 12 salt rounds. Passwords are hashed during registration and password changes. Login uses bcrypt.compare() to validate against stored hash.\par}
+
+  {\pard\sb200\sa100\f0\fs28\b 4.2 JWT Token Flow\b0\par}
+  {\pard\sa60\f0\fs24 1. On successful login/register, server generates JWT with \{userId\} payload, signed with JWT_SECRET env var.\par}
+  {\pard\sa60\f0\fs24 2. Token expires in 7 days.\par}
+  {\pard\sa60\f0\fs24 3. Frontend stores token in localStorage under key 'auth_token'.\par}
+  {\pard\sa60\f0\fs24 4. Every API request includes Authorization: Bearer <token> header.\par}
+  {\pard\sa60\f0\fs24 5. The authenticateToken middleware (server/middleware/auth.ts) verifies the token and attaches userId to the request object.\par}
+  {\pard\sa60\f0\fs24 6. On 401/403 response, the frontend api.ts utility auto-clears the token and dispatches a custom 'auth_token_cleared' event.\par}
+  {\pard\sa60\f0\fs24 7. AuthContext listens for this event and resets user state to null, triggering redirect to login.\par}
+
+  {\pard\sb200\sa100\f0\fs28\b 4.3 API Endpoints (server/routes/auth.ts)\b0\par}
+  {\pard\li360\sa60\f0\fs24 \bullet  \b POST /api/auth/register\b0  \endash  Creates user, returns \{token, user\}\par}
+  {\pard\li360\sa60\f0\fs24 \bullet  \b POST /api/auth/login\b0  \endash  Validates credentials, returns \{token, user\}\par}
+  {\pard\li360\sa60\f0\fs24 \bullet  \b GET /api/auth/me\b0  \endash  Returns current user from token (used on app load to verify session)\par}
+  {\pard\li360\sa60\f0\fs24 \bullet  \b PUT /api/auth/change-password\b0  \endash  Requires current + new password\par}
+
+  {\pard\sb200\sa100\f0\fs28\b 4.4 Frontend Auth (AuthContext.tsx)\b0\par}
+  {\pard\sa100\f0\fs24 Provides user, loading, isLoggedIn state. On mount, calls /api/auth/me to verify existing token. Exposes login() and logout() methods. ProtectedRoute component in App.tsx wraps /app routes and redirects to /login if not authenticated.\par}
+
+  {\pard\sb200\sa100\f0\fs28\b 4.5 Admin Seeding\b0\par}
+  {\pard\sa100\f0\fs24 The ADMIN_ACCOUNTS environment variable contains a JSON array of account objects. On server startup, seedAdminAccounts() iterates through them: if email doesn't exist, creates a new user with role='admin' and subscription_tier='unlimited'; if user exists, updates their role/tier. Password is hashed with bcrypt (12 rounds).\par}
+
+  
+  {\pard\brdrb\brdrs\brdrw10\brsp20\par}
+
+  {\pard\sb400\sa200\keepn\f0\fs40\b 5. FILE UPLOAD SYSTEM\b0\par}
+
+  {\pard\sb200\sa100\f0\fs28\b 5.1 Primary: Chunked Multipart Upload (S3)\b0\par}
+  {\pard\sa100\f0\fs24 The primary upload path uses S3 multipart upload for resilience against tab suspension and network interruptions. Files are split into 50MB chunks, uploaded 3 concurrently, with 3 retries per chunk.\par}
+
+  {\pard\sa100\f0\fs24\b Flow:\b0\par}
+  {\pard\sa60\f0\fs24 1. Frontend calls POST /api/transcripts/multipart/initiate with \{filename, contentType, fileSize\}.\par}
+  {\pard\sa60\f0\fs24 2. Backend creates S3 multipart upload via CreateMultipartUploadCommand, stores metadata in pendingUploads Map (24-hour expiry), returns \{uploadToken, chunkSize, totalParts\}.\par}
+  {\pard\sa60\f0\fs24 3. Frontend splits file into chunks using File.slice(). For each batch of 3 parts:\par}
+  {\pard\li360\sa60\f0\fs24    a. Calls POST /api/transcripts/multipart/presign-batch with \{uploadToken, partNumbers\} to get presigned URLs for all parts in the batch.\par}
+  {\pard\li360\sa60\f0\fs24    b. Uploads 3 chunks concurrently via XHR PUT to their presigned URLs.\par}
+  {\pard\li360\sa60\f0\fs24    c. Captures the ETag response header from each successful upload (S3 bucket CORS must include ExposeHeaders: [ETag]).\par}
+  {\pard\li360\sa60\f0\fs24    d. On failure, retries with backoff (1s, 2s, 3s) and refreshes the presigned URL.\par}
+  {\pard\sa60\f0\fs24 4. After all parts complete, calls POST /api/transcripts/multipart/complete with \{uploadToken, parts: [\{PartNumber, ETag\}]\}.\par}
+  {\pard\sa60\f0\fs24 5. Backend calls CompleteMultipartUploadCommand, sets completed=true flag.\par}
+  {\pard\sa60\f0\fs24 6. Frontend calls POST /api/transcripts/confirm-upload with \{uploadToken, description, folderId, expectedSpeakers, recordingType, practiceArea\}.\par}
+  {\pard\sa60\f0\fs24 7. Backend verifies multipart.completed===true, creates transcript DB record with status='pending', triggers processTranscription() background task.\par}
+  {\pard\sa60\f0\fs24 8. On any failure, frontend calls POST /api/transcripts/multipart/abort to clean up S3 partial upload.\par}
+
+  {\pard\sb200\sa100\f0\fs28\b 5.2 Progress Tracking\b0\par}
+  {\pard\sa100\f0\fs24 Progress uses a per-part byte map (partBytesLoaded). Each XHR onprogress event updates the loaded bytes for its specific part number. reportProgress() sums all entries and divides by total file size, capped at 95%. The remaining 5% covers the confirm-upload API call.\par}
+
+  {\pard\sb200\sa100\f0\fs28\b 5.3 Server-Side Token Validation\b0\par}
+  {\pard\sa100\f0\fs24 All multipart endpoints validate the upload token via validatePendingUpload() helper which checks: token exists in Map, userId matches authenticated user, expiry hasn't passed. Part numbers are validated against totalParts. The complete endpoint verifies parts.length === totalParts. The confirm-upload endpoint rejects if multipart.completed !== true.\par}
+
+  {\pard\sb200\sa100\f0\fs28\b 5.4 Legacy: Presigned Single-PUT\b0\par}
+  {\pard\sa100\f0\fs24 POST /api/transcripts/presigned-upload generates a single presigned PutObject URL. The client uploads the entire file in one XHR PUT request. Still functional for backward compatibility.\par}
+
+  {\pard\sb200\sa100\f0\fs28\b 5.5 Fallback: Multer Upload\b0\par}
+  {\pard\sa100\f0\fs24 POST /api/transcripts/upload uses multer v2 for multipart/form-data. The file passes through the Express server. If S3 is configured, the file is re-uploaded to S3 and the local temp file is deleted. If S3 is not configured, it remains in the local uploads/ directory.\par}
+
+  {\pard\sb200\sa100\f0\fs28\b 5.6 Frontend Upload UX\b0\par}
+  {\pard\sa100\f0\fs24\b UploadDropzone.tsx:\b0  Combined file selector and metadata form. Supports drag-and-drop and file browsing. Validates file type against a comprehensive regex of audio/video extensions. Metadata collected before upload: Recording Type (Deposition, Court Hearing, Recorded Statement, Police Interrogation, Other), Area of Law (10 practice areas), Expected Speakers (Auto-detect or 2-6+). File is "staged" in UI before user commits.\par}
+  {\pard\sa100\f0\fs24\b AudioRecorder.tsx:\b0  In-browser recording using MediaRecorder API. Records WebM/opus format. Features real-time audio visualizer (Web Audio API AnalyserNode), pause/resume/cancel controls, and elapsed time display. On stop, generates a timestamped .webm file.\par}
+  {\pard\sa100\f0\fs24\b RecordingMetadata.tsx:\b0  Post-recording modal that collects the same metadata as UploadDropzone (recording type, practice area, speakers) before initiating upload.\par}
+  {\pard\sa100\f0\fs24\b UploadProgress.tsx:\b0  Framer Motion animated floating panel in bottom-right. Shows active uploads with progress bars, completion checkmarks, or error icons. Auto-dismisses after 3s (success) or 5s (error). Manual dismiss via X button.\par}
+
+  {\pard\sb200\sa100\f0\fs28\b 5.7 Background Upload (TranscriptContext.tsx)\b0\par}
+  {\pard\sa100\f0\fs24 startBackgroundUpload() creates a unique uploadId, adds an UploadEntry to activeUploads state, calls api.transcripts.upload() with a progress callback, and handles success/error by updating the entry status and scheduling removal. Uploads are non-blocking \endash  the modal closes immediately and the user can continue working.\par}
+
+  
+  {\pard\brdrb\brdrs\brdrw10\brsp20\par}
+
+  {\pard\sb400\sa200\keepn\f0\fs40\b 6. AMAZON S3 STORAGE LAYER\b0\par}
+
+  {\pard\sb200\sa100\f0\fs28\b 6.1 Configuration\b0\par}
+  {\pard\sa100\f0\fs24 server/s3.ts initializes an S3Client using AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, S3_BUCKET_NAME, S3_REGION env vars. The s3Configured boolean gates all S3 operations. If credentials are missing, the app falls back to local disk storage.\par}
+
+  {\pard\sb200\sa100\f0\fs28\b 6.2 Core Functions\b0\par}
+  {\pard\li360\sa60\f0\fs24 \bullet  \b uploadToS3(buffer, key, contentType)\b0  \endash  Uploads a Buffer, returns s3://<key>\par}
+  {\pard\li360\sa60\f0\fs24 \bullet  \b uploadFileToS3(filePath, key, contentType)\b0  \endash  Streams a local file to S3\par}
+  {\pard\li360\sa60\f0\fs24 \bullet  \b downloadFromS3(key)\b0  \endash  Downloads to temp dir (os.tmpdir()), returns local path. Cleans up on failure.\par}
+  {\pard\li360\sa60\f0\fs24 \bullet  \b streamFromS3(key, res)\b0  \endash  Pipes S3 object stream directly to Express response\par}
+  {\pard\li360\sa60\f0\fs24 \bullet  \b deleteFromS3(key)\b0  \endash  Deletes an object from S3\par}
+  {\pard\li360\sa60\f0\fs24 \bullet  \b getPresignedDownloadUrl(key)\b0  \endash  Signed GET URL (1 hour)\par}
+  {\pard\li360\sa60\f0\fs24 \bullet  \b getPresignedUploadUrl(key, contentType)\b0  \endash  Signed PUT URL (1 hour)\par}
+  {\pard\li360\sa60\f0\fs24 \bullet  \b createMultipartUpload(key, contentType)\b0  \endash  Returns UploadId\par}
+  {\pard\li360\sa60\f0\fs24 \bullet  \b getPresignedPartUrl(key, uploadId, partNumber)\b0  \endash  Signed URL for multipart part\par}
+  {\pard\li360\sa60\f0\fs24 \bullet  \b completeMultipartUpload(key, uploadId, parts)\b0  \endash  Assembles parts, sorts by PartNumber\par}
+  {\pard\li360\sa60\f0\fs24 \bullet  \b abortMultipartUpload(key, uploadId)\b0  \endash  Cancels and cleans up partial upload\par}
+
+  {\pard\sb200\sa100\f0\fs28\b 6.3 R2 Backward Compatibility\b0\par}
+  {\pard\sa100\f0\fs24 isCloudStorageUrl() matches both s3:// and r2:// prefixes. getKeyFromStorageUrl() strips either prefix. This handles legacy database entries from a prior Cloudflare R2 storage period.\par}
+
+  {\pard\sb200\sa100\f0\fs28\b 6.4 S3 CORS Configuration\b0\par}
+  {\pard\sa100\f0\fs24 The S3 bucket must have CORS configured to allow browser direct uploads:\par}
+  {\pard\sa60\f1\fs20 AllowedMethods: GET, PUT, POST, DELETE, HEAD\par}
+  {\pard\sa60\f1\fs20 AllowedOrigins: https://scribe.mattrmindr.com, http://scribe.mattrmindr.com\par}
+  {\pard\sa60\f1\fs20 AllowedHeaders: *\par}
+  {\pard\sa60\f1\fs20 ExposeHeaders: ETag    (CRITICAL for multipart uploads)\par}
+  {\pard\sa60\f1\fs20 MaxAgeSeconds: 3600\par}
+
+  {\pard\sb200\sa100\f0\fs28\b 6.5 Media Token System (server/index.ts)\b0\par}
+  {\pard\sa100\f0\fs24\b POST /api/media/token:\b0  Authenticated endpoint. Verifies the user owns the transcript associated with the requested filename. For cloud storage files (s3:// or r2://), immediately generates a presigned S3 download URL and returns it as mediaUrl. For local files, generates a random 32-byte hex token stored in an in-memory Map with 1-hour expiry.\par}
+  {\pard\sa100\f0\fs24\b GET /api/media/:filename?token=:\b0  Validates the token, checks filename match, and either streams from S3 (if isCloudStorage) or serves the local file via res.sendFile().\par}
+
+  
+  {\pard\brdrb\brdrs\brdrw10\brsp20\par}
+
+  {\pard\sb400\sa200\keepn\f0\fs40\b 7. AI TRANSCRIPTION PIPELINE (3 STEPS)\b0\par}
+
+  {\pard\sa100\f0\fs24 The pipeline is triggered by processTranscription(transcriptId) and runs as a background task. It processes audio/video files through three AI services sequentially.\par}
+
+  {\pard\sb200\sa100\f0\fs28\b 7.1 Step 1: OpenAI Whisper (Speech-to-Text)\b0\par}
+  {\pard\sa100\f0\fs24\b Audio Duration Detection:\b0  Uses ffprobe with 3 fallback strategies: (1) format metadata, (2) stream metadata, (3) full file scan. Duration is non-blocking \endash  the pipeline continues even if all probing fails. WAV files use file-size-based calculation.\par}
+  {\pard\sa100\f0\fs24\b Chunking:\b0  If the file exceeds 24MB, splitAudioIntoChunks() converts it directly to MP3 chunks (64kbps, 16kHz, mono) using ffmpeg time-based seeking. No intermediate WAV conversion. Chunk size is calculated from output bitrate (~43 min per chunk). A 1-second overlap between chunks prevents word loss at boundaries.\par}
+  {\pard\sa100\f0\fs24\b API Calls:\b0  Chunks are processed in parallel (concurrency of 3 via p-limit) using OpenAI's whisper-1 model with verbose_json response format to get segment-level timestamps. Retry with exponential jittered backoff (up to 4 attempts) via p-retry.\par}
+  {\pard\sa100\f0\fs24\b Deduplication:\b0  deduplicateSegments() sorts by start time and removes duplicates where start times are within 1.5s and text overlap (Jaccard-like similarity) exceeds 0.7.\par}
+  {\pard\sa100\f0\fs24\b Hallucination Detection:\b0  removeHallucinatedSegments() identifies common Whisper hallucination loops \endash  repeated short phrases (3 words or fewer) appearing 3+ times consecutively with uniform temporal spacing.\par}
+
+  {\pard\sb200\sa100\f0\fs28\b 7.2 Step 2: AssemblyAI (Speaker Diarization)\b0\par}
+  {\pard\sa100\f0\fs24\b Upload:\b0  The audio file is uploaded to AssemblyAI using createReadStream() (streaming upload, not readFile()) to prevent OOM on large files. This was a critical fix for 1GB+ files.\par}
+  {\pard\sa100\f0\fs24\b Model:\b0  Uses universal-3-pro with speaker_labels: true. If expected_speakers is provided (or if recording type is deposition, which defaults to 5), it passes speakers_expected to the API.\par}
+  {\pard\sa100\f0\fs24\b Diarization runs in parallel with Whisper.\b0  Both Step 1 and Step 2 begin simultaneously.\par}
+  {\pard\sa100\f0\fs24\b Mapping:\b0  mapDiarizationToSegments() aligns Whisper's high-accuracy text with AssemblyAI's speaker labels using a "best overlap" strategy: it calculates the intersection of Whisper segment time-ranges with AssemblyAI utterance ranges. Falls back to nearest mid-point distance if no overlap is found.\par}
+
+  {\pard\sb200\sa100\f0\fs28\b 7.3 Step 3: Claude Opus 4 (Speaker Refinement)\b0\par}
+  {\pard\sa100\f0\fs24\b Model:\b0  claude-opus-4-20250514 via Anthropic streaming API.\par}
+  {\pard\sa100\f0\fs24\b Two-Pass Deposition Refinement:\b0\par}
+  {\pard\li360\sa60\f0\fs24 \bullet  \b Pass 1 (Roster Identification):\b0  Analyzes the first 80 segments to identify the speaker roster (attorneys, deponent, court reporter, videographer).\par}
+  {\pard\li360\sa60\f0\fs24 \bullet  \b Pass 2 (Full Refinement):\b0  Processes the transcript in batches of 700 segments (with 20-segment overlap between batches). Uses the roster from Pass 1. Claude returns \{segments: [\{label, text\}], identifications\} \endash  both corrected speaker labels AND cleaned text (punctuation, time formatting, capitalization) while preserving filler words verbatim.\par}
+  {\pard\sa100\f0\fs24\b Batch Limits:\b0  SINGLE_CALL_LIMIT=800 segments, BATCH_SIZE=700 segments (respects Claude Opus 4's 32K max output token limit).\par}
+  {\pard\sa100\f0\fs24\b Recording-Type Prompts:\b0  The system sends only the matching recording-type section to Claude (deposition, court_hearing, police_interrogation, etc.) for targeted refinement.\par}
+  {\pard\sa100\f0\fs24\b Q&A Post-Processing:\b0  applyDepositionQAPostProcessing() identifies the examiner (most questions) and deponent (most answers), then corrects short misattributed utterances (like "Okay", "Mm-hmm") using examiner/deponent alternation logic.\par}
+  {\pard\sa100\f0\fs24\b Speaker Normalization:\b0  Post-batch normalization eliminates generic "Speaker N" labels that leak through Claude's output. Auto-defaults 5 expected speakers for depositions.\par}
+
+  {\pard\sb200\sa100\f0\fs28\b 7.4 Resumable Checkpoint System\b0\par}
+  {\pard\sa100\f0\fs24 After Whisper+Diarization complete (but before Claude refinement), segments are saved to the database and pipeline_log is updated with whisper.status='success'. On server restart, if hasCheckpoint (whisper success + segments exist), the pipeline skips directly to Step 3 refinement instead of re-downloading and re-transcribing.\par}
+
+  {\pard\sb200\sa100\f0\fs28\b 7.5 Cancellation\b0\par}
+  {\pard\sa100\f0\fs24 Periodic checkCancelled() calls during the pipeline query the database for the transcript's existence. If deleted by the user, the pipeline stops immediately to avoid wasting API credits.\par}
+
+  {\pard\sb200\sa100\f0\fs28\b 7.6 Segment Storage\b0\par}
+  {\pard\sa100\f0\fs24 Segments are saved in a DB transaction: DELETE existing + INSERT new + UPDATE transcript status, all atomically. An ON CONFLICT upsert on (transcript_id, segment_order) unique index prevents duplicate rows.\par}
+
+  
+  {\pard\brdrb\brdrs\brdrw10\brsp20\par}
+
+  {\pard\sb400\sa200\keepn\f0\fs40\b 8. LEGAL AGENTS & AI SUMMARIZATION SYSTEM\b0\par}
+
+  {\pard\sb200\sa100\f0\fs28\b 8.1 Agent Types (server/legalAgents.ts)\b0\par}
+  {\pard\sa100\f0\fs24 10 specialized legal agents, each with a unique system prompt and 7-10 recording sub-types:\par}
+  {\pard\li360\sa60\f0\fs24 1. \b Personal Injury\b0  (personal-injury) \endash  10 sub-types: Plaintiff's Depo, Defendant's Depo, Treating Physician, Retained Expert, Fact Witness, Damages Witness, IME, Recorded Statement, Court Hearing, Other\par}
+  {\pard\li360\sa60\f0\fs24 2. \b Family Law\b0  (family-law) \endash  9 sub-types: Party Depo, Custody Evaluation, Mediation, Court Hearing, GAL Interview, Financial Expert, Fact Witness, Child Interview, Other\par}
+  {\pard\li360\sa60\f0\fs24 3. \b Criminal Defense\b0  (criminal-defense) \endash  10 sub-types: Interrogation, Body Camera, Investigation Interview, Expert Witness, Witness Interview, 911 Call, Court Hearing, Grand Jury, Jail Call, Other\par}
+  {\pard\li360\sa60\f0\fs24 4. \b Workers' Compensation\b0  (workers-comp) \endash  9 sub-types: Claimant Depo, Employer Depo, Treating Physician, IME, Vocational Expert, Co-Worker, Board Hearing, Recorded Statement, Other\par}
+  {\pard\li360\sa60\f0\fs24 5. \b Insurance Defense\b0  (insurance-defense) \endash  8 sub-types: Claimant's Depo, Recorded Statement, Expert Witness, Surveillance Review, Court Hearing, EUO, Fact Witness, Other\par}
+  {\pard\li360\sa60\f0\fs24 6. \b Employment Law\b0  (employment-law) \endash  9 sub-types: Plaintiff's Depo, Corporate Rep 30(b)(6), HR Representative, Co-Worker, Expert Witness, Internal Investigation, EEOC Hearing, Court Hearing, Other\par}
+  {\pard\li360\sa60\f0\fs24 7. \b Medical Malpractice\b0  (medical-malpractice) \endash  9 sub-types: Patient Depo, Defendant Physician, Treating Physician, Expert Witness, Nurse/Staff, Hospital Corporate Rep, Court Hearing, IME, Other\par}
+  {\pard\li360\sa60\f0\fs24 8. \b Real Estate\b0  (real-estate) \endash  9 sub-types: Party Depo, Expert Witness, HOA Meeting, Zoning Hearing, Broker Depo, Inspection Recording, Court Hearing, Mediation, Other\par}
+  {\pard\li360\sa60\f0\fs24 9. \b Immigration\b0  (immigration) \endash  9 sub-types: Asylum Interview, Immigration Court, Client Prep, Country Expert, Fear Interview, Bond Hearing, Naturalization, Visa Interview, Other\par}
+  {\pard\li360\sa60\f0\fs24 10. \b General Litigation\b0  (general-litigation) \endash  9 sub-types: Plaintiff's Depo, Defendant's Depo, Expert Witness, Fact Witness, Court Hearing, Mediation, Arbitration, Corporate Rep, Other\par}
+
+  {\pard\sb200\sa100\f0\fs28\b 8.2 Prompt Architecture\b0\par}
+  {\pard\sa100\f0\fs24 Each agent has a systemPrompt that defines the AI's role and the 10-section output structure (Case Overview, specific sections per practice area, Attorney Action Items). Each sub-type has a promptModifier that narrows the focus. The "Other" sub-type accepts a custom description from the user and generates a dynamic prompt: "This transcript is from: [description]. Analyze it thoroughly using the framework for this practice area."\par}
+
+  {\pard\sb200\sa100\f0\fs28\b 8.3 Summarize Endpoint (SSE)\b0\par}
+  {\pard\sa100\f0\fs24 POST /api/transcripts/:id/summarize is a Server-Sent Events endpoint. It streams tokens in real-time as the AI generates the summary. Uses GPT model for generation. On completion, saves the full summary to transcript_summaries table with agent_type and sub_type.\par}
+
+  {\pard\sb200\sa100\f0\fs28\b 8.4 Summary Storage\b0\par}
+  {\pard\sa100\f0\fs24 Multiple summaries can exist per transcript (different agents, different sub-types). GET /api/transcripts/:id/summaries retrieves all past summaries ordered by creation date.\par}
+
+  
+  {\pard\brdrb\brdrs\brdrw10\brsp20\par}
+
+  {\pard\sb400\sa200\keepn\f0\fs40\b 9. TRANSCRIPT VIEWER & EDITOR\b0\par}
+
+  {\pard\sb200\sa100\f0\fs28\b 9.1 Segment Editing\b0\par}
+  {\pard\sa100\f0\fs24 Users click any segment text to enter inline editing mode. Changes are saved on blur or Enter. The TranscriptText component renders each segment with timestamp, speaker name, and editable text.\par}
+
+  {\pard\sb200\sa100\f0\fs28\b 9.2 Merge & Split\b0\par}
+  {\pard\sa100\f0\fs24\b Split:\b0  A segment can be split at a specific character position. The system calculates a midpoint timestamp for the new segment. \b Merge:\b0  On desktop, a merge button appears between adjacent segments. On mobile, a checkbox-based multi-select system allows merging 2+ selected segments. The merged segment inherits the first segment's speaker and start time, and the last segment's end time.\par}
+
+  {\pard\sb200\sa100\f0\fs28\b 9.3 Undo Stack & Autosave\b0\par}
+  {\pard\sa100\f0\fs24 An internal undoStack stores previous segment states. Edits, merges, and splits push to the stack. Autosave is debounced by 1500ms \endash  after each edit, if no further edits occur within 1.5s, a new transcript version is created via the API.\par}
+
+  {\pard\sb200\sa100\f0\fs28\b 9.4 Audio Synchronization\b0\par}
+  {\pard\sa100\f0\fs24\b Bidirectional sync:\b0  (1) As audio plays, the active segment auto-scrolls into view using scrollIntoView(\{behavior: 'smooth', block: 'center'\}). If the user manually scrolls, auto-scroll pauses for 5 seconds. (2) Clicking a timestamp seeks the audio to that segment's start_time.\par}
+  {\pard\sa100\f0\fs24\b useAudioPlayer.ts:\b0  Custom hook managing HTML5 audio/video playback with secure media token fetch, variable speed (0.5x-2x), skip forward/back, and currentTime tracking.\par}
+
+  {\pard\sb200\sa100\f0\fs28\b 9.5 Speaker Management\b0\par}
+  {\pard\li360\sa60\f0\fs24 \bullet  \b Rename:\b0  Renaming a speaker updates all segments globally.\par}
+  {\pard\li360\sa60\f0\fs24 \bullet  \b Merge Speakers:\b0  POST /api/transcripts/:id/merge-speaker combines all segments from one speaker into another. Creates a version snapshot. Transactional.\par}
+  {\pard\li360\sa60\f0\fs24 \bullet  \b Color Coding:\b0  10 distinct colors (Blue, Purple, Emerald, etc.) assigned by hash of speaker name. Manually overridable.\par}
+  {\pard\li360\sa60\f0\fs24 \bullet  \b Per-Segment Reassignment:\b0  Click a speaker name on a segment to change it via dropdown.\par}
+
+  {\pard\sb200\sa100\f0\fs28\b 9.6 Version History\b0\par}
+  {\pard\sa100\f0\fs24 Every major edit creates a version snapshot in transcript_versions (full segment array as JSONB). Users can browse history and revert to any previous version. Reversion itself is undoable. POST /api/transcripts/:id/versions creates, GET retrieves.\par}
+
+  {\pard\sb200\sa100\f0\fs28\b 9.7 Pipeline Summary Panel\b0\par}
+  {\pard\sa100\f0\fs24 PipelineSummary.tsx shows the 3-step pipeline status (Whisper, AssemblyAI, Claude Opus) with individual step status indicators. If a step failed, shows the error and provides a "Retry Transcription" button.\par}
+
+  {\pard\sb200\sa100\f0\fs28\b 9.8 Export\b0\par}
+  {\pard\sa100\f0\fs24 GET /api/transcripts/:id/export/:format supports three formats:\par}
+  {\pard\li360\sa60\f0\fs24 \bullet  \b txt:\b0  Plain text with timestamps and speaker names. Native string manipulation.\par}
+  {\pard\li360\sa60\f0\fs24 \bullet  \b docx:\b0  Word document using the 'docx' library. Heading, metadata in grey/italic, bordered speaker sections.\par}
+  {\pard\li360\sa60\f0\fs24 \bullet  \b pdf:\b0  PDF using 'pdfkit'. Letter size, 50pt margins, formatted headers, automatic page breaks.\par}
+
+  
+  {\pard\brdrb\brdrs\brdrw10\brsp20\par}
+
+  {\pard\sb400\sa200\keepn\f0\fs40\b 10. FOLDER & CASE MANAGEMENT\b0\par}
+
+  {\pard\sb200\sa100\f0\fs28\b 10.1 Data Model\b0\par}
+  {\pard\sa100\f0\fs24 Folders support hierarchy via parent_id self-reference. Each folder belongs to a user (user_id). Can optionally link to a MattrMindr case via mattrmindr_case_id and mattrmindr_case_name columns.\par}
+
+  {\pard\sb200\sa100\f0\fs28\b 10.2 API Endpoints (server/routes/folders.ts)\b0\par}
+  {\pard\li360\sa60\f0\fs24 \bullet  \b GET /api/folders\b0  \endash  List all folders for user, ordered alphabetically\par}
+  {\pard\li360\sa60\f0\fs24 \bullet  \b POST /api/folders\b0  \endash  Create folder. Supports optional MattrMindr case linking at creation.\par}
+  {\pard\li360\sa60\f0\fs24 \bullet  \b PATCH /api/folders/:id\b0  \endash  Update name, case number\par}
+  {\pard\li360\sa60\f0\fs24 \bullet  \b DELETE /api/folders/:id\b0  \endash  Deletes folder, unsets folder_id on transcripts (does not delete transcripts)\par}
+  {\pard\li360\sa60\f0\fs24 \bullet  \b POST /api/folders/move-transcripts\b0  \endash  Bulk move transcript IDs into a folder\par}
+
+  
+  {\pard\brdrb\brdrs\brdrw10\brsp20\par}
+
+  {\pard\sb400\sa200\keepn\f0\fs40\b 11. MATTRMINDR INTEGRATION\b0\par}
+
+  {\pard\sb200\sa100\f0\fs28\b 11.1 Outbound (server/routes/mattrmindr.ts)\b0\par}
+  {\pard\li360\sa60\f0\fs24 \bullet  \b POST /api/mattrmindr/connect\b0  \endash  User provides baseUrl, email, password. Backend authenticates against MattrMindr server's /api/external/auth endpoint. Stores auth_token in mattrmindr_connections table.\par}
+  {\pard\li360\sa60\f0\fs24 \bullet  \b GET /api/mattrmindr/status\b0  \endash  Returns connection status.\par}
+  {\pard\li360\sa60\f0\fs24 \bullet  \b DELETE /api/mattrmindr/disconnect\b0  \endash  Removes connection.\par}
+  {\pard\li360\sa60\f0\fs24 \bullet  \b GET /api/mattrmindr/cases?q=\b0  \endash  Proxies case search to MattrMindr server.\par}
+  {\pard\li360\sa60\f0\fs24 \bullet  \b POST /api/mattrmindr/send/:folderId\b0  \endash  Sends all completed transcripts in a folder to the linked case. Checks for file conflicts.\par}
+  {\pard\li360\sa60\f0\fs24 \bullet  \b POST /api/mattrmindr/send/:folderId/confirm\b0  \endash  Confirms send with file replacements.\par}
+  {\pard\li360\sa60\f0\fs24 \bullet  \b POST /api/mattrmindr/send-transcript/:transcriptId\b0  \endash  Sends a single transcript. Creates/links folder if necessary.\par}
+
+  {\pard\sa100\f0\fs24\b Data payload includes:\b0  Media metadata, current segments, full version history, AI summaries, and pipeline log.\par}
+
+  {\pard\sb200\sa100\f0\fs28\b 11.2 Inbound (server/routes/external.ts)\b0\par}
+  {\pard\li360\sa60\f0\fs24 \bullet  \b POST /api/external/auth\b0  \endash  MattrMindr authenticates against Scribe to get a JWT.\par}
+  {\pard\li360\sa60\f0\fs24 \bullet  \b POST /api/external/receive\b0  \endash  Accepts a fileUrl. Scribe downloads the file, saves to S3 or local storage, creates DB record, triggers processTranscription pipeline.\par}
+  {\pard\li360\sa60\f0\fs24 \bullet  \b GET /api/external/transcripts/:id/status\b0  \endash  MattrMindr polls for transcription progress and final segments.\par}
+
+  {\pard\sa100\f0\fs24 All MattrMindr API calls are server-to-server (proxied through Scribe backend). No direct browser-to-MattrMindr requests. API contract documented in mattrmindr-api-contract.md.\par}
+
+  
+  {\pard\brdrb\brdrs\brdrw10\brsp20\par}
+
+  {\pard\sb400\sa200\keepn\f0\fs40\b 12. SERVER STARTUP, RECOVERY & ADMINISTRATION\b0\par}
+
+  {\pard\sb200\sa100\f0\fs28\b 12.1 Startup Sequence (server/index.ts)\b0\par}
+  {\pard\sa60\f0\fs24 1. Import dotenv, initialize Express, apply middleware.\par}
+  {\pard\sa60\f0\fs24 2. Run inline database migrations (idempotent, .catch() for "already exists").\par}
+  {\pard\sa60\f0\fs24 3. Seed admin accounts from ADMIN_ACCOUNTS env var.\par}
+  {\pard\sa60\f0\fs24 4. Mount API routes and start listening.\par}
+  {\pard\sa60\f0\fs24 5. Capture serverBootTime = new Date().toISOString() at module level.\par}
+  {\pard\sa60\f0\fs24 6. After 2-second delay (setTimeout), run startup tasks:\par}
+
+  {\pard\sb200\sa100\f0\fs28\b 12.2 Temp File Cleanup\b0\par}
+  {\pard\sa100\f0\fs24 Scans os.tmpdir() and deletes all directories starting with s3_download_ or transcription_. These are orphaned from interrupted transcription jobs that left partial files behind (e.g., due to crashes or ENOSPC errors).\par}
+
+  {\pard\sb200\sa100\f0\fs28\b 12.3 Auto-Resume Recovery\b0\par}
+  {\pard\sa100\f0\fs24 Queries transcripts with status 'processing' or 'resuming' that were updated BEFORE serverBootTime (prevents double-triggering on fast-starting transcripts). For each stuck transcript:\par}
+  {\pard\li360\sa60\f0\fs24 \bullet  If pipeline_log.whisper.status === 'success' AND segments exist in DB: resumes from Step 3 (refinement) only.\par}
+  {\pard\li360\sa60\f0\fs24 \bullet  Otherwise: restarts from the beginning.\par}
+  {\pard\sa100\f0\fs24 Uses processTranscription(id) to restart each stuck item.\par}
+
+  {\pard\sb200\sa100\f0\fs28\b 12.4 ENOSPC Handling\b0\par}
+  {\pard\sa100\f0\fs24 Disk-full (ENOSPC) errors during transcription are caught gracefully. The transcript status is set to 'error' with a clear message instead of crashing the server. Partial S3 downloads are cleaned up on failure in downloadFromS3().\par}
+
+  {\pard\sb200\sa100\f0\fs28\b 12.5 Admin Restart Endpoint\b0\par}
+  {\pard\sa100\f0\fs24 POST /api/transcripts/admin/restart-processing with X-Admin-Key header (validated against ADMIN_API_KEY env var). This endpoint is registered BEFORE router.use(authenticateToken) so it doesn't require a user session. Returns JSON immediately, then triggers staggered background restarts (5-second delay between each) from each transcript's last checkpoint.\par}
+
+  {\pard\sb200\sa100\f0\fs28\b 12.6 Data Deduplication Migrations\b0\par}
+  {\pard\sa100\f0\fs24 Two one-time data migrations tracked in the _migrations table:\par}
+  {\pard\li360\sa60\f0\fs24 \bullet  \b dedup_segments_v1:\b0  Runs deduplicateExistingSegments() on transcripts with >200 segments.\par}
+  {\pard\li360\sa60\f0\fs24 \bullet  \b dedup_segments_v2:\b0  Deletes duplicate rows by (transcript_id, segment_order), then creates a UNIQUE INDEX to prevent future duplicates.\par}
+
+  
+  {\pard\brdrb\brdrs\brdrw10\brsp20\par}
+
+  {\pard\sb400\sa200\keepn\f0\fs40\b 13. FRONTEND ARCHITECTURE\b0\par}
+
+  {\pard\sb200\sa100\f0\fs28\b 13.1 Routing (src/App.tsx)\b0\par}
+  {\pard\sa60\f0\fs24 React Router v6 hierarchy:\par}
+  {\pard\li360\sa60\f1\fs20 /              -> LandingPage (public marketing/pricing)\par}
+  {\pard\li360\sa60\f1\fs20 /login         -> AuthPage (login/register forms)\par}
+  {\pard\li360\sa60\f1\fs20 /app           -> AppLayout (protected wrapper)\par}
+  {\pard\li360\sa60\f1\fs20   /app/        -> DashboardPage (transcript list, folder view)\par}
+  {\pard\li360\sa60\f1\fs20   /app/transcript/:id -> TranscriptViewerPage\par}
+  {\pard\li360\sa60\f1\fs20 /app/transcript/:id/present -> PresentModePage\par}
+
+  {\pard\sb200\sa100\f0\fs28\b 13.2 Contexts\b0\par}
+  {\pard\li360\sa60\f0\fs24 \bullet  \b AuthContext\b0  \endash  User session, JWT management, login/logout, isLoggedIn state.\par}
+  {\pard\li360\sa60\f0\fs24 \bullet  \b TranscriptContext\b0  \endash  Transcript list, folder list, active uploads, background upload management, optimistic updates.\par}
+  {\pard\li360\sa60\f0\fs24 \bullet  \b ThemeContext\b0  \endash  Dark/light mode. Toggles .dark class on document root. Persists in localStorage.\par}
+
+  {\pard\sb200\sa100\f0\fs28\b 13.3 Landing Page\b0\par}
+  {\pard\sa100\f0\fs24 Marketing page with hero section, 6-item features grid, and 3-tier pricing (Starter $29/mo, Professional $79/mo highlighted as "Most Popular", Enterprise $199/mo). Pricing buttons redirect to /login. Note: Stripe payment processing is not yet implemented \endash  the DB supports subscription_tier but there is no active checkout/webhook flow.\par}
+
+  {\pard\sb200\sa100\f0\fs28\b 13.4 Present Mode\b0\par}
+  {\pard\sa100\f0\fs24 Full-screen, distraction-free courtroom presentation. Dark background (slate-950), large typography (text-3xl/4xl), active segment highlighted at 100% opacity/scale while inactive segments dim to 40% opacity and 95% scale. Auto-scrolls to active segment synced with audio playback. Only Play/Pause and Exit controls. Exit via button or Escape key.\par}
+
+  {\pard\sb200\sa100\f0\fs28\b 13.5 Mobile Responsiveness\b0\par}
+  {\pard\li360\sa60\f0\fs24 \bullet  \b MobileResumeHandler:\b0  Forces DOM repaint on visibilitychange. Reloads page if hidden >30s. Reloads on pageshow with e.persisted (BFCache restore).\par}
+  {\pard\li360\sa60\f0\fs24 \bullet  \b Touch targets:\b0  touch-action: manipulation on buttons/links. -webkit-tap-highlight-color: transparent.\par}
+  {\pard\li360\sa60\f0\fs24 \bullet  \b Transcript editing:\b0  Checkbox-based merge on mobile (vs inline buttons on desktop).\par}
+  {\pard\li360\sa60\f0\fs24 \bullet  \b Speaker manager:\b0  Bottom sheet on mobile (fixed inset-x-0 bottom-0), dropdown on desktop.\par}
+  {\pard\li360\sa60\f0\fs24 \bullet  \b Speaker bar:\b0  Horizontally scrollable with flex-nowrap + whitespace-nowrap + flex-shrink-0.\par}
+  {\pard\li360\sa60\f0\fs24 \bullet  \b Side panels:\b0  Full-width on mobile.\par}
+  {\pard\li360\sa60\f0\fs24 \bullet  \b Audio player:\b0  Pointer events for drag-to-scrub. Speed as dropdown on mobile, inline buttons on desktop.\par}
+
+  {\pard\sb200\sa100\f0\fs28\b 13.6 Key Frontend Files\b0\par}
+  {\pard\li360\sa60\f0\fs24 \bullet  src/App.tsx \endash  Routing, providers, ProtectedRoute, ErrorBoundary\par}
+  {\pard\li360\sa60\f0\fs24 \bullet  src/utils/api.ts \endash  Centralized fetch wrapper, token management, chunked upload logic\par}
+  {\pard\li360\sa60\f0\fs24 \bullet  src/contexts/*.tsx \endash  Auth, Transcript, Theme state management\par}
+  {\pard\li360\sa60\f0\fs24 \bullet  src/components/layout/AppLayout.tsx \endash  Shell for authenticated app, sidebar, mobile overlays\par}
+  {\pard\li360\sa60\f0\fs24 \bullet  src/components/layout/Sidebar.tsx \endash  Navigation, folder tree, search, MattrMindr integration\par}
+  {\pard\li360\sa60\f0\fs24 \bullet  src/components/viewer/TranscriptText.tsx \endash  Interactive segments with auto-scroll, editing\par}
+  {\pard\li360\sa60\f0\fs24 \bullet  src/components/viewer/AISummaryPanel.tsx \endash  SSE streaming summary display with markdown rendering\par}
+  {\pard\li360\sa60\f0\fs24 \bullet  src/hooks/useAudioPlayer.ts \endash  HTML5 media playback with secure token fetch\par}
+
+  
+  {\pard\brdrb\brdrs\brdrw10\brsp20\par}
+
+  {\pard\sb400\sa200\keepn\f0\fs40\b 14. DEPLOYMENT & INFRASTRUCTURE\b0\par}
+
+  {\pard\sb200\sa100\f0\fs28\b 14.1 Development (Replit)\b0\par}
+  {\pard\li360\sa60\f0\fs24 \bullet  Target: vm (always-on). Autoscale would kill 20-30+ min transcription pipelines via SIGTERM.\par}
+  {\pard\li360\sa60\f0\fs24 \bullet  Build: npm run build (Vite production build to dist/)\par}
+  {\pard\li360\sa60\f0\fs24 \bullet  Run: npm run start (production) or npm run dev (development)\par}
+
+  {\pard\sb200\sa100\f0\fs28\b 14.2 Production (AWS EC2)\b0\par}
+  {\pard\li360\sa60\f0\fs24 \bullet  \b Domain:\b0  scribe.mattrmindr.com (via Cloudflare DNS)\par}
+  {\pard\li360\sa60\f0\fs24 \bullet  \b Server:\b0  EC2 Ubuntu instance\par}
+  {\pard\li360\sa60\f0\fs24 \bullet  \b Process Manager:\b0  PM2 (pm2 start npm --name "mattrmindrscribe" -- run start)\par}
+  {\pard\li360\sa60\f0\fs24 \bullet  \b Reverse Proxy:\b0  Nginx at /etc/nginx/sites-available/mattrmindrscribe. client_max_body_size set for large uploads.\par}
+  {\pard\li360\sa60\f0\fs24 \bullet  \b Database:\b0  PostgreSQL local, user mattrmindr, database mattrmindrscribe, auth scram-sha-256\par}
+  {\pard\li360\sa60\f0\fs24 \bullet  \b S3 Bucket:\b0  mattrmindrscribe-files in us-east-2\par}
+  {\pard\li360\sa60\f0\fs24 \bullet  \b Code Repo:\b0  github.com/benw525/MattrMindrScribe\par}
+  {\pard\li360\sa60\f0\fs24 \bullet  \b Deploy:\b0  git pull origin main && npm run build && pm2 restart mattrmindrscribe\par}
+
+  
+  {\pard\brdrb\brdrs\brdrw10\brsp20\par}
+
+  {\pard\sb400\sa200\keepn\f0\fs40\b 15. ENVIRONMENT VARIABLES REFERENCE\b0\par}
+
+  {\pard\sa100\f0\fs24 All environment variables stored in .env file (gitignored). On EC2, located at /home/ubuntu/mattrmindrscribe/.env\par}
+
+  {\pard\sa60\f1\fs20 DATABASE_URL        = postgres://mattrmindr:***@localhost/mattrmindrscribe\par}
+  {\pard\sa60\f1\fs20 JWT_SECRET          = <random string for JWT signing>\par}
+  {\pard\sa60\f1\fs20 AWS_ACCESS_KEY_ID   = <IAM access key>\par}
+  {\pard\sa60\f1\fs20 AWS_SECRET_ACCESS_KEY = <IAM secret key>\par}
+  {\pard\sa60\f1\fs20 S3_BUCKET_NAME      = mattrmindrscribe-files\par}
+  {\pard\sa60\f1\fs20 S3_REGION           = us-east-2\par}
+  {\pard\sa60\f1\fs20 OPENAI_API_KEY      = <OpenAI API key for Whisper + GPT>\par}
+  {\pard\sa60\f1\fs20 ANTHROPIC_API_KEY   = <Anthropic API key for Claude Opus>\par}
+  {\pard\sa60\f1\fs20 ASSEMBLYAI_API_KEY  = <AssemblyAI API key for diarization>\par}
+  {\pard\sa60\f1\fs20 ADMIN_ACCOUNTS      = [JSON array of \{email, password\} objects]\par}
+  {\pard\sa60\f1\fs20 ADMIN_API_KEY       = <secret for admin restart endpoint>\par}
+  {\pard\sa60\f1\fs20 NODE_ENV            = production\par}
+  {\pard\sa60\f1\fs20 REPLIT_DEPLOYMENT   = 1   (triggers production mode in server)\par}
+
+  {\pard\sb200\sa100\f0\fs28\b Optional:\b0\par}
+  {\pard\sa60\f1\fs20 S3_PUBLIC_URL       = <custom S3 public URL if using CDN>\par}
+
+  {\pard\brdrb\brdrs\brdrw10\brsp20\par}
+
+  {\pard\sb200\sa100\f0\fs24\cf3\i End of Document. This covers every major system in MattrMindrScribe at a level of detail sufficient to rebuild from scratch.\i0\cf1\par}
+
+  }
