@@ -118,6 +118,8 @@ const uploadLimiter = rateLimit({
   message: { error: 'Upload limit reached, please try again later.' },
 });
 
+router.use('/multipart', uploadLimiter);
+
 router.get('/', async (req: AuthRequest, res: Response) => {
   try {
     const result = await pool.query(
@@ -260,7 +262,7 @@ router.post('/presigned-upload', uploadLimiter, async (req: AuthRequest, res: Re
 
 const CHUNK_SIZE = 50 * 1024 * 1024;
 
-router.post('/multipart/initiate', uploadLimiter, async (req: AuthRequest, res: Response) => {
+router.post('/multipart/initiate', async (req: AuthRequest, res: Response) => {
   try {
     if (!s3Configured) {
       return res.status(400).json({ error: 'Direct upload not available. S3 storage is not configured.' });
