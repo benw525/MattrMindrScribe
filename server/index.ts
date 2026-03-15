@@ -91,16 +91,6 @@ const authLimiter = rateLimit({
   message: { error: 'Too many authentication attempts, please try again later.' },
 });
 
-const uploadLimiter = rateLimit({
-  windowMs: 60 * 60 * 1000,
-  max: 20,
-  standardHeaders: true,
-  legacyHeaders: false,
-  keyGenerator: (req: any) => {
-    return req.userId || req.ip;
-  },
-  message: { error: 'Upload limit reached, please try again later.' },
-});
 
 const adminLimiter = rateLimit({
   windowMs: 60 * 1000,
@@ -113,9 +103,6 @@ const adminLimiter = rateLimit({
 app.use('/api/', generalLimiter);
 app.use('/api/auth/login', authLimiter);
 app.use('/api/auth/register', authLimiter);
-app.use('/api/transcripts/upload', uploadLimiter);
-app.use('/api/transcripts/presigned-upload', uploadLimiter);
-app.use('/api/transcripts/multipart', uploadLimiter);
 app.use('/api/transcripts/admin', adminLimiter);
 
 app.use(csrfProtection);
@@ -132,8 +119,8 @@ app.get('/', (_req, res, next) => {
 });
 
 const largeBodyPatterns = [
-  /^\/api\/transcripts\/\d+\/versions/,
-  /^\/api\/transcripts\/\d+$/,
+  /^\/api\/transcripts\/[^/]+\/versions/,
+  /^\/api\/transcripts\/[^/]+$/,
 ];
 app.use((req, res, next) => {
   const cleanPath = req.originalUrl.split('?')[0];

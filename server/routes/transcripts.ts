@@ -1,4 +1,5 @@
 import { Router, Response } from 'express';
+import rateLimit from 'express-rate-limit';
 import multer from 'multer';
 import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
@@ -106,6 +107,17 @@ router.post('/admin/restart-processing', authenticateAdmin, async (req, res: Res
 
 router.use(authenticateToken);
 
+const uploadLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req: AuthRequest) => {
+    return req.userId || req.ip || 'unknown';
+  },
+  message: { error: 'Upload limit reached, please try again later.' },
+});
+
 router.get('/', async (req: AuthRequest, res: Response) => {
   try {
     const result = await pool.query(
@@ -206,7 +218,7 @@ function validatePendingUpload(uploadToken: string, userId: string): { pending: 
   return { pending };
 }
 
-router.post('/presigned-upload', authenticateToken, async (req: AuthRequest, res: Response) => {
+router.post('/presigned-upload', uploadLimiter, async (req: AuthRequest, res: Response) => {
   try {
     if (!s3Configured) {
       return res.status(400).json({ error: 'Direct upload not available. S3 storage is not configured.' });
@@ -248,7 +260,7 @@ router.post('/presigned-upload', authenticateToken, async (req: AuthRequest, res
 
 const CHUNK_SIZE = 50 * 1024 * 1024;
 
-router.post('/multipart/initiate', authenticateToken, async (req: AuthRequest, res: Response) => {
+router.post('/multipart/initiate', uploadLimiter, async (req: AuthRequest, res: Response) => {
   try {
     if (!s3Configured) {
       return res.status(400).json({ error: 'Direct upload not available. S3 storage is not configured.' });
@@ -466,7 +478,7 @@ router.post('/confirm-upload', authenticateToken, async (req: AuthRequest, res: 
   }
 });
 
-router.post('/upload', (req, res: Response, next) => {
+router.post('/upload', uploadLimiter, (req: AuthRequest, res: Response, next) => {
   console.log('[Upload] Request received (legacy)');
   req.setTimeout(30 * 60 * 1000);
   upload.single('file')(req, res, (err: any) => {
