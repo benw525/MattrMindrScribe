@@ -89,7 +89,7 @@ export const api = {
       const { uploadToken, chunkSize, totalParts } = initRes;
       const completedParts: Array<{ PartNumber: number; ETag: string }> = [];
       const partBytesLoaded: Record<number, number> = {};
-      const CONCURRENT_UPLOADS = 3;
+      const CONCURRENT_UPLOADS = 5;
       const MAX_RETRIES = 3;
 
       const reportProgress = () => {

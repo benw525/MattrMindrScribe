@@ -275,7 +275,7 @@ router.post('/presigned-upload', uploadLimiter, async (req: AuthRequest, res: Re
   }
 });
 
-const CHUNK_SIZE = 50 * 1024 * 1024;
+const CHUNK_SIZE = 25 * 1024 * 1024;
 
 router.post('/multipart/initiate', async (req: AuthRequest, res: Response) => {
   try {
