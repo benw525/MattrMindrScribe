@@ -341,10 +341,7 @@ export async function cleanAudioWithAuphonic(
   title: string,
   checkCancelled?: () => Promise<void>,
 ): Promise<AuphonicResult> {
-  const apiKey = getApiKey();
-  if (!apiKey) {
-    throw new Error('AUPHONIC_API_KEY is not configured');
-  }
+  getApiKey();
 
   const startTime = Date.now();
 
