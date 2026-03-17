@@ -245,7 +245,7 @@ setTimeout(async () => {
   try {
     const tmpDir = os.tmpdir();
     const entries = fs.readdirSync(tmpDir);
-    const orphaned = entries.filter(e => e.startsWith('s3_download_') || e.startsWith('transcription_'));
+    const orphaned = entries.filter(e => e.startsWith('s3_download_') || e.startsWith('transcription_') || e.startsWith('auphonic_'));
     let cleaned = 0;
     for (const entry of orphaned) {
       try {

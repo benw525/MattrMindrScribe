@@ -9,6 +9,7 @@ import pool from './db.js';
 import { isCloudStorageUrl, getKeyFromStorageUrl, downloadFromS3 } from './s3.js';
 import { diarizeWithAssemblyAI, mapDiarizationToSegments } from './diarization.js';
 import { refineSpeakersWithGPT } from './speakerRefinement.js';
+import { cleanAudioWithAuphonic, auphonicConfigured } from './auphonic.js';
 
 const whisperClient = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -408,8 +409,10 @@ async function isTranscriptDeleted(transcriptId: string): Promise<boolean> {
 export async function processTranscription(transcriptId: string): Promise<void> {
   const workDir = path.join(tmpdir(), `transcription_${randomUUID()}`);
   let cloudTempPath: string | null = null;
+  let auphonicCleanedPath: string | null = null;
 
   const pipelineLog: Record<string, any> = {
+    auphonic: { status: 'pending' },
     whisper: { status: 'pending' },
     diarization: { status: 'pending' },
     refinement: { status: 'pending' },
@@ -470,6 +473,7 @@ export async function processTranscription(transcriptId: string): Promise<void> 
     if (hasCheckpoint) {
       console.log(`[Transcription] Resuming for "${filename}" (${transcriptId}) — ${existingSegments.length} segments from previous run, skipping to refinement`);
       allSegments = existingSegments as TranscriptSegment[];
+      pipelineLog.auphonic = existingLog.auphonic || { status: 'skipped', reason: 'Resumed from checkpoint' };
       pipelineLog.whisper = existingLog.whisper;
       pipelineLog.diarization = existingLog.diarization;
       pipelineLog.resumed = true;
@@ -498,6 +502,32 @@ export async function processTranscription(transcriptId: string): Promise<void> 
       await mkdir(workDir, { recursive: true });
 
       console.log(`[Transcription] Starting for "${filename}" (${transcriptId})${expectedSpeakers ? ` — expecting ${expectedSpeakers} speakers` : ''}`);
+
+      if (auphonicConfigured) {
+        try {
+          console.log(`[Transcription] Step 0: Auphonic audio cleanup...`);
+          pipelineLog.auphonic = { status: 'processing', startedAt: new Date().toISOString() };
+          await savePipelineLog();
+
+          const auphonicResult = await cleanAudioWithAuphonic(sourcePath, filename || `transcript_${transcriptId}`, checkCancelled);
+          auphonicCleanedPath = auphonicResult.cleanedFilePath;
+          sourcePath = auphonicResult.cleanedFilePath;
+          pipelineLog.auphonic = {
+            status: 'success',
+            productionUuid: auphonicResult.productionUuid,
+            durationSeconds: auphonicResult.durationSeconds,
+          };
+          console.log(`[Transcription] Auphonic cleanup complete — using cleaned audio for pipeline`);
+        } catch (err: any) {
+          console.error(`[Transcription] Auphonic cleanup failed (non-fatal):`, err.message);
+          pipelineLog.auphonic = { status: 'error', error: err.message };
+        }
+        await savePipelineLog();
+      } else {
+        pipelineLog.auphonic = { status: 'skipped', reason: 'API key not configured' };
+      }
+
+      await checkCancelled();
 
       duration = await getAudioDuration(sourcePath);
       if (duration !== null) {
@@ -733,6 +763,12 @@ export async function processTranscription(transcriptId: string): Promise<void> 
       try {
         const tempDir = path.dirname(cloudTempPath);
         await cleanupDir(tempDir);
+      } catch {}
+    }
+    if (auphonicCleanedPath) {
+      try {
+        const auphonicDir = path.dirname(auphonicCleanedPath);
+        await cleanupDir(auphonicDir);
       } catch {}
     }
   }
