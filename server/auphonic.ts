@@ -1,5 +1,5 @@
 import { createReadStream, createWriteStream } from 'fs';
-import { readFile, stat, mkdir } from 'fs/promises';
+import { stat, mkdir } from 'fs/promises';
 import path from 'path';
 import { randomUUID } from 'crypto';
 import { tmpdir } from 'os';
@@ -16,10 +16,18 @@ const REQUEST_TIMEOUT_MS = 10 * 60 * 1000;
 const UPLOAD_TIMEOUT_MS = 60 * 60 * 1000;
 const DOWNLOAD_TIMEOUT_MS = 30 * 60 * 1000;
 
-export const auphonicConfigured = !!process.env.AUPHONIC_API_KEY;
+export function auphonicConfigured(): boolean {
+  return !!process.env.AUPHONIC_API_KEY;
+}
+
+function getApiKey(): string {
+  const key = process.env.AUPHONIC_API_KEY;
+  if (!key) throw new Error('AUPHONIC_API_KEY is not configured');
+  return key;
+}
 
 function authHeader(): Record<string, string> {
-  return { Authorization: `bearer ${process.env.AUPHONIC_API_KEY}` };
+  return { Authorization: `bearer ${getApiKey()}` };
 }
 
 function timeoutSignal(ms: number): AbortSignal {
@@ -80,6 +88,71 @@ async function createProduction(title: string): Promise<string> {
   return uuid;
 }
 
+function httpsUploadMultipart(
+  url: string,
+  headers: Record<string, string>,
+  boundary: string,
+  headerBytes: Buffer,
+  footerBytes: Buffer,
+  filePath: string,
+  fileSize: number,
+  timeoutMs: number,
+): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const parsedUrl = new URL(url);
+    const totalLength = headerBytes.length + fileSize + footerBytes.length;
+
+    const reqOptions: https.RequestOptions = {
+      hostname: parsedUrl.hostname,
+      path: parsedUrl.pathname + parsedUrl.search,
+      method: 'POST',
+      headers: {
+        ...headers,
+        'Content-Type': `multipart/form-data; boundary=${boundary}`,
+        'Content-Length': String(totalLength),
+      },
+      timeout: timeoutMs,
+    };
+
+    const req = https.request(reqOptions, (res) => {
+      const chunks: Buffer[] = [];
+      res.on('data', (chunk: Buffer) => chunks.push(chunk));
+      res.on('end', () => {
+        const body = Buffer.concat(chunks).toString('utf8');
+        if (!res.statusCode || res.statusCode >= 400) {
+          reject(new Error(`Auphonic upload failed (${res.statusCode}): ${body}`));
+          return;
+        }
+        resolve(body);
+      });
+    });
+
+    req.on('error', reject);
+    req.on('timeout', () => {
+      req.destroy(new Error(`Auphonic upload timed out after ${timeoutMs / 1000}s`));
+    });
+
+    req.write(headerBytes);
+
+    const fileStream = createReadStream(filePath);
+    fileStream.on('data', (chunk: Buffer) => {
+      const canContinue = req.write(chunk);
+      if (!canContinue) {
+        fileStream.pause();
+        req.once('drain', () => fileStream.resume());
+      }
+    });
+    fileStream.on('end', () => {
+      req.write(footerBytes);
+      req.end();
+    });
+    fileStream.on('error', (err) => {
+      req.destroy(err);
+      reject(err);
+    });
+  });
+}
+
 async function uploadFileToProduction(productionUuid: string, filePath: string): Promise<void> {
   const fileStats = await stat(filePath);
   const fileSizeMB = (fileStats.size / 1024 / 1024).toFixed(1);
@@ -94,24 +167,19 @@ async function uploadFileToProduction(productionUuid: string, filePath: string):
     `Content-Type: application/octet-stream\r\n\r\n`
   );
   const footerBytes = Buffer.from(`\r\n--${boundary}--\r\n`);
-  const fileBytes = await readFile(filePath);
-  const body = Buffer.concat([headerBytes, fileBytes, footerBytes]);
 
-  const res = await fetch(`${AUPHONIC_BASE_URL}/production/${productionUuid}/upload.json`, {
-    method: 'POST',
-    headers: {
-      ...authHeader(),
-      'Content-Type': `multipart/form-data; boundary=${boundary}`,
-      'Content-Length': String(body.length),
-    },
-    body,
-    signal: timeoutSignal(UPLOAD_TIMEOUT_MS),
-  });
+  const uploadUrl = `${AUPHONIC_BASE_URL}/production/${productionUuid}/upload.json`;
 
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Auphonic upload failed (${res.status}): ${text}`);
-  }
+  await httpsUploadMultipart(
+    uploadUrl,
+    authHeader(),
+    boundary,
+    headerBytes,
+    footerBytes,
+    filePath,
+    fileStats.size,
+    UPLOAD_TIMEOUT_MS,
+  );
 
   console.log(`[Auphonic] Upload complete`);
 }
@@ -273,7 +341,8 @@ export async function cleanAudioWithAuphonic(
   title: string,
   checkCancelled?: () => Promise<void>,
 ): Promise<AuphonicResult> {
-  if (!process.env.AUPHONIC_API_KEY) {
+  const apiKey = getApiKey();
+  if (!apiKey) {
     throw new Error('AUPHONIC_API_KEY is not configured');
   }
 

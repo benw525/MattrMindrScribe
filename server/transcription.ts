@@ -503,7 +503,7 @@ export async function processTranscription(transcriptId: string): Promise<void> 
 
       console.log(`[Transcription] Starting for "${filename}" (${transcriptId})${expectedSpeakers ? ` — expecting ${expectedSpeakers} speakers` : ''}`);
 
-      if (auphonicConfigured) {
+      if (auphonicConfigured()) {
         try {
           console.log(`[Transcription] Step 0: Auphonic audio cleanup...`);
           pipelineLog.auphonic = { status: 'processing', startedAt: new Date().toISOString() };
