@@ -1,13 +1,16 @@
 import { createReadStream, createWriteStream } from 'fs';
-import { stat, mkdir } from 'fs/promises';
+import { readFile, stat, mkdir } from 'fs/promises';
 import path from 'path';
 import { randomUUID } from 'crypto';
 import { tmpdir } from 'os';
-import { Readable, Transform } from 'stream';
+import https from 'https';
+import { Transform } from 'stream';
 import { pipeline } from 'stream/promises';
 
 const AUPHONIC_BASE_URL = 'https://auphonic.com/api';
-const POLL_INTERVAL_MS = 10_000;
+const POLL_INITIAL_INTERVAL_MS = 5_000;
+const POLL_MAX_INTERVAL_MS = 30_000;
+const POLL_BACKOFF_FACTOR = 1.5;
 const POLL_MAX_WAIT_MS = 30 * 60 * 1000;
 const REQUEST_TIMEOUT_MS = 10 * 60 * 1000;
 const UPLOAD_TIMEOUT_MS = 60 * 60 * 1000;
@@ -91,29 +94,17 @@ async function uploadFileToProduction(productionUuid: string, filePath: string):
     `Content-Type: application/octet-stream\r\n\r\n`
   );
   const footerBytes = Buffer.from(`\r\n--${boundary}--\r\n`);
-
-  const totalLength = headerBytes.length + fileStats.size + footerBytes.length;
-
-  async function* multipartStream() {
-    yield headerBytes;
-    const fileStream = createReadStream(filePath);
-    for await (const chunk of fileStream) {
-      yield chunk;
-    }
-    yield footerBytes;
-  }
-
-  const bodyStream = Readable.from(multipartStream());
+  const fileBytes = await readFile(filePath);
+  const body = Buffer.concat([headerBytes, fileBytes, footerBytes]);
 
   const res = await fetch(`${AUPHONIC_BASE_URL}/production/${productionUuid}/upload.json`, {
     method: 'POST',
     headers: {
       ...authHeader(),
       'Content-Type': `multipart/form-data; boundary=${boundary}`,
-      'Content-Length': String(totalLength),
+      'Content-Length': String(body.length),
     },
-    body: bodyStream as any,
-    duplex: 'half' as any,
+    body,
     signal: timeoutSignal(UPLOAD_TIMEOUT_MS),
   });
 
@@ -140,6 +131,12 @@ async function startProduction(productionUuid: string): Promise<void> {
   console.log(`[Auphonic] Production started`);
 }
 
+function computeBackoffMs(pollCount: number): number {
+  const interval = POLL_INITIAL_INTERVAL_MS * Math.pow(POLL_BACKOFF_FACTOR, pollCount - 1);
+  const jitter = Math.random() * 1000;
+  return Math.min(interval + jitter, POLL_MAX_INTERVAL_MS);
+}
+
 async function pollUntilDone(
   productionUuid: string,
   checkCancelled?: () => Promise<void>,
@@ -150,8 +147,9 @@ async function pollUntilDone(
   while (Date.now() - startTime < POLL_MAX_WAIT_MS) {
     if (checkCancelled) await checkCancelled();
 
-    await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
     pollCount++;
+    const backoffMs = computeBackoffMs(pollCount);
+    await new Promise((resolve) => setTimeout(resolve, backoffMs));
 
     let res: Response;
     try {
@@ -159,8 +157,9 @@ async function pollUntilDone(
         headers: authHeader(),
         signal: timeoutSignal(30_000),
       });
-    } catch (err: any) {
-      console.warn(`[Auphonic] Status poll ${pollCount} network error: ${err.message}, retrying...`);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.warn(`[Auphonic] Status poll ${pollCount} network error: ${message}, retrying...`);
       continue;
     }
 
@@ -183,10 +182,61 @@ async function pollUntilDone(
     }
 
     const elapsed = ((Date.now() - startTime) / 1000).toFixed(0);
-    console.log(`[Auphonic] Status: ${statusString} (${status}) — poll ${pollCount}, ${elapsed}s elapsed`);
+    console.log(`[Auphonic] Status: ${statusString} (${status}) — poll ${pollCount}, ${elapsed}s elapsed, next poll in ${(backoffMs / 1000).toFixed(1)}s`);
   }
 
   throw new Error(`Auphonic production timed out after ${POLL_MAX_WAIT_MS / 60000} minutes`);
+}
+
+function httpsDownload(url: string, headers: Record<string, string>, destPath: string, timeoutMs: number): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const parsedUrl = new URL(url);
+    const reqOptions: https.RequestOptions = {
+      hostname: parsedUrl.hostname,
+      path: parsedUrl.pathname + parsedUrl.search,
+      method: 'GET',
+      headers,
+      timeout: timeoutMs,
+    };
+
+    const req = https.request(reqOptions, (res) => {
+      if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+        httpsDownload(res.headers.location, headers, destPath, timeoutMs).then(resolve, reject);
+        return;
+      }
+
+      if (!res.statusCode || res.statusCode >= 400) {
+        reject(new Error(`Auphonic download failed (${res.statusCode})`));
+        return;
+      }
+
+      const writeStream = createWriteStream(destPath);
+      let downloaded = 0;
+      let lastLog = Date.now();
+
+      const progress = new Transform({
+        transform(chunk: Buffer, _encoding, callback) {
+          downloaded += chunk.length;
+          const now = Date.now();
+          if (now - lastLog > 10000) {
+            console.log(`[Auphonic] Download: ${(downloaded / 1024 / 1024).toFixed(1)} MB`);
+            lastLog = now;
+          }
+          callback(null, chunk);
+        },
+      });
+
+      pipeline(res, progress, writeStream)
+        .then(() => resolve(downloaded))
+        .catch(reject);
+    });
+
+    req.on('error', reject);
+    req.on('timeout', () => {
+      req.destroy(new Error(`Auphonic download timed out after ${timeoutMs / 1000}s`));
+    });
+    req.end();
+  });
 }
 
 async function downloadResultFile(
@@ -202,37 +252,11 @@ async function downloadResultFile(
   const downloadUrl = wavFile.download_url;
   console.log(`[Auphonic] Downloading cleaned audio (${wavFile.format})...`);
 
-  const res = await fetch(downloadUrl, {
-    redirect: 'follow',
-    headers: authHeader(),
-    signal: timeoutSignal(DOWNLOAD_TIMEOUT_MS),
-  });
-  if (!res.ok) {
-    throw new Error(`Auphonic download failed (${res.status})`);
-  }
-
   const tempDir = path.join(tmpdir(), `auphonic_${randomUUID()}`);
   await mkdir(tempDir, { recursive: true });
   const outPath = path.join(tempDir, `cleaned.${wavFile.format || 'wav'}`);
 
-  const writeStream = createWriteStream(outPath);
-  const bodyStream = Readable.fromWeb(res.body as any);
-
-  let downloaded = 0;
-  let lastLog = Date.now();
-  const progress = new Transform({
-    transform(chunk, _encoding, callback) {
-      downloaded += chunk.length;
-      const now = Date.now();
-      if (now - lastLog > 10000) {
-        console.log(`[Auphonic] Download: ${(downloaded / 1024 / 1024).toFixed(1)} MB`);
-        lastLog = now;
-      }
-      callback(null, chunk);
-    },
-  });
-
-  await pipeline(bodyStream, progress, writeStream);
+  const downloaded = await httpsDownload(downloadUrl, authHeader(), outPath, DOWNLOAD_TIMEOUT_MS);
   console.log(`[Auphonic] Downloaded cleaned audio: ${(downloaded / 1024 / 1024).toFixed(1)} MB → ${outPath}`);
 
   return outPath;
