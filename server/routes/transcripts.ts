@@ -698,8 +698,8 @@ router.post('/:id/merge-speaker', async (req: AuthRequest, res: Response) => {
       }
 
       await client.query(
-        `INSERT INTO transcript_versions (transcript_id, segments, change_description)
-         VALUES ($1, $2, $3)`,
+        `INSERT INTO transcript_versions (transcript_id, version_number, segments, change_description)
+         VALUES ($1, COALESCE((SELECT MAX(version_number) FROM transcript_versions WHERE transcript_id = $1), 0) + 1, $2, $3)`,
         [id, JSON.stringify(segmentsResult.rows), `Merged speaker "${fromSpeaker}" into "${toSpeaker}"`]
       );
 
@@ -917,8 +917,8 @@ router.post('/:id/versions', async (req: AuthRequest, res: Response) => {
     );
 
     const result = await pool.query(
-      `INSERT INTO transcript_versions (transcript_id, segments, change_description)
-       VALUES ($1, $2, $3) RETURNING *`,
+      `INSERT INTO transcript_versions (transcript_id, version_number, segments, change_description)
+       VALUES ($1, COALESCE((SELECT MAX(version_number) FROM transcript_versions WHERE transcript_id = $1), 0) + 1, $2, $3) RETURNING *`,
       [id, JSON.stringify(segmentsResult.rows), changeDescription || '']
     );
 
