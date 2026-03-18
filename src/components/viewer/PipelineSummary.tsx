@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { CheckCircle2Icon, XCircleIcon, AlertTriangleIcon, ClockIcon, RefreshCwIcon, XIcon, CpuIcon, MicIcon, BrainCircuitIcon } from 'lucide-react';
+import { CheckCircle2Icon, XCircleIcon, AlertTriangleIcon, ClockIcon, RefreshCwIcon, XIcon, CpuIcon, MicIcon, BrainCircuitIcon, Volume2Icon } from 'lucide-react';
 import { PipelineLog, PipelineStepLog } from '../../types/transcript';
 import { api } from '../../utils/api';
 import { toast } from 'sonner';
@@ -61,6 +61,9 @@ function StepCard({ title, icon, step, description }: { title: string; icon: Rea
               {step.speakersAfterRefinement !== undefined && (
                 <span className="text-xs text-emerald-700 dark:text-emerald-400">{step.speakersAfterRefinement} speakers confirmed</span>
               )}
+              {step.durationSeconds !== undefined && (
+                <span className="text-xs text-emerald-700 dark:text-emerald-400">{Math.round(step.durationSeconds)}s processing time</span>
+              )}
             </div>
           )}
           {step.status === 'error' && step.error && (
@@ -83,6 +86,7 @@ export function PipelineSummary({ pipelineLog, transcriptStatus, errorMessage, t
   const [isRetrying, setIsRetrying] = useState(false);
 
   const hasAnyFailure = pipelineLog && (
+    pipelineLog.auphonic?.status === 'error' ||
     pipelineLog.whisper.status === 'error' ||
     pipelineLog.diarization.status === 'error' ||
     pipelineLog.refinement.status === 'error' ||
@@ -131,6 +135,15 @@ export function PipelineSummary({ pipelineLog, transcriptStatus, errorMessage, t
             </div>
           ) : (
             <>
+              {pipelineLog.auphonic && (
+                <StepCard
+                  title="Auphonic Audio Cleanup"
+                  icon={<Volume2Icon className="h-3.5 w-3.5 text-slate-500 dark:text-slate-400" />}
+                  step={pipelineLog.auphonic}
+                  description="Noise reduction, leveling & audio enhancement"
+                />
+              )}
+
               <StepCard
                 title="OpenAI Whisper"
                 icon={<CpuIcon className="h-3.5 w-3.5 text-slate-500 dark:text-slate-400" />}

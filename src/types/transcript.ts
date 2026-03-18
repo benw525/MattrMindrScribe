@@ -1,5 +1,5 @@
 export interface PipelineStepLog {
-  status: 'pending' | 'success' | 'error' | 'skipped';
+  status: 'pending' | 'success' | 'error' | 'skipped' | 'processing';
   error?: string;
   reason?: string;
   segments?: number;
@@ -7,9 +7,12 @@ export interface PipelineStepLog {
   utterances?: number;
   speakersDetected?: number;
   speakersAfterRefinement?: number;
+  productionUuid?: string;
+  durationSeconds?: number;
 }
 
 export interface PipelineLog {
+  auphonic?: PipelineStepLog;
   whisper: PipelineStepLog;
   diarization: PipelineStepLog;
   refinement: PipelineStepLog;
