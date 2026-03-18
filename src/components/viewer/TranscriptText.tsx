@@ -331,7 +331,7 @@ interface TranscriptTextProps {
   speakerColors?: Record<string, string>;
   onAddSpeakerFromDropdown?: (segmentId: string, name: string) => void;
 }
-export function TranscriptText({
+export const TranscriptText = React.memo(function TranscriptText({
   segments,
   currentTime,
   isPlaying = false,
@@ -493,4 +493,4 @@ export function TranscriptText({
       </div>
     </div>
   );
-}
+});

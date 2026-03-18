@@ -1,4 +1,4 @@
-import React, { useCallback, useState, useEffect, useRef, createContext, ReactNode } from 'react';
+import React, { useCallback, useState, useEffect, useRef, useMemo, createContext, ReactNode } from 'react';
 import { Transcript, Folder, UploadEntry } from '../types/transcript';
 import { api, isAuthenticated } from '../utils/api';
 import { toast } from 'sonner';
@@ -194,25 +194,26 @@ export function TranscriptProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const contextValue = useMemo(() => ({
+    transcripts,
+    folders,
+    loading,
+    activeUploads,
+    addTranscript,
+    uploadFile,
+    startBackgroundUpload,
+    dismissUpload,
+    updateTranscript,
+    deleteTranscripts,
+    addFolder,
+    deleteFolder,
+    renameFolder,
+    moveTranscripts,
+    refreshData,
+  }), [transcripts, folders, loading, activeUploads, addTranscript, uploadFile, startBackgroundUpload, dismissUpload, updateTranscript, deleteTranscripts, addFolder, deleteFolder, renameFolder, moveTranscripts, refreshData]);
+
   return (
-    <TranscriptContext.Provider
-      value={{
-        transcripts,
-        folders,
-        loading,
-        activeUploads,
-        addTranscript,
-        uploadFile,
-        startBackgroundUpload,
-        dismissUpload,
-        updateTranscript,
-        deleteTranscripts,
-        addFolder,
-        deleteFolder,
-        renameFolder,
-        moveTranscripts,
-        refreshData,
-      }}>
+    <TranscriptContext.Provider value={contextValue}>
       {children}
     </TranscriptContext.Provider>
   );

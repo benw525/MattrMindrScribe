@@ -248,7 +248,7 @@ export function TranscriptViewerPage() {
     }]
     );
   }, []);
-  const handleUndo = () => {
+  const handleUndo = useCallback(() => {
     if (undoStack.length === 0) return;
     const last = undoStack[undoStack.length - 1];
     updateTranscript(transcript.id, {
@@ -257,8 +257,9 @@ export function TranscriptViewerPage() {
     setUndoStack((prev) => prev.slice(0, -1));
     autoSave(`Undo: ${last.description}`);
     toast.success(`Undone: ${last.description}`);
-  };
-  const handleSave = async () => {
+  }, [undoStack, transcript.id, updateTranscript, autoSave]);
+
+  const handleSave = useCallback(async () => {
     if (saveTimerRef.current) {
       clearTimeout(saveTimerRef.current);
       saveTimerRef.current = null;
@@ -272,7 +273,7 @@ export function TranscriptViewerPage() {
       console.error('Failed to save version:', err);
       toast.error('Failed to save version');
     }
-  };
+  }, [transcript.id]);
   const handleUpdateSegment = useCallback((segmentId: string, newText: string) => {
     const t = transcriptRef.current;
     if (!t) return;
@@ -461,13 +462,13 @@ export function TranscriptViewerPage() {
     handleChangeSegmentSpeaker(segmentId, name);
   }, [handleChangeSegmentSpeaker]);
 
-  const getSpeakerDotColor = (speaker: string) => {
+  const getSpeakerDotColor = useCallback((speaker: string) => {
     return getSpeakerColorObj(speaker, speakerColors).bg;
-  };
+  }, [speakerColors]);
 
-  const getSpeakerBorderColor = (speaker: string) => {
+  const getSpeakerBorderColor = useCallback((speaker: string) => {
     return getSpeakerColorObj(speaker, speakerColors).border;
-  };
+  }, [speakerColors]);
   const handleSelectAgent = async (agentId: string, subTypeId: string, customDescription?: string) => {
     if (!transcript) return;
     setLoadingAgentId(agentId);
@@ -528,10 +529,13 @@ export function TranscriptViewerPage() {
     }
   };
 
-  const agentNames: Record<string, string> = {};
-  agents.forEach(a => { agentNames[a.id] = a.name; });
+  const agentNames = useMemo(() => {
+    const map: Record<string, string> = {};
+    agents.forEach(a => { map[a.id] = a.name; });
+    return map;
+  }, [agents]);
 
-  const handleRevertVersion = (versionId: string) => {
+  const handleRevertVersion = useCallback((versionId: string) => {
     const version = versions.find((v) => v.id === versionId);
     if (version) {
       pushUndo('Revert to version');
@@ -542,9 +546,10 @@ export function TranscriptViewerPage() {
       toast.success('Reverted to previous version');
       setShowHistory(false);
     }
-  };
-  const isProcessing =
-  transcript.status === 'processing' || transcript.status === 'pending' || transcript.status === 'resuming';
+  }, [versions, transcript.id, pushUndo, updateTranscript, autoSave]);
+  const isProcessing = useMemo(() =>
+    transcript.status === 'processing' || transcript.status === 'pending' || transcript.status === 'resuming',
+  [transcript.status]);
   return (
     <div className="flex-1 flex flex-col h-full bg-white dark:bg-slate-950 relative overflow-hidden">
       {/* Top Bar */}
