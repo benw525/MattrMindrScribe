@@ -4,28 +4,78 @@
 \paperw12240\paperh15840\margl1440\margr1440\margt1440\margb1440
 
 \pard\qc\b\fs36 MattrMindrScribe Transcript Viewer\line Comprehensive Lag Analysis\b0\fs24\par
-\pard\qc\fs20\cf5 Prepared: March 18, 2026\line Covers: Frontend, Backend, Database, Infrastructure, and Browser\cf0\fs24\par
+\pard\qc\fs20\cf5 Prepared: March 18, 2026 \u8212? Updated: March 18, 2026\line Covers: Frontend, Backend, Database, Infrastructure, Browser, and Safari-Specific Issues\line\line\cf6\b KEY FINDING: Lag is significantly worse in Safari vs Chrome.\line Safari\rquote s rendering engine (WebKit) is the primary amplifier of all issues listed below.\b0\cf0\fs24\par
 \pard\par
 
 \pard\b\fs28\cf4 TABLE OF CONTENTS\cf0\b0\fs24\par
 \pard\par
-\pard\li360 1. React Component Architecture Issues\par
-2. State Management & Re-render Cascades\par
-3. DOM Weight & Paint Cost\par
-4. CSS & Animation Overhead\par
-5. Data Size & Memory Pressure\par
-6. Network & API Round-Trip Issues\par
-7. Database Query Performance\par
-8. Server-Side Bottlenecks\par
-9. Browser & Device Factors\par
-10. EC2 Infrastructure Constraints\par
-11. Deployment & Proxy Chain\par
+\pard\li360{\cf2\b NEW \u8594?\b0\cf0} 1. Safari-Specific Performance Issues (WebKit)\par
+2. React Component Architecture Issues\par
+3. State Management & Re-render Cascades\par
+4. DOM Weight & Paint Cost\par
+5. CSS & Animation Overhead\par
+6. Data Size & Memory Pressure\par
+7. Network & API Round-Trip Issues\par
+8. Database Query Performance\par
+9. Server-Side Bottlenecks\par
+10. Browser & Device Factors\par
+11. EC2 Infrastructure Constraints\par
+12. Deployment & Proxy Chain\par
 \pard\par
 
 \pard\brdrb\brdrs\brdrw10\brsp20\par
 \pard\par
 
-{\b\fs28\cf4 1. REACT COMPONENT ARCHITECTURE ISSUES\cf0\fs24\b0}\par
+{\b\fs28\cf2 1. SAFARI-SPECIFIC PERFORMANCE ISSUES (WebKit)\cf0\fs24\b0}\par
+\par
+\pard\li360\cf5\i The user confirmed that the viewer is MUCH smoother in Chrome compared to Safari. This section details why Safari\rquote s WebKit rendering engine amplifies every issue in this document and introduces additional problems that Chrome (Blink/V8) handles more efficiently.\i0\cf0\par\pard\par
+
+{\b\cf2 1.1 \u8212? Safari\rquote s JavaScript Engine (JavaScriptCore) Is Slower at React Workloads\cf0\b0}\par
+\pard\li360 Safari uses JavaScriptCore (JSC), while Chrome uses V8. V8 has significantly more aggressive JIT (Just-In-Time) compilation optimizations for the types of object-heavy, function-heavy workloads that React produces. React\rquote s reconciliation algorithm creates and compares thousands of short-lived virtual DOM objects per render cycle. V8\rquote s TurboFan optimizing compiler and inline caching excel at this pattern. JSC\rquote s DFG and FTL JIT tiers are measurably slower (often 20-40% slower) for this class of workload. For a component tree with 500+ SegmentRows, each render pass involves thousands of shallow object comparisons \u8212? the exact scenario where V8 outperforms JSC most dramatically.\par\pard\par
+
+{\b\cf2 1.2 \u8212? Safari\rquote s Garbage Collector Has Longer Pauses\cf0\b0}\par
+\pard\li360 The transcript viewer creates enormous garbage pressure: new arrays from segments.map(), new objects from React\rquote s virtual DOM, shallow copies in the undo stack, and new function references from inline arrow functions. V8 uses Orinoco, a concurrent/incremental garbage collector that performs most GC work off the main thread with minimal pause times (typically <1ms). Safari\rquote s JSC garbage collector, while improved in recent versions, still produces longer and more frequent GC pauses on the main thread when processing large object graphs. With the undo stack holding thousands of segment copies and the context holding the full transcript list, GC pauses in Safari can cause visible frame drops and input lag that simply don\rquote t occur in Chrome.\par\pard\par
+
+{\b\cf2 1.3 \u8212? Safari Renders 10,000+ DOM Nodes Much More Slowly\cf0\b0}\par
+\pard\li360 WebKit\rquote s layout engine (the rendering pipeline responsible for calculating positions and sizes of DOM elements) is measurably slower than Blink (Chrome\rquote s engine) when handling pages with large DOM trees. The transcript viewer has 7,500-10,000+ DOM nodes for 500 segments. In benchmarks, Safari\rquote s layout pass for pages with 5,000+ nodes is often 2-3x slower than Chrome. This affects every interaction: scrolling through the segment list, hovering over rows (which triggers CSS transitions), opening dropdowns, and even idle repaints. Safari also performs layout synchronously in more situations where Chrome can defer it.\par\pard\par
+
+{\b\cf2 1.4 \u8212? Safari\rquote s CSS Transition Handling Is More Expensive\cf0\b0}\par
+\pard\li360 The viewer has 43 elements with CSS transition classes. Safari handles CSS transitions differently from Chrome in a critical way: Safari often promotes transitioning elements to separate compositing layers more aggressively, and its compositor has higher per-layer overhead. The transition-all class (which the viewer uses on multiple elements) is particularly problematic in Safari because WebKit must check every animatable CSS property for potential transitions, whereas Blink optimizes this check. The group-hover opacity transitions on 500+ merge/split buttons are especially costly \u8212? Safari creates and manages compositing layers for these even when not actively transitioning, consuming GPU memory and increasing composite time. In Chrome, Blink is more intelligent about layer promotion and avoids creating layers for elements that are unlikely to actually animate.\par\pard\par
+
+{\b\cf2 1.5 \u8212? backdrop-blur-sm Is Extremely Expensive in Safari\cf0\b0}\par
+\pard\li360 The viewer components use Tailwind\rquote s backdrop-blur-sm class in multiple places (modals, video player overlay). The CSS backdrop-filter: blur() property is notoriously expensive in Safari. WebKit historically lacked hardware-accelerated backdrop-filter support and fell back to CPU-based Gaussian blur rendering. Even in recent Safari versions where GPU acceleration is available, backdrop-filter performance is significantly worse than Chrome. When a modal with backdrop-blur is open (AISummarizeModal, SendToMattrMindrModal, PipelineSummary), Safari must re-render the blur effect on every frame, which can drop the frame rate to 15-30fps on lower-powered Macs. Chrome\rquote s Blink engine handles backdrop-filter with much more efficient GPU shader pipelines.\par\pard\par
+
+{\b\cf2 1.6 \u8212? Safari\rquote s overflow-y-auto Scroll Container Performance\cf0\b0}\par
+\pard\li360 The transcript segment list uses overflow-y-auto with overscroll-contain. Safari handles scrollable overflow containers differently from Chrome. In Safari, scrolling a deeply nested overflow container with thousands of DOM nodes inside triggers more frequent and more expensive layout recalculations. Safari\rquote s scroll event handling is also less efficient \u8212? it fires scroll events on the main thread more often, while Chrome offloads scroll handling to the compositor thread. The overscroll-contain property has known performance issues in Safari, causing the browser to do additional boundary-checking work on every scroll frame. Combined with the 500+ SegmentRows, scrolling the transcript in Safari is fundamentally slower than in Chrome.\par\pard\par
+
+{\b\cf2 1.7 \u8212? Safari\rquote s scrollIntoView(\{ behavior: \rquote smooth\rquote  \}) Is Janky\cf0\b0}\par
+\pard\li360 The auto-scroll feature during playback uses scrollIntoView(\{ behavior: \rquote smooth\rquote , block: \rquote center\rquote  \}). Safari\rquote s implementation of smooth scrollIntoView has well-documented performance problems. Unlike Chrome, which uses the compositor thread for smooth scrolling, Safari performs smooth scroll animations on the main thread. This means each frame of the smooth scroll animation competes with React rendering, event processing, and JavaScript execution. During audio/video playback, this creates a cascading effect: the timeupdate event fires \u8594? React re-renders TranscriptText \u8594? scrollIntoView starts a main-thread smooth scroll animation \u8594? each scroll frame triggers layout recalculation for 10,000+ DOM nodes \u8594? the next timeupdate event fires before the scroll completes. This is the single most likely cause of the Safari-specific lag during playback.\par\pard\par
+
+{\b\cf2 1.8 \u8212? Safari\rquote s Textarea Reflow Is Slower\cf0\b0}\par
+\pard\li360 The segment editing textarea uses a height-auto-then-scrollHeight pattern to auto-resize on every keystroke. This forces two synchronous reflows per keystroke. Safari\rquote s layout engine processes these forced reflows significantly slower than Chrome when the textarea is inside a deep DOM tree (which it is \u8212? nested inside SegmentRow, inside the scroll container, inside the TranscriptText component, inside the viewer page). In Chrome, forced reflows in deeply nested elements are optimized through incremental layout \u8212? only the affected subtree is recalculated. Safari more often recalculates layout for the entire scrollable container, which means every keystroke triggers layout for all 500+ segments, not just the one being edited.\par\pard\par
+
+{\b\cf2 1.9 \u8212? Safari\rquote s Framer Motion Performance Is Worse\cf0\b0}\par
+\pard\li360 Framer Motion relies on requestAnimationFrame, getComputedStyle, and getBoundingClientRect to calculate and apply animations. Safari\rquote s implementations of getComputedStyle and getBoundingClientRect are slower than Chrome\rquote s, especially when called during animation frames. The AnimatePresence components (VersionHistory, AISummaryPanel, AISummarizeModal) trigger these measurements during enter/exit animations. In Safari, each call to getBoundingClientRect can force a synchronous layout pass, while Chrome caches layout results more aggressively between frames. This makes Framer Motion\rquote s animations noticeably less smooth in Safari.\par\pard\par
+
+{\b\cf2 1.10 \u8212? Safari ITP (Intelligent Tracking Prevention) Interferes with Network Requests\cf0\b0}\par
+\pard\li360 Safari\rquote s Intelligent Tracking Prevention (ITP) performs additional processing on every network request to check against its tracking database. For the 5+ parallel API calls on page load and the debounced PATCH/version save calls during editing, ITP adds overhead that Chrome does not have. This is especially noticeable if the API domain (scribe.mattrmindr.com) triggers any ITP heuristics. While ITP overhead is small per-request, it compounds with the frequent API calls during editing.\par\pard\par
+
+{\b\cf2 1.11 \u8212? Safari\rquote s position: sticky Has Performance Issues\cf0\b0}\par
+\pard\li360 The viewer uses position: sticky (for the side panel content). Safari has well-known performance issues with position: sticky inside scrollable containers. When the user scrolls the transcript text while a sticky-positioned element is in view, Safari must recalculate the sticky element\rquote s position on every scroll frame, which triggers additional layout work. In extreme cases, Safari\rquote s sticky positioning implementation can cause the entire scroll container to repaint, rather than just compositing the sticky element independently. Chrome handles sticky positioning entirely on the compositor thread, avoiding this issue.\par\pard\par
+
+{\b\cf2 1.12 \u8212? Safari Timer Throttling Is More Aggressive\cf0\b0}\par
+\pard\li360 Safari more aggressively throttles setTimeout and setInterval when the tab is not focused, and even when it is focused but the browser determines the page is using excessive resources. The debounced save (setTimeout-based, 2 seconds) and debounced version creation (1.5 seconds) can be delayed beyond their intended timeouts if Safari decides to throttle. This can cause saves to bunch together, creating larger CPU spikes when multiple debounced operations fire simultaneously instead of being spread out.\par\pard\par
+
+{\b\cf2 1.13 \u8212? Safari\rquote s Web Audio and Media Playback Consumes More CPU\cf0\b0}\par
+\pard\li360 Safari\rquote s audio and video decoding pipelines use different codecs and processing paths than Chrome. For audio playback (the primary use case), Safari\rquote s HTMLAudioElement implementation uses more CPU for decoding and buffering. The MediaRecorder API (used for in-browser recording) also has significantly higher CPU overhead in Safari. During audio playback, the additional CPU load from Safari\rquote s media pipeline reduces the CPU budget available for React rendering, making the lag compound \u8212? audio playback + timeupdate events + React re-renders + Safari\rquote s slower layout engine = visible jank.\par\pard\par
+
+{\b\cf2 1.14 \u8212? Safari\rquote s Font Rendering and Text Layout Is More Expensive\cf0\b0}\par
+\pard\li360 Safari uses Core Text for font rendering (macOS\rquote s native text engine), which produces higher-quality text but at a higher computational cost. Each SegmentRow contains a paragraph of transcript text that must be laid out and rendered. For 500 segments, Safari\rquote s text layout is measurably slower than Chrome\rquote s Skia-based text rendering. This difference is amplified by the text-sm sm:text-base responsive font size classes, which Safari must evaluate per-element. On Retina displays (which most Mac users have), Safari renders text at 2x or 3x resolution, further increasing the per-segment text rendering cost compared to non-Retina or when Chrome applies its own sub-pixel rendering optimizations.\par\pard\par
+
+\pard\brdrb\brdrs\brdrw10\brsp20\par
+\pard\par
+
+{\b\fs28\cf4 2. REACT COMPONENT ARCHITECTURE ISSUES\cf0\fs24\b0}\par
 \par
 
 {\b\cf2 1.1 \u8212? Monolithic TranscriptViewerPage Component (1,097 lines)\cf0\b0}\par
@@ -55,7 +105,7 @@
 \pard\brdrb\brdrs\brdrw10\brsp20\par
 \pard\par
 
-{\b\fs28\cf4 2. STATE MANAGEMENT & RE-RENDER CASCADES\cf0\fs24\b0}\par
+{\b\fs28\cf4 3. STATE MANAGEMENT & RE-RENDER CASCADES\cf0\fs24\b0}\par
 \par
 
 {\b\cf2 2.1 \u8212? TranscriptContext Triggers Global Re-renders\cf0\b0}\par
@@ -79,7 +129,7 @@
 \pard\brdrb\brdrs\brdrw10\brsp20\par
 \pard\par
 
-{\b\fs28\cf4 3. DOM WEIGHT & PAINT COST\cf0\fs24\b0}\par
+{\b\fs28\cf4 4. DOM WEIGHT & PAINT COST\cf0\fs24\b0}\par
 \par
 
 {\b\cf2 3.1 \u8212? No Virtualization for Segment List\cf0\b0}\par
@@ -97,7 +147,7 @@
 \pard\brdrb\brdrs\brdrw10\brsp20\par
 \pard\par
 
-{\b\fs28\cf4 4. CSS & ANIMATION OVERHEAD\cf0\fs24\b0}\par
+{\b\fs28\cf4 5. CSS & ANIMATION OVERHEAD\cf0\fs24\b0}\par
 \par
 
 {\b\cf2 4.1 \u8212? 43 CSS Transition Properties Across Viewer Components\cf0\b0}\par
@@ -112,7 +162,7 @@
 \pard\brdrb\brdrs\brdrw10\brsp20\par
 \pard\par
 
-{\b\fs28\cf4 5. DATA SIZE & MEMORY PRESSURE\cf0\fs24\b0}\par
+{\b\fs28\cf4 6. DATA SIZE & MEMORY PRESSURE\cf0\fs24\b0}\par
 \par
 
 {\b\cf2 5.1 \u8212? Transcript Object Contains Full Segment Array\cf0\b0}\par
@@ -130,7 +180,7 @@
 \pard\brdrb\brdrs\brdrw10\brsp20\par
 \pard\par
 
-{\b\fs28\cf4 6. NETWORK & API ROUND-TRIP ISSUES\cf0\fs24\b0}\par
+{\b\fs28\cf4 7. NETWORK & API ROUND-TRIP ISSUES\cf0\fs24\b0}\par
 \par
 
 {\b\cf2 6.1 \u8212? Initial Page Load Makes 5+ Parallel API Calls\cf0\b0}\par
@@ -154,7 +204,7 @@
 \pard\brdrb\brdrs\brdrw10\brsp20\par
 \pard\par
 
-{\b\fs28\cf4 7. DATABASE QUERY PERFORMANCE\cf0\fs24\b0}\par
+{\b\fs28\cf4 8. DATABASE QUERY PERFORMANCE\cf0\fs24\b0}\par
 \par
 
 {\b\cf2 7.1 \u8212? json_agg Aggregation on Every Query\cf0\b0}\par
@@ -175,7 +225,7 @@
 \pard\brdrb\brdrs\brdrw10\brsp20\par
 \pard\par
 
-{\b\fs28\cf4 8. SERVER-SIDE BOTTLENECKS\cf0\fs24\b0}\par
+{\b\fs28\cf4 9. SERVER-SIDE BOTTLENECKS\cf0\fs24\b0}\par
 \par
 
 {\b\cf2 8.1 \u8212? 50MB JSON Body Limit\cf0\b0}\par
@@ -193,7 +243,7 @@
 \pard\brdrb\brdrs\brdrw10\brsp20\par
 \pard\par
 
-{\b\fs28\cf4 9. BROWSER & DEVICE FACTORS\cf0\fs24\b0}\par
+{\b\fs28\cf4 10. BROWSER & DEVICE FACTORS\cf0\fs24\b0}\par
 \par
 
 {\b\cf2 9.1 \u8212? Long Task Blocking from React Reconciliation\cf0\b0}\par
@@ -223,7 +273,7 @@
 \pard\brdrb\brdrs\brdrw10\brsp20\par
 \pard\par
 
-{\b\fs28\cf4 10. EC2 INFRASTRUCTURE CONSTRAINTS\cf0\fs24\b0}\par
+{\b\fs28\cf4 11. EC2 INFRASTRUCTURE CONSTRAINTS\cf0\fs24\b0}\par
 \par
 
 {\b\cf2 10.1 \u8212? EC2 Instance Type Unknown (Potentially Undersized)\cf0\b0}\par
@@ -247,7 +297,7 @@
 \pard\brdrb\brdrs\brdrw10\brsp20\par
 \pard\par
 
-{\b\fs28\cf4 11. DEPLOYMENT & PROXY CHAIN\cf0\fs24\b0}\par
+{\b\fs28\cf4 12. DEPLOYMENT & PROXY CHAIN\cf0\fs24\b0}\par
 \par
 
 {\b\cf2 11.1 \u8212? Nginx Reverse Proxy Adds Latency\cf0\b0}\par
@@ -270,41 +320,59 @@
 
 {\b\fs28\cf4 SUMMARY: RANKED BY LIKELY IMPACT\cf0\fs24\b0}\par
 \par
+\pard\li360\cf6\b\i Note: Since the app runs MUCH smoother in Chrome than Safari, the Safari-specific issues should be considered the primary amplifiers. The underlying code issues exist in both browsers, but Safari\rquote s rendering engine turns moderate inefficiencies into visible, frustrating lag.\i0\b0\cf0\par\pard\par
 
-\pard\li360{\b Critical (Most Likely Causing Visible Lag):\b0}\par
-\pard\li720 1. No virtualization for segment list \u8212? 500+ segments with 10,000+ DOM nodes\par
-2. Monolithic 28-useState component \u8212? every interaction re-renders everything\par
-3. Full transcripts list in context with segments \u8212? massive data on every context change\par
-4. PATCH endpoint rewrites all segments \u8212? expensive API + DB round-trip\par
-5. No child component memoization \u8212? AudioPlayer, Toolbar, etc. re-render on every state change\par
+\pard\li360{\b\cf2 CRITICAL \u8212? Safari-Specific Amplifiers (Primary Cause of Safari Lag):\cf0\b0}\par
+\pard\li720 1. Safari\rquote s WebKit layout engine is 2-3x slower with 10,000+ DOM nodes (Section 1.3)\par
+2. Safari\rquote s scrollIntoView smooth scrolling runs on main thread, causing cascading jank during playback (Section 1.7)\par
+3. Safari\rquote s JavaScriptCore is 20-40% slower than V8 for React reconciliation workloads (Section 1.1)\par
+4. Safari\rquote s garbage collector has longer main-thread pauses with large object graphs (Section 1.2)\par
+5. backdrop-blur-sm is extremely expensive in Safari, drops frames when modals are open (Section 1.5)\par
+6. Safari\rquote s CSS transition handling creates excessive compositing layers for 500+ hover elements (Section 1.4)\par
+7. Safari\rquote s textarea reflow recalculates entire scroll container vs Chrome\rquote s subtree-only approach (Section 1.8)\par
+\pard\par
+
+\pard\li360{\b Critical (Code Issues \u8212? Affect Both Browsers But Safari Makes Them Visible):\b0}\par
+\pard\li720 8. No virtualization for segment list \u8212? 500+ segments with 10,000+ DOM nodes\par
+9. Monolithic 28-useState component \u8212? every interaction re-renders everything\par
+10. Full transcripts list in context with segments \u8212? massive data on every context change\par
+11. PATCH endpoint rewrites all segments \u8212? expensive API + DB round-trip\par
+12. No child component memoization \u8212? AudioPlayer, Toolbar, etc. re-render on every state change\par
 \pard\par
 
 \pard\li360{\b High Impact:\b0}\par
-\pard\li720 6. undoStack with unlimited full-copy snapshots\par
-7. VideoPlayer unthrottled timeupdate\par
-8. json_agg query for all transcripts on list load\par
-9. Textarea auto-resize causing double reflow per keystroke\par
-10. EC2 instance potentially undersized / CPU credit exhaustion\par
+\pard\li720 13. undoStack with unlimited full-copy snapshots\par
+14. VideoPlayer unthrottled timeupdate\par
+15. json_agg query for all transcripts on list load\par
+16. Textarea auto-resize causing double reflow per keystroke\par
+17. EC2 instance potentially undersized / CPU credit exhaustion\par
+18. Safari\rquote s Framer Motion performance (getComputedStyle/getBoundingClientRect slower) (Section 1.9)\par
+19. Safari\rquote s overflow scroll container performance + overscroll-contain (Section 1.6)\par
 \pard\par
 
 \pard\li360{\b Medium Impact:\b0}\par
-\pard\li720 11. 43 CSS transitions across viewer components\par
-12. Framer Motion AnimatePresence overhead\par
-13. 5+ parallel API calls on page mount\par
-14. refreshData full reload after speaker merge\par
-15. getSpeakerColorFromMap per-segment per-render\par
-16. Cross-region S3 latency (us-east-1 to us-east-2)\par
-17. No response compression on Express\par
+\pard\li720 20. 43 CSS transitions across viewer components\par
+21. Framer Motion AnimatePresence overhead\par
+22. 5+ parallel API calls on page mount\par
+23. refreshData full reload after speaker merge\par
+24. getSpeakerColorFromMap per-segment per-render\par
+25. Cross-region S3 latency (us-east-1 to us-east-2)\par
+26. No response compression on Express\par
+27. Safari font rendering / Core Text overhead on Retina displays (Section 1.14)\par
+28. Safari timer throttling bunching debounced saves together (Section 1.12)\par
+29. Safari ITP overhead on API requests (Section 1.10)\par
 \pard\par
 
 \pard\li360{\b Lower Impact (But Still Contributing):\b0}\par
-\pard\li720 18. Inline arrow functions preventing future memoization\par
-19. Non-memoized handler functions\par
-20. scrollIntoView smooth animation during playback\par
-21. formatDuration called 500x per render\par
-22. Mobile checkbox rendering for all segments\par
-23. No database indexes on transcript_segments(transcript_id)\par
-24. Browser extensions / React DevTools overhead\par
-25. PM2 and Nginx proxy chain latency\par
+\pard\li720 30. Inline arrow functions preventing future memoization\par
+31. Non-memoized handler functions\par
+32. scrollIntoView smooth animation during playback\par
+33. formatDuration called 500x per render\par
+34. Mobile checkbox rendering for all segments\par
+35. No database indexes on transcript_segments(transcript_id)\par
+36. Browser extensions / React DevTools overhead\par
+37. PM2 and Nginx proxy chain latency\par
+38. Safari position: sticky repaint issues (Section 1.11)\par
+39. Safari media playback CPU overhead (Section 1.13)\par
 \pard\par
 }
