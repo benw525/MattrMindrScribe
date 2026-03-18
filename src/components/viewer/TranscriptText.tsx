@@ -48,8 +48,6 @@ interface SegmentRowProps {
   onChangeSegmentSpeaker?: (segmentId: string, newSpeaker: string) => void;
   onAddSpeakerFromDropdown?: (segmentId: string, name: string) => void;
   onToggleSelect: (id: string) => void;
-  speakerDropdownId: string | null;
-  onSetSpeakerDropdownId: (id: string | null) => void;
 }
 
 const SegmentRow = React.memo(function SegmentRow({
@@ -67,19 +65,15 @@ const SegmentRow = React.memo(function SegmentRow({
   onChangeSegmentSpeaker,
   onAddSpeakerFromDropdown,
   onToggleSelect,
-  speakerDropdownId,
-  onSetSpeakerDropdownId,
 }: SegmentRowProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState('');
+  const [showDropdown, setShowDropdown] = useState(false);
   const [addingSpeakerInDropdown, setAddingSpeakerInDropdown] = useState(false);
   const [newSpeakerName, setNewSpeakerName] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const newSpeakerInputRef = useRef<HTMLInputElement>(null);
-  const activeRef = useRef<HTMLDivElement>(null);
-
-  const showDropdown = speakerDropdownId === segment.id;
 
   useEffect(() => {
     if (isEditing && textareaRef.current) {
@@ -106,7 +100,7 @@ const SegmentRow = React.memo(function SegmentRow({
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
-        onSetSpeakerDropdownId(null);
+        setShowDropdown(false);
         setAddingSpeakerInDropdown(false);
         setNewSpeakerName('');
       }
@@ -115,7 +109,7 @@ const SegmentRow = React.memo(function SegmentRow({
       document.addEventListener('mousedown', handleClickOutside);
     }
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [showDropdown, onSetSpeakerDropdownId]);
+  }, [showDropdown]);
 
   const handleEditStart = useCallback(() => {
     setIsEditing(true);
@@ -166,17 +160,16 @@ const SegmentRow = React.memo(function SegmentRow({
     if (onAddSpeakerFromDropdown) {
       onAddSpeakerFromDropdown(segment.id, trimmed);
     }
-    onSetSpeakerDropdownId(null);
+    setShowDropdown(false);
     setAddingSpeakerInDropdown(false);
     setNewSpeakerName('');
-  }, [newSpeakerName, segment.id, onAddSpeakerFromDropdown, onSetSpeakerDropdownId]);
+  }, [newSpeakerName, segment.id, onAddSpeakerFromDropdown]);
 
   const speakerColorBorder = getSpeakerColorFromMap(segment.speaker, speakerColors).border;
 
   return (
     <>
       <div
-        ref={isActive ? activeRef : undefined}
         data-active={isActive || undefined}
         className={`flex gap-1 sm:gap-4 group transition-colors py-2 sm:p-2 sm:-mx-2 rounded-lg ${isActive ? 'bg-indigo-50/50 dark:bg-indigo-950/30' : ''}`}
       >
@@ -199,10 +192,10 @@ const SegmentRow = React.memo(function SegmentRow({
 
         <div className={`flex-1 border-l-2 pl-2 sm:pl-4 min-w-0 ${speakerColorBorder}`}>
           <div className="flex items-center justify-between mb-1">
-            <div className="relative">
+            <div className="relative" ref={dropdownRef}>
               <button
                 onClick={() => {
-                  onSetSpeakerDropdownId(showDropdown ? null : segment.id);
+                  setShowDropdown(prev => !prev);
                   setAddingSpeakerInDropdown(false);
                   setNewSpeakerName('');
                 }}
@@ -213,7 +206,6 @@ const SegmentRow = React.memo(function SegmentRow({
               </button>
               {showDropdown && (
                 <div
-                  ref={dropdownRef}
                   className="absolute left-0 top-full mt-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg z-30 min-w-[180px] py-1">
                   {allSpeakers.map((speaker) => (
                     <button
@@ -222,7 +214,7 @@ const SegmentRow = React.memo(function SegmentRow({
                         if (onChangeSegmentSpeaker && speaker !== segment.speaker) {
                           onChangeSegmentSpeaker(segment.id, speaker);
                         }
-                        onSetSpeakerDropdownId(null);
+                        setShowDropdown(false);
                       }}
                       className={`w-full text-left px-3 py-2.5 sm:py-1.5 text-sm flex items-center gap-2 transition-colors ${speaker === segment.speaker ? 'bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 font-medium' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 active:bg-slate-100 dark:active:bg-slate-600'}`}>
                       <span className={`w-2 h-2 rounded-full ${getSpeakerColorFromMap(speaker, speakerColors).bg}`} />
@@ -352,7 +344,6 @@ export function TranscriptText({
   speakerColors = {},
   onAddSpeakerFromDropdown
 }: TranscriptTextProps) {
-  const [speakerDropdownId, setSpeakerDropdownId] = useState<string | null>(null);
   const [userScrolled, setUserScrolled] = useState(false);
   const userScrollTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -442,10 +433,6 @@ export function TranscriptText({
     }
   }, [isPlaying]);
 
-  const handleSetSpeakerDropdownId = useCallback((id: string | null) => {
-    setSpeakerDropdownId(id);
-  }, []);
-
   if (segments.length === 0) {
     return (
       <div className="flex-1 flex items-center justify-center p-8 text-slate-500 dark:text-slate-400">
@@ -500,8 +487,6 @@ export function TranscriptText({
               onChangeSegmentSpeaker={onChangeSegmentSpeaker}
               onAddSpeakerFromDropdown={onAddSpeakerFromDropdown}
               onToggleSelect={toggleSelect}
-              speakerDropdownId={speakerDropdownId}
-              onSetSpeakerDropdownId={handleSetSpeakerDropdownId}
             />
           );
         })}

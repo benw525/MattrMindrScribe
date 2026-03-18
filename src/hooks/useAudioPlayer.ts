@@ -54,12 +54,22 @@ export function useAudioPlayer(totalDuration: number, fileUrl?: string, mediaTyp
     audioRef.current = audio;
     hasRealAudio.current = true;
 
+    let lastUpdateTime = 0;
     audio.addEventListener('timeupdate', () => {
-      setCurrentTime(audio.currentTime);
+      const now = Date.now();
+      if (now - lastUpdateTime >= 500) {
+        lastUpdateTime = now;
+        setCurrentTime(audio.currentTime);
+      }
     });
 
     audio.addEventListener('ended', () => {
+      setCurrentTime(audio.currentTime);
       setIsPlaying(false);
+    });
+
+    audio.addEventListener('pause', () => {
+      setCurrentTime(audio.currentTime);
     });
 
     audio.addEventListener('error', () => {

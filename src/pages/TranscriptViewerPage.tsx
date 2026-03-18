@@ -590,7 +590,8 @@ export function TranscriptViewerPage() {
       {/* Speaker Bar */}
       {!isProcessing && transcript.segments.length > 0 &&
       <div className="flex-shrink-0 border-b border-slate-100 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-900/50 px-3 sm:px-6 py-2 sm:py-2.5">
-          <div className="flex items-center gap-2 overflow-x-auto no-scrollbar flex-nowrap">
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 overflow-x-auto no-scrollbar flex-nowrap flex-1 min-w-0">
             <span className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mr-1 flex-shrink-0">
               Speakers
             </span>
@@ -636,6 +637,7 @@ export function TranscriptViewerPage() {
                 </button>
               );
             })}
+            </div>
             <div className="relative flex-shrink-0" ref={speakerManagerRef}>
               <button
                 onClick={() => {
