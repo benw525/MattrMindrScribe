@@ -1034,7 +1034,7 @@ router.post('/:id/summarize', async (req: AuthRequest, res: Response) => {
       return `${timestamp} ${seg.speaker}: ${seg.text}`;
     }).join('\n');
 
-    const MAX_CHARS = 120000;
+    const MAX_CHARS = 400000;
     if (transcriptText.length > MAX_CHARS) {
       return res.status(400).json({ error: `Transcript is too long for summarization (${Math.round(transcriptText.length / 1000)}k chars). Maximum is ${MAX_CHARS / 1000}k characters.` });
     }
