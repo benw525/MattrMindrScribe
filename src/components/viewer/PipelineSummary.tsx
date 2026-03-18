@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { CheckCircle2Icon, XCircleIcon, AlertTriangleIcon, ClockIcon, RefreshCwIcon, XIcon, CpuIcon, MicIcon, BrainCircuitIcon, Volume2Icon } from 'lucide-react';
+import { CheckCircle2Icon, XCircleIcon, AlertTriangleIcon, ClockIcon, RefreshCwIcon, XIcon, CpuIcon, MicIcon, BrainCircuitIcon, Volume2Icon, LoaderIcon } from 'lucide-react';
 import { PipelineLog, PipelineStepLog } from '../../types/transcript';
 import { api } from '../../utils/api';
 import { toast } from 'sonner';
@@ -21,6 +21,8 @@ function StepStatusIcon({ status }: { status: string }) {
       return <XCircleIcon className="h-5 w-5 text-red-500 flex-shrink-0" />;
     case 'skipped':
       return <AlertTriangleIcon className="h-5 w-5 text-amber-500 flex-shrink-0" />;
+    case 'processing':
+      return <LoaderIcon className="h-5 w-5 text-indigo-500 flex-shrink-0 animate-spin" />;
     case 'pending':
       return <ClockIcon className="h-5 w-5 text-slate-400 flex-shrink-0" />;
     default:
@@ -34,6 +36,7 @@ function StepCard({ title, icon, step, description }: { title: string; icon: Rea
       step.status === 'error' ? 'border-red-200 dark:border-red-800 bg-red-50/50 dark:bg-red-950/20' :
       step.status === 'success' ? 'border-emerald-200 dark:border-emerald-800 bg-emerald-50/50 dark:bg-emerald-950/20' :
       step.status === 'skipped' ? 'border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/20' :
+      step.status === 'processing' ? 'border-indigo-200 dark:border-indigo-800 bg-indigo-50/50 dark:bg-indigo-950/20' :
       'border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/50'
     }`}>
       <div className="flex items-start gap-3">
@@ -86,7 +89,6 @@ export function PipelineSummary({ pipelineLog, transcriptStatus, errorMessage, t
   const [isRetrying, setIsRetrying] = useState(false);
 
   const hasAnyFailure = pipelineLog && (
-    pipelineLog.auphonic?.status === 'error' ||
     pipelineLog.whisper.status === 'error' ||
     pipelineLog.diarization.status === 'error' ||
     pipelineLog.refinement.status === 'error' ||
