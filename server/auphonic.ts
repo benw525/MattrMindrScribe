@@ -27,7 +27,7 @@ function getApiKey(): string {
 }
 
 function authHeader(): Record<string, string> {
-  return { Authorization: `Basic ${Buffer.from(getApiKey() + ':').toString('base64')}` };
+  return { Authorization: `Bearer ${getApiKey()}` };
 }
 
 function timeoutSignal(ms: number): AbortSignal {
