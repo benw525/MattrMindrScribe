@@ -14,7 +14,7 @@ interface TranscriptContextType {
   dismissUpload: (id: string) => void;
   updateTranscript: (id: string, updates: Partial<Transcript>) => void;
   deleteTranscripts: (ids: string[]) => void;
-  addFolder: (name: string, caseNumber: string, parentId?: string | null, mattrmindrCaseId?: string | null, mattrmindrCaseName?: string | null) => void;
+  addFolder: (name: string, caseNumber: string, parentId?: string | null, mattrmindrCaseId?: string | null, mattrmindrCaseName?: string | null) => Promise<void>;
   deleteFolder: (id: string) => void;
   renameFolder: (id: string, newName: string) => void;
   moveTranscripts: (ids: string[], folderId: string | null) => void;
@@ -154,12 +154,8 @@ export function TranscriptProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const addFolder = useCallback(async (name: string, caseNumber: string, parentId: string | null = null, mattrmindrCaseId: string | null = null, mattrmindrCaseName: string | null = null) => {
-    try {
-      const newFolder = await api.folders.create(name, caseNumber, parentId, mattrmindrCaseId, mattrmindrCaseName);
-      setFolders((prev) => [...prev, newFolder]);
-    } catch (err) {
-      console.error('Failed to create folder:', err);
-    }
+    const newFolder = await api.folders.create(name, caseNumber, parentId, mattrmindrCaseId, mattrmindrCaseName);
+    setFolders((prev) => [...prev, newFolder]);
   }, []);
 
   const deleteFolder = useCallback(async (id: string) => {

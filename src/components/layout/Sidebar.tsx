@@ -120,16 +120,20 @@ export function Sidebar({
     }, 300);
   }, []);
 
-  const handleSelectCase = useCallback((c: MattrMindrCase) => {
-    addFolder(c.name, c.caseNumber, creatingParentId, c.id, c.name);
-    if (creatingParentId) {
-      setExpandedFolders((prev) => new Set([...prev, creatingParentId]));
+  const handleSelectCase = useCallback(async (c: MattrMindrCase) => {
+    try {
+      await addFolder(c.name, c.caseNumber, creatingParentId, c.id, c.name);
+      if (creatingParentId) {
+        setExpandedFolders((prev) => new Set([...prev, creatingParentId]));
+      }
+      setIsCreatingFolder(false);
+      setCreatingParentId(null);
+      setCaseSearchQuery('');
+      setCaseSearchResults([]);
+      setCreateTab('new');
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to create folder from case');
     }
-    setIsCreatingFolder(false);
-    setCreatingParentId(null);
-    setCaseSearchQuery('');
-    setCaseSearchResults([]);
-    setCreateTab('new');
   }, [addFolder, creatingParentId]);
 
   // Close menu on outside click
@@ -142,20 +146,24 @@ export function Sidebar({
     if (menuFolderId) document.addEventListener('mousedown', handleClick);
     return () => document.removeEventListener('mousedown', handleClick);
   }, [menuFolderId]);
-  const handleCreateFolder = () => {
+  const handleCreateFolder = async () => {
     if (newFolderName.trim()) {
-      addFolder(
-        newFolderName.trim(),
-        newCaseNumber.trim() || 'N/A',
-        creatingParentId
-      );
-      if (creatingParentId) {
-        setExpandedFolders((prev) => new Set([...prev, creatingParentId]));
+      try {
+        await addFolder(
+          newFolderName.trim(),
+          newCaseNumber.trim() || 'N/A',
+          creatingParentId
+        );
+        if (creatingParentId) {
+          setExpandedFolders((prev) => new Set([...prev, creatingParentId]));
+        }
+        setNewFolderName('');
+        setNewCaseNumber('');
+        setIsCreatingFolder(false);
+        setCreatingParentId(null);
+      } catch (err: any) {
+        toast.error(err?.message || 'Failed to create folder');
       }
-      setNewFolderName('');
-      setNewCaseNumber('');
-      setIsCreatingFolder(false);
-      setCreatingParentId(null);
     }
   };
   const handleKeyDown = (e: React.KeyboardEvent) => {
