@@ -1,0 +1,8 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "iIUig75pvgKPuTIz758u1"
+uri = "file://MattrMindrScribe_Lag_Analysis.rtf"
+type = "unspecified"
+title = "Comprehensive Lag Analysis - MattrMindrScribe Transcript Viewer"

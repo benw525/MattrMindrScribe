@@ -1,0 +1,310 @@
+{\rtf1\ansi\deff0
+{\fonttbl{\f0\fswiss Helvetica;}{\f1\fmodern Courier New;}}
+{\colortbl;\red0\green0\blue0;\red180\green0\blue0;\red0\green100\blue0;\red0\green0\blue180;\red100\green100\blue100;\red255\green140\blue0;}
+\paperw12240\paperh15840\margl1440\margr1440\margt1440\margb1440
+
+\pard\qc\b\fs36 MattrMindrScribe Transcript Viewer\line Comprehensive Lag Analysis\b0\fs24\par
+\pard\qc\fs20\cf5 Prepared: March 18, 2026\line Covers: Frontend, Backend, Database, Infrastructure, and Browser\cf0\fs24\par
+\pard\par
+
+\pard\b\fs28\cf4 TABLE OF CONTENTS\cf0\b0\fs24\par
+\pard\par
+\pard\li360 1. React Component Architecture Issues\par
+2. State Management & Re-render Cascades\par
+3. DOM Weight & Paint Cost\par
+4. CSS & Animation Overhead\par
+5. Data Size & Memory Pressure\par
+6. Network & API Round-Trip Issues\par
+7. Database Query Performance\par
+8. Server-Side Bottlenecks\par
+9. Browser & Device Factors\par
+10. EC2 Infrastructure Constraints\par
+11. Deployment & Proxy Chain\par
+\pard\par
+
+\pard\brdrb\brdrs\brdrw10\brsp20\par
+\pard\par
+
+{\b\fs28\cf4 1. REACT COMPONENT ARCHITECTURE ISSUES\cf0\fs24\b0}\par
+\par
+
+{\b\cf2 1.1 \u8212? Monolithic TranscriptViewerPage Component (1,097 lines)\cf0\b0}\par
+\pard\li360 The entire transcript viewer page is a single React component with 28 useState hooks, 8 useEffect hooks, and 18 useCallback/useMemo hooks. Every single state change in any of these 28 state variables triggers a complete re-execution of the entire component function body \u8212? including all hook evaluations, JSX construction, and reconciliation of the full component tree. Even toggling a modal, opening a dropdown, or changing an editing state causes the entire 1,097-line function to re-run.\par\pard\par
+
+{\b\cf2 1.2 \u8212? No Sub-Component Memoization for Viewer Children\cf0\b0}\par
+\pard\li360 The child components AudioPlayer, MetadataEditor, TranscriptToolbar, VideoPlayer, VersionHistory, AISummaryPanel, AISummarizeModal, PipelineSummary, and SendToMattrMindrModal are all plain exported functions \u8212? none are wrapped in React.memo. Every time the parent TranscriptViewerPage re-renders (which happens on any of its 28 state changes), every single one of these child components fully re-renders, even if their props have not changed. This means a simple tooltip hover or input keystroke in the speaker bar triggers re-rendering of the audio player, the toolbar, the metadata editor, and the entire transcript text area.\par\pard\par
+
+{\b\cf2 1.3 \u8212? TranscriptText Receives currentTime as Prop\cf0\b0}\par
+\pard\li360 TranscriptText is now wrapped in React.memo, which helps. However, it receives currentTime as a prop. During audio playback, currentTime changes every 500ms (after throttling), which means TranscriptText re-renders twice per second during playback. Each re-render iterates over all segments in the .map() call, evaluating props for every SegmentRow. Even though SegmentRow is memoized and most rows skip rendering, the parent TranscriptText still has to run the map loop and perform shallow prop comparisons for every single segment.\par\pard\par
+
+{\b\cf2 1.4 \u8212? SegmentRow document.addEventListener on Every Open Dropdown\cf0\b0}\par
+\pard\li360 Each SegmentRow has a useEffect that attaches and removes a document-level mousedown event listener whenever its speaker dropdown opens or closes. If multiple dropdowns are opened and closed in sequence, these listeners are repeatedly attached and detached from the global document. While only one dropdown should be open at a time (since state is local), the listener attachment/cleanup cycle runs per-row and interacts with React's effect scheduling.\par\pard\par
+
+{\b\cf2 1.5 \u8212? Inline Arrow Functions in JSX Throughout the Page\cf0\b0}\par
+\pard\li360 The TranscriptViewerPage contains dozens of inline arrow functions in JSX event handlers, such as onClick=\{() => setShowHistory(!showHistory)\}, onClick=\{() => setShowSummarizeModal(true)\}, onChange=\{(e) => setSpeakerEditValue(e.target.value)\}, and so on. Each of these creates a new function reference on every render. While these alone are not the primary lag source, they prevent any future child component memoization from working because the prop references are always new.\par\pard\par
+
+{\b\cf2 1.6 \u8212? Non-Memoized Handler Functions\cf0\b0}\par
+\pard\li360 Several handler functions are defined as plain functions (not useCallback): handleAddSpeaker, handleRemoveSpeaker, handleMergeSpeaker, handleRenameSpeaker, handleChangeSpeakerColor, and handleSelectAgent. These are recreated on every render, and some of them are passed as props to child components, defeating any potential memoization.\par\pard\par
+
+{\b\cf2 1.7 \u8212? VideoPlayer onTimeUpdate Fires Unthrottled\cf0\b0}\par
+\pard\li360 The VideoPlayer component attaches an onTimeUpdate handler to the <video> element that calls onSeek(video.currentTime) on every browser time update event (approximately 4 times per second). Unlike the audio player which was throttled to 500ms, the video player has no throttling at all. Since onSeek calls setCurrentTime in useAudioPlayer, this causes the entire TranscriptViewerPage to re-render ~4 times per second during video playback, cascading re-renders to every child component.\par\pard\par
+
+{\b\cf2 1.8 \u8212? togglePlayPause Depends on isPlaying State\cf0\b0}\par
+\pard\li360 In useAudioPlayer, the togglePlayPause callback has [isPlaying] as a dependency. This means a new function reference is created every time isPlaying changes. Since togglePlayPause is passed as onTogglePlay to AudioPlayer and VideoPlayer, those components receive a new prop on every play/pause toggle, forcing them to re-render (even if they were memoized).\par\pard\par
+
+\pard\brdrb\brdrs\brdrw10\brsp20\par
+\pard\par
+
+{\b\fs28\cf4 2. STATE MANAGEMENT & RE-RENDER CASCADES\cf0\fs24\b0}\par
+\par
+
+{\b\cf2 2.1 \u8212? TranscriptContext Triggers Global Re-renders\cf0\b0}\par
+\pard\li360 TranscriptContext stores the entire transcripts array (all transcripts for the user, each containing all their segments). The context value is now memoized, but it still changes whenever any transcript is updated, any upload progresses, or any folder changes. Every component that calls useTranscripts() (the dashboard, the viewer page, the sidebar) re-renders whenever the transcripts array changes. When the user edits a single segment in the viewer, updateTranscript calls setTranscripts with a new array, which changes the context value, which re-renders every context consumer including the dashboard page components (even though they are not visible).\par\pard\par
+
+{\b\cf2 2.2 \u8212? Full Transcript List Loaded in Context (All Segments Included)\cf0\b0}\par
+\pard\li360 The GET /api/transcripts endpoint returns ALL transcripts for the user, each with ALL their segments aggregated via json_agg. A single transcript with a 2-hour deposition can have 500-1000+ segments. If the user has 10 transcripts, the context holds potentially 5,000-10,000 segment objects in memory. Every call to transcripts.find((t) => t.id === id) iterates over this entire array. Every call to setTranscripts with a new array creates a new reference for the entire list, even if only one segment in one transcript was modified.\par\pard\par
+
+{\b\cf2 2.3 \u8212? undoStack Stores Full Segment Array Copies\cf0\b0}\par
+\pard\li360 Each undo entry stores a complete copy of all segments via [...t.segments]. For a transcript with 500 segments, each undo entry copies 500 objects. After 10 edits, the undo stack holds 5,000 segment object copies. The undo stack has no size limit. Because handleUndo depends on [undoStack, ...], the handleUndo callback is recreated on every edit (since undoStack changes), which cascades new props to the toolbar.\par\pard\par
+
+{\b\cf2 2.4 \u8212? Debounced PATCH Still Sends Full Segment Array\cf0\b0}\par
+\pard\li360 When the user edits a segment, updateTranscript in the context merges updates and debounces the API call by 2 seconds. However, the PATCH request sends the entire segments array in the request body. For a transcript with 500 segments, this means serializing and sending ~50-200KB of JSON on every edit (after the 2-second debounce). The server then DELETEs all segments and re-INSERTs them all in a transaction. This is a full table rewrite for each save.\par\pard\par
+
+{\b\cf2 2.5 \u8212? autoSave Creates Version on Every Edit\cf0\b0}\par
+\pard\li360 After every segment edit, merge, split, or speaker change, autoSave is called with a 1.5-second debounce. This POSTs to /api/transcripts/:id/versions, which copies all segments to the versions table. Combined with the PATCH debounce (2 seconds), a single segment edit triggers two separate API calls: one to save segments (2s delay) and one to create a version snapshot (1.5s delay). Both calls send/copy the full segment data.\par\pard\par
+
+{\b\cf2 2.6 \u8212? Multiple State Updates Not Batched (React 18 Caveat)\cf0\b0}\par
+\pard\li360 Several event handlers call multiple setState functions sequentially. For example, handleRenameSpeaker calls: pushUndo (setUndoStack), updateTranscript (setTranscripts in context), setCustomSpeakers, setSpeakerColors, setEditingSpeaker, and autoSave. React 18 batches these in event handlers, but the autoSave calls setTimeout internally, and state updates inside setTimeout callbacks are not automatically batched, potentially causing additional re-renders.\par\pard\par
+
+\pard\brdrb\brdrs\brdrw10\brsp20\par
+\pard\par
+
+{\b\fs28\cf4 3. DOM WEIGHT & PAINT COST\cf0\fs24\b0}\par
+\par
+
+{\b\cf2 3.1 \u8212? No Virtualization for Segment List\cf0\b0}\par
+\pard\li360 TranscriptText renders every single segment in the DOM simultaneously via segments.map(). A 1-hour legal deposition typically produces 200-600 segments. A 3-hour recording can produce 1,000+ segments. Each SegmentRow renders approximately 15-20 DOM elements (container div, timestamp button, speaker button, dropdown button, chevron icon, text paragraph, border div, merge button, split button, and conditional elements). For 500 segments, this means 7,500-10,000 DOM nodes just for the transcript text area. The browser must layout, paint, and composite all of these nodes, even though only 5-15 are visible in the viewport at any time. There is no windowing or virtualization (such as react-window or react-virtuoso) to limit DOM nodes to only visible segments.\par\pard\par
+
+{\b\cf2 3.2 \u8212? Hidden Merge Buttons Between Every Pair of Segments\cf0\b0}\par
+\pard\li360 On desktop, every SegmentRow (except the last) renders a merge button between itself and the next segment. These merge buttons have opacity-0 and only become visible on hover. However, they still exist in the DOM and participate in layout calculations. For 500 segments, this adds ~500 additional invisible button elements, each with their own icon and text span.\par\pard\par
+
+{\b\cf2 3.3 \u8212? Conditional Speaker Dropdown Per Row\cf0\b0}\par
+\pard\li360 Each SegmentRow contains the full speaker dropdown markup (speaker list, add new speaker form, input field, confirm/cancel buttons). When the dropdown is closed, React does not render this subtree. However, the conditional evaluation and the useEffect for the click-outside listener still run per-row.\par\pard\par
+
+{\b\cf2 3.4 \u8212? Large Speaker Bar in TranscriptViewerPage\cf0\b0}\par
+\pard\li360 The speaker bar iterates over all unique speakers and renders either an editing form or a button for each. The speaker manager dropdown, when open, renders the full speaker management UI including color pickers (10 color circles per speaker), rename inputs, merge confirmations, and remove buttons. This is all rendered inline in the TranscriptViewerPage component body, adding to the reconciliation cost on every re-render.\par\pard\par
+
+\pard\brdrb\brdrs\brdrw10\brsp20\par
+\pard\par
+
+{\b\fs28\cf4 4. CSS & ANIMATION OVERHEAD\cf0\fs24\b0}\par
+\par
+
+{\b\cf2 4.1 \u8212? 43 CSS Transition Properties Across Viewer Components\cf0\b0}\par
+\pard\li360 TranscriptViewerPage has 21 elements with CSS transition classes, TranscriptText has 13, and AudioPlayer has 9. These include transition-colors, transition-all, transition-opacity, and transition-transform. Every time any of these elements re-render with a class change, the browser must calculate and animate the CSS transition. The transition-all class is particularly expensive because it transitions every animatable CSS property, forcing the browser to check and potentially animate all properties on every change.\par\pard\par
+
+{\b\cf2 4.2 \u8212? Framer Motion AnimatePresence (7 Instances)\cf0\b0}\par
+\pard\li360 The TranscriptViewerPage uses AnimatePresence in 3 places (VersionHistory, AISummaryPanel, and AISummarizeModal). Framer Motion adds JavaScript-based animation overhead, subscribing to React\rquote s render cycle to coordinate enter/exit animations. Even when the animated components are not visible, AnimatePresence maintains internal state tracking and registers effects. Framer Motion also forces layout measurements (getBoundingClientRect) during animations, which triggers browser reflow.\par\pard\par
+
+{\b\cf2 4.3 \u8212? group-hover and opacity-0/opacity-100 Toggles\cf0\b0}\par
+\pard\li360 Many elements use Tailwind's group-hover pattern (sm:opacity-0 sm:group-hover:opacity-100) for show-on-hover interactions. While CSS-only, these create GPU compositing layers for opacity transitions. With 500+ segment rows each having opacity-toggled split and merge buttons, the browser may create hundreds of compositing layers, consuming GPU memory and increasing composite time.\par\pard\par
+
+\pard\brdrb\brdrs\brdrw10\brsp20\par
+\pard\par
+
+{\b\fs28\cf4 5. DATA SIZE & MEMORY PRESSURE\cf0\fs24\b0}\par
+\par
+
+{\b\cf2 5.1 \u8212? Transcript Object Contains Full Segment Array\cf0\b0}\par
+\pard\li360 Each Transcript object includes a segments array with all TranscriptSegment objects. Each segment has 5 fields: id (UUID string, 36 chars), startTime (number), endTime (number), speaker (string, ~10-30 chars), and text (string, typically 20-200 chars). A 500-segment transcript occupies roughly 250-500KB as a JavaScript object. With the undo stack holding copies, and the context holding all transcripts, memory usage can reach several megabytes for a single viewer session.\par\pard\par
+
+{\b\cf2 5.2 \u8212? Versions Array Contains Full Segment Snapshots\cf0\b0}\par
+\pard\li360 The versions state holds TranscriptVersion objects, each containing a complete segments array. With 10+ versions, this multiplies the segment data by 10x in memory. The versions are fetched on page load (api.transcripts.getVersions) and stored entirely in state, even though they are only displayed in the VersionHistory panel.\par\pard\par
+
+{\b\cf2 5.3 \u8212? Full Transcripts List Held in Context\cf0\b0}\par
+\pard\li360 TranscriptContext.transcripts holds every transcript the user owns, each with all segments. If the user has 20 transcripts averaging 300 segments each, that is 6,000 segment objects held in a single React state variable. Every call to setTranscripts creates a new array (shallow copy), triggering garbage collection of the old array. Frequent edits cause frequent garbage collection pauses.\par\pard\par
+
+{\b\cf2 5.4 \u8212? Summaries State Holds Full Summary Text\cf0\b0}\par
+\pard\li360 The summaries state array holds all AI-generated summaries for the current transcript. Legal summaries can be 2,000-5,000 words each. With multiple summaries, this adds several hundred KB of text data to the component state, increasing the cost of every state comparison and re-render.\par\pard\par
+
+\pard\brdrb\brdrs\brdrw10\brsp20\par
+\pard\par
+
+{\b\fs28\cf4 6. NETWORK & API ROUND-TRIP ISSUES\cf0\fs24\b0}\par
+\par
+
+{\b\cf2 6.1 \u8212? Initial Page Load Makes 5+ Parallel API Calls\cf0\b0}\par
+\pard\li360 When the TranscriptViewerPage mounts, it triggers: (1) transcripts list from context (already loaded or loading), (2) getVersions, (3) getSummaries, (4) getAgents, (5) mattrmindr.status, and potentially (6) a direct transcript fetch if context hasn't loaded yet. Each API call returns a response that triggers setState, causing re-renders. The 5 setState calls from these API responses may not all batch together (since they resolve at different times via async/then), causing up to 5 sequential re-renders on page load.\par\pard\par
+
+{\b\cf2 6.2 \u8212? GET /api/transcripts Returns All Transcripts with All Segments\cf0\b0}\par
+\pard\li360 The list endpoint (GET /api/transcripts) performs a LEFT JOIN with json_agg that returns every transcript with every segment. For a user with 15 transcripts and 300 segments each, this response is approximately 1-3MB of JSON. This data must be: serialized by the server, transmitted over the network, parsed by the browser, and stored in React state. On the production EC2 instance, this query aggregates all segments into a JSON array per-transcript, which is a CPU-intensive operation for PostgreSQL.\par\pard\par
+
+{\b\cf2 6.3 \u8212? PATCH Endpoint Performs DELETE + INSERT for All Segments\cf0\b0}\par
+\pard\li360 When saving a transcript edit, the PATCH /:id endpoint deletes ALL segments for the transcript and re-inserts them all (in batches of 200). For a 500-segment transcript, this means: 1 DELETE, 3 batch INSERTs (200+200+100), plus 1 SELECT with json_agg for the response. This round-trip takes the database transaction lock, performs disk I/O, and returns the full transcript. While debounced to 2 seconds, rapid editing can queue multiple saves.\par\pard\par
+
+{\b\cf2 6.4 \u8212? Version Creation Copies Segments to Versions Table\cf0\b0}\par
+\pard\li360 The POST /:id/versions endpoint copies all current segments into a transcript_versions row (as a JSON column or related table). This is an additional write operation that happens 1.5 seconds after every edit. Combined with the PATCH save, each edit results in two database write transactions within a 2-second window.\par\pard\par
+
+{\b\cf2 6.5 \u8212? refreshData After Speaker Merge Reloads Everything\cf0\b0}\par
+\pard\li360 When the user merges speakers, handleMergeSpeaker calls refreshData() after the merge API call. refreshData fetches ALL transcripts and ALL folders from scratch, replacing the entire context state. This causes a full re-render of every context consumer with entirely new object references, invalidating all memoization.\par\pard\par
+
+{\b\cf2 6.6 \u8212? Media Token Request Before Audio Playback\cf0\b0}\par
+\pard\li360 When the transcript loads, useAudioPlayer triggers a POST to /api/media/token to get a presigned S3 download URL. This is an additional network round-trip before audio can start loading. If the S3 presigned URL generation is slow (cross-region to us-east-2), this adds latency to the initial load.\par\pard\par
+
+\pard\brdrb\brdrs\brdrw10\brsp20\par
+\pard\par
+
+{\b\fs28\cf4 7. DATABASE QUERY PERFORMANCE\cf0\fs24\b0}\par
+\par
+
+{\b\cf2 7.1 \u8212? json_agg Aggregation on Every Query\cf0\b0}\par
+\pard\li360 Both the list endpoint (GET /api/transcripts) and the detail endpoint (GET /api/transcripts/:id/detail) use json_agg to aggregate segments into a JSON array. This forces PostgreSQL to: join the transcripts and transcript_segments tables, sort segments by segment_order, build a JSON array in memory, and serialize it into the response. For large transcripts, this aggregation is CPU-intensive and memory-intensive on the database server.\par\pard\par
+
+{\b\cf2 7.2 \u8212? No Pagination on Transcript List\cf0\b0}\par
+\pard\li360 The GET /api/transcripts endpoint has no LIMIT, OFFSET, or cursor-based pagination. It returns every transcript the user owns. As the user accumulates more transcripts, this query becomes progressively slower. There is also no option to fetch transcripts without segments (a lightweight list for the dashboard vs. a full detail fetch for the viewer).\par\pard\par
+
+{\b\cf2 7.3 \u8212? Missing Database Indexes\cf0\b0}\par
+\pard\li360 The database has a unique index on (transcript_id, segment_order) for deduplication, and an index on transcript_summaries(transcript_id). However, there is no visible index on transcript_segments(transcript_id) alone, which would speed up the DELETE and SELECT queries in the PATCH endpoint. There may also be missing indexes on transcripts(user_id) for the list query, and on transcripts(user_id, id) for the ownership check.\par\pard\par
+
+{\b\cf2 7.4 \u8212? PostgreSQL Pool Has No Configuration\cf0\b0}\par
+\pard\li360 The database pool in server/db.ts uses default pg.Pool settings: default max connections (10), no idle timeout configuration, no statement timeout, and no connection timeout. Under load (multiple users or concurrent transcription pipelines), the pool may be exhausted, causing API requests to queue.\par\pard\par
+
+{\b\cf2 7.5 \u8212? Full Segment Re-write on Every Save (No Diff-Based Updates)\cf0\b0}\par
+\pard\li360 The PATCH endpoint deletes all segments and re-inserts them, rather than updating only the changed segment. If the user edits one word in one segment out of 500, all 500 are deleted and re-inserted. A diff-based approach (only updating the changed segment by ID) would reduce the database I/O by 99%.\par\pard\par
+
+\pard\brdrb\brdrs\brdrw10\brsp20\par
+\pard\par
+
+{\b\fs28\cf4 8. SERVER-SIDE BOTTLENECKS\cf0\fs24\b0}\par
+\par
+
+{\b\cf2 8.1 \u8212? 50MB JSON Body Limit\cf0\b0}\par
+\pard\li360 The Express server has express.json(\{ limit: '50mb' \}). When the PATCH endpoint receives a request with 500+ segments, Express must parse potentially 200KB+ of JSON synchronously on the main thread. This blocks the event loop during parsing.\par\pard\par
+
+{\b\cf2 8.2 \u8212? Transcription Pipeline Runs on Same Server\cf0\b0}\par
+\pard\li360 Active transcription pipelines (Whisper, AssemblyAI, Claude) run on the same Express server. While the API calls themselves are async I/O, the ffmpeg audio processing (chunking, conversion) is CPU-intensive and runs as child processes. If a transcription is actively processing while the user is editing a different transcript, the server's CPU and memory are shared between the pipeline and API request handling.\par\pard\par
+
+{\b\cf2 8.3 \u8212? No Response Compression\cf0\b0}\par
+\pard\li360 The Express server does not use compression middleware (such as compression or express-compress). API responses containing full transcript data (1-3MB for the list endpoint) are sent uncompressed over the network. On the EC2 instance, this means larger transfer times, especially if the user is on a slower connection.\par\pard\par
+
+{\b\cf2 8.4 \u8212? Startup Recovery Can Saturate Server\cf0\b0}\par
+\pard\li360 On server startup, the recovery logic finds all stuck transcripts and auto-resumes them (with 5-second delays between each). If multiple transcripts were stuck, the server immediately begins running multiple transcription pipelines, consuming CPU and memory that should be serving user requests.\par\pard\par
+
+\pard\brdrb\brdrs\brdrw10\brsp20\par
+\pard\par
+
+{\b\fs28\cf4 9. BROWSER & DEVICE FACTORS\cf0\fs24\b0}\par
+\par
+
+{\b\cf2 9.1 \u8212? Long Task Blocking from React Reconciliation\cf0\b0}\par
+\pard\li360 When TranscriptViewerPage re-renders with 500+ segments, React's reconciliation (diffing the virtual DOM) runs synchronously on the main thread. This is a "long task" that blocks user input (typing, clicking, scrolling) until complete. React 18's concurrent features (startTransition, useDeferredValue) are not used anywhere in the viewer. The React Router v6 future flag warning in the console confirms v7_startTransition is not enabled.\par\pard\par
+
+{\b\cf2 9.2 \u8212? scrollIntoView During Playback\cf0\b0}\par
+\pard\li360 TranscriptText has an auto-scroll effect that calls el.scrollIntoView(\{ behavior: 'smooth', block: 'center' \}) whenever the active segment changes during playback. Smooth scrolling triggers continuous browser layout and paint operations. The 500ms timeout after scrollIntoView (to suppress user scroll detection) means the browser is forced into smooth-scroll animation for up to 500ms per segment transition.\par\pard\par
+
+{\b\cf2 9.3 \u8212? overscroll-contain CSS Property\cf0\b0}\par
+\pard\li360 The scroll container uses overscroll-contain, which forces the browser to handle overscroll behavior explicitly. On some browsers and devices, this adds additional processing to every scroll event to determine if the scroll has reached the container boundary.\par\pard\par
+
+{\b\cf2 9.4 \u8212? Textarea Auto-Resize on Every Keystroke\cf0\b0}\par
+\pard\li360 When editing a segment, handleTextareaChange sets the textarea height to 'auto' and then to scrollHeight on every keystroke. This forces the browser to: (1) collapse the textarea to natural height, (2) measure the scroll height (triggering reflow), and (3) set the new height (triggering another reflow). This is two forced reflows per keystroke, which at typical typing speed (5-10 chars/sec) means 10-20 reflows per second.\par\pard\par
+
+{\b\cf2 9.5 \u8212? formatDuration Called Per Segment Per Render\cf0\b0}\par
+\pard\li360 Each SegmentRow calls formatDuration(segment.startTime) on every render to display the timestamp. While this is a simple math function, it runs for every segment on every TranscriptText re-render. For 500 segments, this is 500 function calls per re-render.\par\pard\par
+
+{\b\cf2 9.6 \u8212? Mobile Checkbox Rendering for All Segments\cf0\b0}\par
+\pard\li360 On mobile, every SegmentRow renders a checkbox input for multi-select. Even when no segments are selected, 500 checkbox inputs exist in the DOM, each with onChange handlers. The selectedIds state uses a Set, and selectedIds.has(segment.id) is called for every segment on every render.\par\pard\par
+
+{\b\cf2 9.7 \u8212? getSpeakerColorFromMap Called Per Segment\cf0\b0}\par
+\pard\li360 Each SegmentRow computes its border color by calling getSpeakerColorFromMap(segment.speaker, speakerColors), which performs a lookup in the color map and falls back to a hash calculation. This runs for every segment on every render. The SPEAKER_COLOR_OPTIONS.find() inside uses linear search rather than a pre-built map.\par\pard\par
+
+{\b\cf2 9.8 \u8212? Browser Extension and DevTools Interference\cf0\b0}\par
+\pard\li360 React DevTools (if installed) adds profiling overhead to every component render. The console warning about React DevTools suggests it may be active. Password managers, ad blockers, and other extensions can inject scripts that observe DOM mutations, adding overhead proportional to DOM size.\par\pard\par
+
+\pard\brdrb\brdrs\brdrw10\brsp20\par
+\pard\par
+
+{\b\fs28\cf4 10. EC2 INFRASTRUCTURE CONSTRAINTS\cf0\fs24\b0}\par
+\par
+
+{\b\cf2 10.1 \u8212? EC2 Instance Type Unknown (Potentially Undersized)\cf0\b0}\par
+\pard\li360 The replit.md mentions an EC2 Ubuntu instance but does not specify the instance type (t2.micro, t3.small, etc.). If this is a t2.micro (1 vCPU, 1GB RAM) or t3.micro (2 vCPU, 1GB RAM), the server may lack sufficient CPU and memory to handle: Node.js/Express API serving, PostgreSQL database queries, ffmpeg audio processing for active transcription pipelines, and PM2 process management, all simultaneously. A single-CPU instance would serialize all operations, causing API latency spikes during transcription processing.\par\pard\par
+
+{\b\cf2 10.2 \u8212? CPU Credit Exhaustion on Burstable Instances\cf0\b0}\par
+\pard\li360 T2 and T3 instance types use CPU credits for burst performance. Sustained workloads (like running a transcription pipeline for 20-30 minutes) deplete CPU credits, after which the instance is throttled to baseline performance (5-20% of a vCPU depending on instance size). API responses during credit exhaustion would be significantly slower, and database queries would take longer. This can make the viewer feel laggy even though the frontend code hasn't changed.\par\pard\par
+
+{\b\cf2 10.3 \u8212? PostgreSQL Running on Same Instance\cf0\b0}\par
+\pard\li360 The database runs on the same EC2 instance as the application server. CPU and memory are shared between Node.js and PostgreSQL. When the application is processing transcriptions (CPU-heavy ffmpeg), database query latency increases because PostgreSQL gets fewer CPU cycles. There is no connection pooler (like PgBouncer) between the application and PostgreSQL, meaning each of the pg.Pool's 10 default connections is a direct process fork.\par\pard\par
+
+{\b\cf2 10.4 \u8212? Disk I/O Contention\cf0\b0}\par
+\pard\li360 EC2 instances with EBS volumes (especially gp2) have limited IOPS. PostgreSQL writes (segment DELETE+INSERT), transcription file processing (audio download, ffmpeg conversion), and Node.js logging all compete for disk I/O. During heavy write operations, read latency (for API queries) can increase.\par\pard\par
+
+{\b\cf2 10.5 \u8212? No CDN for Static Assets\cf0\b0}\par
+\pard\li360 The production build serves static assets (522KB main JS bundle) from the EC2 instance via Express with 1-year cache headers. There is no CloudFront or other CDN in front of the EC2 instance. First-time visitors and cache-busted loads must download the full bundle from the EC2 instance's network bandwidth, which is limited compared to a CDN edge location.\par\pard\par
+
+{\b\cf2 10.6 \u8212? S3 Cross-Region Latency\cf0\b0}\par
+\pard\li360 The EC2 instance is in us-east-1, but the S3 bucket (mattrmindrscribe-files) is in us-east-2. Cross-region S3 operations (presigned URL generation, file downloads for transcription) add 5-20ms of network latency per request compared to same-region access. This affects media URL generation, file downloads for transcription, and presigned upload URL generation.\par\pard\par
+
+\pard\brdrb\brdrs\brdrw10\brsp20\par
+\pard\par
+
+{\b\fs28\cf4 11. DEPLOYMENT & PROXY CHAIN\cf0\fs24\b0}\par
+\par
+
+{\b\cf2 11.1 \u8212? Nginx Reverse Proxy Adds Latency\cf0\b0}\par
+\pard\li360 Every API request passes through Nginx before reaching Express. While Nginx is fast, the proxy_pass adds a small amount of latency (1-5ms per request). For the initial page load with 5+ API calls, this adds up.\par\pard\par
+
+{\b\cf2 11.2 \u8212? Cloudflare DNS/Proxy Layer\cf0\b0}\par
+\pard\li360 The domain scribe.mattrmindr.com is routed through Cloudflare DNS. If Cloudflare's proxy is enabled (orange cloud), every request passes through Cloudflare's edge network, which adds TLS termination and re-establishment latency. Cloudflare's "rocket loader" or other optimization features can interfere with JavaScript execution if enabled.\par\pard\par
+
+{\b\cf2 11.3 \u8212? PM2 Process Manager Overhead\cf0\b0}\par
+\pard\li360 PM2 manages the Node.js process and adds memory overhead for process monitoring, log management, and health checking. On a memory-constrained instance, PM2's overhead (typically 30-50MB) reduces available memory for Node.js and PostgreSQL. PM2's environment variable caching can also cause issues (requiring pm2 delete + restart instead of simple restart when env vars change).\par\pard\par
+
+{\b\cf2 11.4 \u8212? No HTTP/2 or Keep-Alive Optimization\cf0\b0}\par
+\pard\li360 The Express server configuration does not explicitly enable HTTP/2 or optimize Keep-Alive settings. If Nginx is not configured for HTTP/2, each API call during the initial page load opens a separate TCP connection (or waits for connection reuse), adding latency to the parallel API requests.\par\pard\par
+
+{\b\cf2 11.5 \u8212? Replit Development Environment vs EC2 Production\cf0\b0}\par
+\pard\li360 In the Replit development environment, the app runs on port 5000 with Vite's dev server proxying to port 3000. The Replit proxy adds its own mTLS layer. If testing lag in Replit (rather than on the EC2 production server), the Replit container's CPU and memory limits may be the bottleneck, not the code itself. The Replit proxy iframe also adds rendering overhead compared to direct browser access on EC2.\par\pard\par
+
+\pard\brdrb\brdrs\brdrw10\brsp20\par
+\pard\par
+
+{\b\fs28\cf4 SUMMARY: RANKED BY LIKELY IMPACT\cf0\fs24\b0}\par
+\par
+
+\pard\li360{\b Critical (Most Likely Causing Visible Lag):\b0}\par
+\pard\li720 1. No virtualization for segment list \u8212? 500+ segments with 10,000+ DOM nodes\par
+2. Monolithic 28-useState component \u8212? every interaction re-renders everything\par
+3. Full transcripts list in context with segments \u8212? massive data on every context change\par
+4. PATCH endpoint rewrites all segments \u8212? expensive API + DB round-trip\par
+5. No child component memoization \u8212? AudioPlayer, Toolbar, etc. re-render on every state change\par
+\pard\par
+
+\pard\li360{\b High Impact:\b0}\par
+\pard\li720 6. undoStack with unlimited full-copy snapshots\par
+7. VideoPlayer unthrottled timeupdate\par
+8. json_agg query for all transcripts on list load\par
+9. Textarea auto-resize causing double reflow per keystroke\par
+10. EC2 instance potentially undersized / CPU credit exhaustion\par
+\pard\par
+
+\pard\li360{\b Medium Impact:\b0}\par
+\pard\li720 11. 43 CSS transitions across viewer components\par
+12. Framer Motion AnimatePresence overhead\par
+13. 5+ parallel API calls on page mount\par
+14. refreshData full reload after speaker merge\par
+15. getSpeakerColorFromMap per-segment per-render\par
+16. Cross-region S3 latency (us-east-1 to us-east-2)\par
+17. No response compression on Express\par
+\pard\par
+
+\pard\li360{\b Lower Impact (But Still Contributing):\b0}\par
+\pard\li720 18. Inline arrow functions preventing future memoization\par
+19. Non-memoized handler functions\par
+20. scrollIntoView smooth animation during playback\par
+21. formatDuration called 500x per render\par
+22. Mobile checkbox rendering for all segments\par
+23. No database indexes on transcript_segments(transcript_id)\par
+24. Browser extensions / React DevTools overhead\par
+25. PM2 and Nginx proxy chain latency\par
+\pard\par
+}
