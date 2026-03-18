@@ -59,15 +59,21 @@ async function createProduction(title: string): Promise<string> {
     },
     body: JSON.stringify({
       metadata: { title },
-      output_files: [{ format: 'wav', ending: 'wav' }],
+      output_files: [{ format: 'wav', ending: 'wav', split_on_chapters: false, mono_mixdown: false }],
       algorithms: {
         denoise: true,
-        denoiseamount: 0,
-        dehum: 'auto',
-        loudnesstarget: -16,
+        denoise_method: 'speech_isolation',
+        denoiseamount: 100,
+        remove_noise: 100,
+        remove_reverb: 80,
+        remove_breaths: 50,
         leveler: true,
-        normloudness: true,
+        leveler_mode: 'moderate',
         filtering: true,
+        voice_autoeq: true,
+        normloudness: true,
+        loudnesstarget: -16,
+        maxpeak: -1,
       },
     }),
     signal: timeoutSignal(REQUEST_TIMEOUT_MS),
@@ -245,7 +251,7 @@ async function pollUntilDone(
       return json.data;
     }
 
-    if (status === 2 || status === 9 || status === 11 || status === 13) {
+    if (status === 4 || status === 11 || status === 13) {
       throw new Error(`Auphonic production failed with status: ${statusString} (${status})`);
     }
 
