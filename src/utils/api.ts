@@ -42,8 +42,24 @@ async function request(endpoint: string, options: RequestInit = {}) {
   }
 
   if (res.status === 401 || res.status === 403) {
-    clearToken();
-    throw new Error('Authentication required');
+    let body: any = null;
+    try { body = await res.json(); } catch {}
+    const serverMessage = (body?.error || '').toLowerCase();
+    const isRealAuthFailure =
+      serverMessage.includes('invalid') ||
+      serverMessage.includes('expired') ||
+      serverMessage.includes('authentication required') ||
+      serverMessage.includes('token required') ||
+      serverMessage.includes('unauthorized');
+
+    if (isRealAuthFailure) {
+      clearToken();
+    }
+    throw new Error(body?.error || 'Authentication required');
+  }
+
+  if (res.status === 502 || res.status === 503 || res.status === 504) {
+    throw new Error('The server is temporarily unavailable. Please try again in a moment.');
   }
 
   let data: any;
@@ -372,8 +388,22 @@ export const api = {
         body: JSON.stringify({ agentType, subType, ...(customDescription ? { customDescription } : {}) }),
       });
       if (res.status === 401 || res.status === 403) {
-        clearToken();
-        throw new Error('Authentication required');
+        let body: any = null;
+        try { body = await res.clone().json(); } catch {}
+        const serverMessage = (body?.error || '').toLowerCase();
+        const isRealAuthFailure =
+          serverMessage.includes('invalid') ||
+          serverMessage.includes('expired') ||
+          serverMessage.includes('authentication required') ||
+          serverMessage.includes('token required') ||
+          serverMessage.includes('unauthorized');
+        if (isRealAuthFailure) {
+          clearToken();
+        }
+        throw new Error(body?.error || 'Authentication required');
+      }
+      if (res.status === 502 || res.status === 503 || res.status === 504) {
+        throw new Error('The server is temporarily unavailable. Please try again in a moment.');
       }
       return res;
     },

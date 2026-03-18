@@ -25,17 +25,46 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (isAuthenticated()) {
-      api.auth.me()
-        .then(userData => setUser(userData))
-        .catch(() => {
+    if (!isAuthenticated()) {
+      setLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    const maxRetries = 3;
+
+    const tryLoadUser = async (attempt: number): Promise<void> => {
+      try {
+        const userData = await api.auth.me();
+        if (!cancelled) {
+          setUser(userData);
+          setLoading(false);
+        }
+      } catch (err: any) {
+        if (cancelled) return;
+        const msg = (err?.message || '').toLowerCase();
+        const isAuthError =
+          msg.includes('invalid') ||
+          msg.includes('expired') ||
+          msg.includes('authentication required') ||
+          msg.includes('token required') ||
+          msg.includes('unauthorized');
+
+        if (isAuthError) {
           clearToken();
           setUser(null);
-        })
-        .finally(() => setLoading(false));
-    } else {
-      setLoading(false);
-    }
+          setLoading(false);
+        } else if (attempt < maxRetries) {
+          await new Promise(r => setTimeout(r, 1500 * attempt));
+          if (!cancelled) return tryLoadUser(attempt + 1);
+        } else {
+          setLoading(false);
+        }
+      }
+    };
+
+    tryLoadUser(1);
+    return () => { cancelled = true; };
   }, []);
 
   useEffect(() => {
