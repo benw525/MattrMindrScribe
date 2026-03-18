@@ -613,7 +613,7 @@ export function TranscriptViewerPage() {
                 </button>
               );
             })}
-            <div className="relative flex-shrink-0">
+            <div className="relative flex-shrink-0" ref={speakerManagerRef}>
               <button
                 onClick={() => {
                   setShowSpeakerManager(!showSpeakerManager);
@@ -629,7 +629,6 @@ export function TranscriptViewerPage() {
 
               {showSpeakerManager &&
                 <div
-                  ref={speakerManagerRef}
                   className="fixed inset-x-0 bottom-0 sm:absolute sm:inset-auto sm:left-0 sm:top-full sm:mt-2 bg-white dark:bg-slate-800 border-t sm:border border-slate-200 dark:border-slate-700 rounded-t-2xl sm:rounded-xl shadow-xl z-40 sm:w-80 max-h-[70vh] sm:max-h-none"
                 >
                   <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-700 flex items-start justify-between">

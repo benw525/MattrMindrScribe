@@ -1,0 +1,218 @@
+{\rtf1\ansi\defs0
+{\fonttbl{\f0\fswiss\fcharset0 Helvetica;}{\f1\fmodern\fcharset0 Courier New;}}
+{\colortbl;\red0\green0\blue0;\red180\green0\blue0;\red0\green100\blue0;\red0\green0\blue180;\red100\green100\blue100;\red255\green140\blue0;}
+
+\paperw12240\paperh15840\margl1440\margr1440\margt1440\margb1440
+
+\pard\qc\f0\b\fs36 Auphonic 403 Failure Analysis\b0\fs24\par
+\pard\qc\fs20\cf5 MattrMindrScribe Production Server -- March 18, 2026\par
+UPDATED: Second investigation after initial fixes failed\cf1\par
+\pard\par
+
+\pard\f0\b\fs28 1. THE ERROR\b0\fs24\par
+\par
+The EC2 production server consistently returns this error when attempting to process audio through the Auphonic pipeline:\par
+\par
+\pard\li720\f1\fs20\cf2 Auphonic create production failed (403): \{\par
+  "status_code": 403,\par
+  "error_code": null,\par
+  "error_message": "Token doesn\rquote t exist",\par
+  "form_errors": \{\},\par
+  "data": null\par
+\}\cf1\f0\fs24\par
+\pard\par
+The error occurs at the very first API call -- creating a new production via POST to /api/productions.json. The 403 with "Token doesn\rquote t exist" means Auphonic\rquote s API received the request but rejected the authentication token.\par
+\par
+The same Auphonic API key works perfectly from the Replit development environment (confirmed: account benw52592, 21 credits). The failure is isolated to the EC2 production server.\par
+\par
+
+\pard\f0\b\fs28 2. WHAT HAS BEEN TRIED AND RULED OUT\b0\fs24\par
+\par
+\pard\li360\b Attempt 1: Changed "bearer" (lowercase) to "Basic" auth\b0\par
+\pard\li720 Hypothesis was that Auphonic required HTTP Basic Auth (apikey: as username, empty password). Testing confirmed this was wrong -- Bearer token auth is the correct method. Basic Auth returned different errors.\par
+\par
+\pard\li360\b Attempt 2: Changed "bearer" (lowercase) to "Bearer" (capitalized)\b0\par
+\pard\li720 Testing from Replit confirmed that "Bearer" (capital B) works for the /api/user.json endpoint (returned 200 with account details). However, the EC2 server still returned 403 after this change. This rules out case-sensitivity of the auth scheme as the sole cause.\par
+\par
+\pard\li360\b Attempt 3: Fixed wrong API key on EC2\b0\par
+\pard\li720 The initial deployment accidentally set an Anthropic API key (sk-ant-api03-...) as the AUPHONIC_API_KEY. This was identified and corrected -- the .env file was edited to contain only the correct 32-character Auphonic key. The duplicate "your_key_here" placeholder entry was also removed. Despite this correction, the 403 persists.\par
+\par
+\pard\li360\b Attempt 4: Updated algorithm settings and polling logic\b0\par
+\pard\li720 The algorithm configuration was updated to match Auphonic\rquote s reference documentation (speech_isolation, denoiseamount: 100, etc.) and the polling status codes were corrected. These changes are unrelated to the 403 auth error since the failure occurs before any audio processing begins.\par
+\pard\par
+
+\pard\f0\b\fs28 3. MOST LIKELY CAUSE: dotenv IS NOT LOADING THE .env FILE\b0\fs24\par
+\par
+\b 3a. How environment variables load in the application\b0\par
+\par
+The application loads environment variables via this import at line 1 of server/index.ts:\par
+\par
+\pard\li720\f1\fs20\cf4 import \rquote dotenv/config\rquote ;\cf1\f0\fs24\par
+\pard\par
+The dotenv library (version 17.3.1) reads a .env file from the \b current working directory\b0  (process.cwd()) at import time. Critically, dotenv does NOT override environment variables that already exist in process.env.\par
+\par
+\b 3b. The PM2 working directory problem\b0\par
+\par
+The application on EC2 is managed by PM2. When PM2 starts the process, the current working directory depends on how PM2 was configured:\par
+\par
+\pard\li720 - If PM2 was started with "pm2 start" from /home/ubuntu/mattrmindrscribe, the CWD will be correct and dotenv will find the .env file.\par
+ - If PM2 was started from a different directory, or if the PM2 ecosystem config specifies a different cwd, dotenv will look for .env in the WRONG directory and silently fail to load any variables from it.\par
+ - If PM2 was originally started before AUPHONIC_API_KEY was added to .env, and the process has been "restarted" (not deleted and re-created), PM2 may cache the original environment.\par
+\pard\par
+The fact that OTHER environment variables work (DATABASE_URL, OPENAI_API_KEY, ANTHROPIC_API_KEY, etc.) does not necessarily prove dotenv is loading .env correctly. These variables may have been set in the PM2 ecosystem config, or exported in the shell profile (~/.bashrc, ~/.profile), or set via "pm2 set" or the PM2 environment. Only variables that exist EXCLUSIVELY in .env (like the newly added AUPHONIC_API_KEY) would reveal a dotenv loading failure.\par
+\par
+\b 3c. The critical evidence\b0\par
+\par
+AUPHONIC_API_KEY was added to the .env file AFTER the application was first deployed and PM2 was configured. All other API keys (OPENAI_API_KEY, ANTHROPIC_API_KEY, ASSEMBLYAI_API_KEY, etc.) were present in .env from the initial deployment. If PM2 cached the environment from the initial start, or if there is a separate mechanism loading those keys, the newly added AUPHONIC_API_KEY would not be picked up by a simple "pm2 restart."\par
+\par
+PM2\rquote s "restart" command reuses the saved environment by default. To force PM2 to re-read the environment, you would need to use "pm2 delete" followed by "pm2 start" (a full re-creation, not just a restart), or use the "--update-env" flag.\par
+\par
+Additionally, dotenv 17.x specifically states: "dotenv will never modify any environment variables that have already been set. If a variable already exists in process.env, dotenv will skip it." So if PM2 has a stale/empty AUPHONIC_API_KEY in its saved environment, dotenv will not overwrite it with the .env file value.\par
+\par
+
+\pard\f0\b\fs28 4. THE RELEVANT CODE PATH\b0\fs24\par
+\par
+The full chain from application startup to API failure:\par
+\par
+\b Step 1: Application starts, dotenv attempts to load .env\b0\par
+\par
+\pard\li720\f1\fs20\cf4 // server/index.ts, line 1\par
+import \rquote dotenv/config\rquote ;\par
+// dotenv reads process.cwd() + "/.env"\par
+// If CWD is wrong, or .env doesn\rquote t exist there, nothing loads\par
+// No error is thrown -- it silently continues\cf1\f0\fs24\par
+\pard\par
+\b Step 2: Transcript upload triggers the pipeline\b0\par
+\par
+\pard\li720\f1\fs20\cf4 // server/transcription.ts, lines 506-527\par
+if (auphonicConfigured()) \{\par
+  // This checks: !!process.env.AUPHONIC_API_KEY\par
+  // Returns true if ANY value exists (even empty string is falsy)\par
+  try \{\par
+    pipelineLog.auphonic = \{ status: \rquote processing\rquote  \};\par
+    const auphonicResult = await cleanAudioWithAuphonic(...);\par
+  \} catch (err) \{\par
+    // Error caught here, logged as non-fatal\par
+    pipelineLog.auphonic = \{ status: \rquote error\rquote , error: err.message \};\par
+  \}\par
+\} else \{\par
+  pipelineLog.auphonic = \{\par
+    status: \rquote skipped\rquote ,\par
+    reason: \rquote API key not configured\rquote\par
+  \};\par
+\}\cf1\f0\fs24\par
+\pard\par
+Important: since the error is "403" and not "skipped: API key not configured", we know that auphonicConfigured() returned true -- meaning SOME value exists in process.env.AUPHONIC_API_KEY. But that value may be wrong, corrupted, or stale.\par
+\par
+\b Step 3: The API call that fails\b0\par
+\par
+\pard\li720\f1\fs20\cf4 // server/auphonic.ts, lines 23-31\par
+function getApiKey(): string \{\par
+  const key = process.env.AUPHONIC_API_KEY;\par
+  if (!key) throw new Error(\rquote AUPHONIC_API_KEY is not configured\rquote );\par
+  return key;  // Returns whatever value is in the env var\par
+\}\par
+\par
+function authHeader(): Record<string, string> \{\par
+  return \{ Authorization: "Bearer " + getApiKey() \};\par
+\}\par
+\par
+// server/auphonic.ts, lines 53-84\par
+async function createProduction(title: string): Promise<string> \{\par
+  const res = await fetch(\par
+    "https://auphonic.com/api/productions.json",\par
+    \{\par
+      method: "POST",\par
+      headers: \{\par
+        ...authHeader(),\par
+        "Content-Type": "application/json",\par
+      \},\par
+      body: JSON.stringify(\{ ... \}),\par
+    \}\par
+  );\par
+\par
+  if (!res.ok) \{\par
+    const text = await res.text();\par
+    throw new Error(\par
+      "Auphonic create production failed (" + res.status + "): " + text\par
+    );\par
+    // ^^ THIS IS THE EXACT ERROR IN THE LOGS\par
+  \}\par
+\}\cf1\f0\fs24\par
+\pard\par
+
+\pard\f0\b\fs28 5. SECOND AREA OF INVESTIGATION: fetch() AND THE Authorization HEADER\b0\fs24\par
+\par
+\b 5a. Node.js fetch() behavior with Authorization headers\b0\par
+\par
+The application uses Node.js\rquote s built-in fetch() API (available since Node 18). There is a known behavior in Node.js\rquote s undici-based fetch implementation: when a request encounters a redirect (3xx), fetch() \b strips the Authorization header\b0  from the redirected request for security reasons.\par
+\par
+If Auphonic\rquote s /api/productions.json endpoint redirects (e.g., from HTTP to HTTPS, or from one subdomain to another), the Authorization header would be silently removed from the follow-up request. The final request would arrive at Auphonic without any authentication, resulting in exactly the error we see: "Token doesn\rquote t exist."\par
+\par
+This behavior is specific to Node.js\rquote s fetch(). The reference implementation uses axios, which preserves Authorization headers across redirects by default. This could explain why:\par
+\par
+\pard\li720 - The same key works from Replit (different network path, possibly no redirect)\par
+ - The same key fails from EC2 (different network path, possibly triggers a redirect)\par
+ - The /api/user.json test from Replit worked (GET request, may not redirect)\par
+ - The /api/productions.json POST from EC2 fails (POST may redirect differently)\par
+\pard\par
+\b 5b. Evidence for this hypothesis\b0\par
+\par
+The reference implementation (auphonic-service.js) uses axios with maxRedirects: 5 set explicitly. Axios preserves auth headers across redirects. Our implementation uses Node.js fetch() which does NOT preserve auth headers across redirects. If the Auphonic API issues any redirect on the production creation endpoint, this would silently strip our credentials.\par
+\par
+This is especially relevant because the reference code was clearly written by someone who had working knowledge of the Auphonic API. Their explicit use of axios with maxRedirects may not be coincidental -- it may be specifically because they encountered redirect-related auth issues with other HTTP clients.\par
+\par
+
+\pard\f0\b\fs28 6. THIRD AREA: THE .env FILE STATE ON EC2\b0\fs24\par
+\par
+Even after editing the .env file to contain the correct key and removing duplicates, several issues could persist:\par
+\par
+\pard\li360\b 6a. Invisible characters in the key value\b0\par
+\pard\li720 If the .env file was edited on Windows or with certain editors, carriage return characters (\\r) may be present at the end of the line. The key would be loaded as "CaN3...\\r" instead of "CaN3..." -- the trailing \\r becomes part of the Bearer token sent to Auphonic, which would not match any token in their system. This can be checked with: cat -A /home/ubuntu/mattrmindrscribe/.env | grep AUPHONIC  (\\r characters appear as ^M).\par
+\par
+\pard\li360\b 6b. Quoting issues\b0\par
+\pard\li720 dotenv handles quotes differently depending on the version. In dotenv 17.x, if the value is wrapped in single or double quotes in the .env file, the quotes are stripped. But if only one quote is present (unmatched), the quote character becomes part of the value. For example: AUPHONIC_API_KEY=\rquote CaN3...\rquote  would work (quotes stripped), but AUPHONIC_API_KEY=\rquote CaN3... (missing closing quote) would include the opening quote in the value.\par
+\par
+\pard\li360\b 6c. PM2 environment caching\b0\par
+\pard\li720 As discussed in section 3, PM2 caches the process environment. Using "pm2 restart" does not re-read the .env file. The --update-env flag was shown in the deployment screenshots (the yellow warning message), but this flag only updates PM2\rquote s own environment variables (set via pm2 set), not the ones loaded by dotenv at runtime. The definitive way to force a clean environment is: pm2 delete mattrmindrscribe, then re-start the process from the correct working directory.\par
+\pard\par
+
+\pard\f0\b\fs28 7. DIAGNOSTIC COMMANDS\b0\fs24\par
+\par
+The following commands would definitively identify which cause is at play:\par
+\par
+\b Verify the exact key value PM2 is passing to the process:\b0\par
+\pard\li720\f1\fs20 pm2 env 0 | grep AUPHONIC\f0\fs24\par
+\pard\par
+\b Test the key directly from EC2 via curl:\b0\par
+\pard\li720\f1\fs20 source /home/ubuntu/mattrmindrscribe/.env && \\\par
+curl -s -H "Authorization: Bearer $AUPHONIC_API_KEY" \\\par
+  https://auphonic.com/api/user.json\f0\fs24\par
+\pard\par
+\b Check for invisible characters in the .env file:\b0\par
+\pard\li720\f1\fs20 cat -A /home/ubuntu/mattrmindrscribe/.env | grep AUPHONIC\f0\fs24\par
+\pard\par
+\b Check for redirects on the Auphonic API endpoint:\b0\par
+\pard\li720\f1\fs20 source /home/ubuntu/mattrmindrscribe/.env && \\\par
+curl -v -X POST \\\par
+  -H "Authorization: Bearer $AUPHONIC_API_KEY" \\\par
+  -H "Content-Type: application/json" \\\par
+  -d \rquote \{"metadata":\{"title":"test"\}\}\rquote  \\\par
+  https://auphonic.com/api/productions.json 2>&1 | head -40\f0\fs24\par
+\pard\par
+\b Force a completely clean PM2 restart:\b0\par
+\pard\li720\f1\fs20 cd /home/ubuntu/mattrmindrscribe && \\\par
+pm2 delete mattrmindrscribe && \\\par
+pm2 start npm --name mattrmindrscribe -- start\f0\fs24\par
+\pard\par
+
+\pard\f0\b\fs28 8. SUMMARY\b0\fs24\par
+\par
+After exhausting the obvious causes (wrong auth scheme, wrong API key, duplicate entries), two primary areas remain:\par
+\par
+\pard\li360\b 1. PM2 environment caching / dotenv not loading the key.\b0  The AUPHONIC_API_KEY was added after initial deployment. PM2 "restart" does not re-read .env files. The process may be running with a stale or empty value for this variable. A full PM2 delete + restart from the correct directory would resolve this.\par
+\par
+\b 2. Node.js fetch() stripping the Authorization header on redirect.\b0  If Auphonic\rquote s API redirects the POST request, Node\rquote s fetch() silently removes the Authorization header. The reference implementation uses axios specifically (with maxRedirects: 5), which preserves auth headers across redirects. This would explain why the same key works from Replit but fails from EC2 -- different network paths may trigger different redirect behavior.\par
+\pard\par
+The diagnostic commands in Section 7 will definitively identify which of these causes is responsible. Running them in order will isolate whether the key is reaching the process correctly (PM2 issue) or whether the HTTP request itself is losing the credentials (fetch/redirect issue).\par
+}

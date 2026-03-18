@@ -251,7 +251,7 @@ async function pollUntilDone(
       return json.data;
     }
 
-    if (status === 4 || status === 11 || status === 13) {
+    if (status === 2 || status === 11 || status === 13) {
       throw new Error(`Auphonic production failed with status: ${statusString} (${status})`);
     }
 
