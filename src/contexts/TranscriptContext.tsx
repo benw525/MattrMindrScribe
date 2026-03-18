@@ -100,25 +100,48 @@ export function TranscriptProvider({ children }: { children: ReactNode }) {
     setActiveUploads((prev) => prev.filter((u) => u.id !== id));
   }, []);
 
-  const updateTranscript = useCallback(async (id: string, updates: Partial<Transcript>) => {
-    const rollback = new Map<string, Transcript>();
+  const pendingUpdatesRef = useRef<Map<string, { mergedUpdates: Partial<Transcript>; rollback: Transcript; timer: ReturnType<typeof setTimeout> }>>(new Map());
+
+  const updateTranscript = useCallback((id: string, updates: Partial<Transcript>) => {
+    let rollbackSnapshot: Transcript | null = null;
     setTranscripts((prev) => prev.map((t) => {
       if (t.id === id) {
-        rollback.set(id, t);
+        if (!pendingUpdatesRef.current.has(id)) {
+          rollbackSnapshot = t;
+        }
         return { ...t, ...updates };
       }
       return t;
     }));
-    try {
-      await api.transcripts.update(id, updates);
-    } catch (err) {
-      console.error('Failed to update transcript:', err);
-      const original = rollback.get(id);
-      if (original) {
-        setTranscripts((prev) => prev.map((t) => (t.id === id ? original : t)));
-        toast.error('Failed to save changes');
-      }
+
+    const existing = pendingUpdatesRef.current.get(id);
+    if (existing) {
+      clearTimeout(existing.timer);
+      rollbackSnapshot = existing.rollback;
     }
+
+    const rollback = rollbackSnapshot!;
+    const mergedUpdates = existing ? { ...existing.mergedUpdates, ...updates } : updates;
+
+    const hasSegments = 'segments' in updates;
+    const delay = hasSegments ? 2000 : 300;
+
+    const timer = setTimeout(async () => {
+      const entry = pendingUpdatesRef.current.get(id);
+      const toSend = entry ? entry.mergedUpdates : mergedUpdates;
+      pendingUpdatesRef.current.delete(id);
+      try {
+        await api.transcripts.update(id, toSend);
+      } catch (err) {
+        console.error('Failed to update transcript:', err);
+        if (rollback) {
+          setTranscripts((prev) => prev.map((t) => (t.id === id ? rollback : t)));
+          toast.error('Failed to save changes');
+        }
+      }
+    }, delay);
+
+    pendingUpdatesRef.current.set(id, { mergedUpdates, rollback, timer });
   }, []);
 
   const deleteTranscripts = useCallback(async (ids: string[]) => {

@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef, Fragment, useCallback } from 'react';
+import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { MergeIcon, SplitIcon, ChevronDownIcon, PlusIcon, CheckIcon, XIcon } from 'lucide-react';
 import { TranscriptSegment } from '../../types/transcript';
 import { formatDuration } from '../../utils/formatters';
@@ -33,6 +33,299 @@ function getSpeakerColorFromMap(speaker: string, colorMap: Record<string, string
   return SPEAKER_COLOR_OPTIONS[getDefaultColorIndex(speaker)];
 }
 
+interface SegmentRowProps {
+  segment: TranscriptSegment;
+  isActive: boolean;
+  isMobile: boolean;
+  isSelected: boolean;
+  speakerColors: Record<string, string>;
+  allSpeakers: string[];
+  nextSegmentId: string | null;
+  onSeek: (time: number) => void;
+  onUpdateSegment: (id: string, newText: string) => void;
+  onMergeSegments: (firstId: string, secondId: string) => void;
+  onSplitSegment: (id: string, splitPosition: number) => void;
+  onChangeSegmentSpeaker?: (segmentId: string, newSpeaker: string) => void;
+  onAddSpeakerFromDropdown?: (segmentId: string, name: string) => void;
+  onToggleSelect: (id: string) => void;
+  speakerDropdownId: string | null;
+  onSetSpeakerDropdownId: (id: string | null) => void;
+}
+
+const SegmentRow = React.memo(function SegmentRow({
+  segment,
+  isActive,
+  isMobile,
+  isSelected,
+  speakerColors,
+  allSpeakers,
+  nextSegmentId,
+  onSeek,
+  onUpdateSegment,
+  onMergeSegments,
+  onSplitSegment,
+  onChangeSegmentSpeaker,
+  onAddSpeakerFromDropdown,
+  onToggleSelect,
+  speakerDropdownId,
+  onSetSpeakerDropdownId,
+}: SegmentRowProps) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [editValue, setEditValue] = useState('');
+  const [addingSpeakerInDropdown, setAddingSpeakerInDropdown] = useState(false);
+  const [newSpeakerName, setNewSpeakerName] = useState('');
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const newSpeakerInputRef = useRef<HTMLInputElement>(null);
+  const activeRef = useRef<HTMLDivElement>(null);
+
+  const showDropdown = speakerDropdownId === segment.id;
+
+  useEffect(() => {
+    if (isEditing && textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+      textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
+      textareaRef.current.focus();
+    }
+  }, [isEditing]);
+
+  const handleTextareaChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setEditValue(e.target.value);
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+      textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
+    }
+  }, []);
+
+  useEffect(() => {
+    if (addingSpeakerInDropdown && newSpeakerInputRef.current) {
+      newSpeakerInputRef.current.focus();
+    }
+  }, [addingSpeakerInDropdown]);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        onSetSpeakerDropdownId(null);
+        setAddingSpeakerInDropdown(false);
+        setNewSpeakerName('');
+      }
+    };
+    if (showDropdown) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showDropdown, onSetSpeakerDropdownId]);
+
+  const handleEditStart = useCallback(() => {
+    setIsEditing(true);
+    setEditValue(segment.text);
+  }, [segment.text]);
+
+  const handleSave = useCallback(() => {
+    if (editValue.trim() && editValue.trim() !== segment.text) {
+      onUpdateSegment(segment.id, editValue.trim());
+    }
+    setIsEditing(false);
+  }, [editValue, segment.id, segment.text, onUpdateSegment]);
+
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSave();
+    }
+    if (e.key === 'Escape') {
+      setIsEditing(false);
+    }
+  }, [handleSave]);
+
+  const handleSplit = useCallback(() => {
+    const text = segment.text;
+    const midpoint = Math.floor(text.length / 2);
+    let splitAt = midpoint;
+    for (let i = 0; i <= 20; i++) {
+      if (midpoint + i < text.length && text[midpoint + i] === ' ') {
+        splitAt = midpoint + i;
+        break;
+      }
+      if (midpoint - i >= 0 && text[midpoint - i] === ' ') {
+        splitAt = midpoint - i;
+        break;
+      }
+    }
+    onSplitSegment(segment.id, splitAt);
+  }, [segment.id, segment.text, onSplitSegment]);
+
+  const handleAddNewSpeaker = useCallback(() => {
+    const trimmed = newSpeakerName.trim();
+    if (!trimmed) {
+      setAddingSpeakerInDropdown(false);
+      setNewSpeakerName('');
+      return;
+    }
+    if (onAddSpeakerFromDropdown) {
+      onAddSpeakerFromDropdown(segment.id, trimmed);
+    }
+    onSetSpeakerDropdownId(null);
+    setAddingSpeakerInDropdown(false);
+    setNewSpeakerName('');
+  }, [newSpeakerName, segment.id, onAddSpeakerFromDropdown, onSetSpeakerDropdownId]);
+
+  const speakerColorBorder = getSpeakerColorFromMap(segment.speaker, speakerColors).border;
+
+  return (
+    <>
+      <div
+        ref={isActive ? activeRef : undefined}
+        data-active={isActive || undefined}
+        className={`flex gap-1 sm:gap-4 group transition-colors py-2 sm:p-2 sm:-mx-2 rounded-lg ${isActive ? 'bg-indigo-50/50 dark:bg-indigo-950/30' : ''}`}
+      >
+        <div className="flex flex-col items-center gap-1 flex-shrink-0 pt-1">
+          {isMobile && (
+            <input
+              type="checkbox"
+              checked={isSelected}
+              onChange={() => onToggleSelect(segment.id)}
+              className="h-4 w-4 text-indigo-600 border-slate-300 dark:border-slate-600 rounded cursor-pointer flex-shrink-0 mb-0.5"
+            />
+          )}
+          <button
+            onClick={() => onSeek(segment.startTime)}
+            className={`text-[10px] sm:text-xs font-medium tabular-nums hover:underline w-10 sm:w-16 text-center sm:text-right ${isActive ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400 dark:text-slate-500'}`}
+          >
+            {formatDuration(segment.startTime)}
+          </button>
+        </div>
+
+        <div className={`flex-1 border-l-2 pl-2 sm:pl-4 min-w-0 ${speakerColorBorder}`}>
+          <div className="flex items-center justify-between mb-1">
+            <div className="relative">
+              <button
+                onClick={() => {
+                  onSetSpeakerDropdownId(showDropdown ? null : segment.id);
+                  setAddingSpeakerInDropdown(false);
+                  setNewSpeakerName('');
+                }}
+                className="flex items-center gap-1 font-semibold text-sm text-slate-900 dark:text-white hover:text-indigo-600 dark:hover:text-indigo-400 active:text-indigo-700 transition-colors rounded px-1.5 py-1 -mx-1.5 -my-1 hover:bg-slate-100 dark:hover:bg-slate-800 active:bg-slate-200 dark:active:bg-slate-700"
+                title="Click to change speaker">
+                {segment.speaker}
+                <ChevronDownIcon className="h-3 w-3 opacity-60 sm:opacity-0 sm:group-hover:opacity-60 transition-opacity" />
+              </button>
+              {showDropdown && (
+                <div
+                  ref={dropdownRef}
+                  className="absolute left-0 top-full mt-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg z-30 min-w-[180px] py-1">
+                  {allSpeakers.map((speaker) => (
+                    <button
+                      key={speaker}
+                      onClick={() => {
+                        if (onChangeSegmentSpeaker && speaker !== segment.speaker) {
+                          onChangeSegmentSpeaker(segment.id, speaker);
+                        }
+                        onSetSpeakerDropdownId(null);
+                      }}
+                      className={`w-full text-left px-3 py-2.5 sm:py-1.5 text-sm flex items-center gap-2 transition-colors ${speaker === segment.speaker ? 'bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 font-medium' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 active:bg-slate-100 dark:active:bg-slate-600'}`}>
+                      <span className={`w-2 h-2 rounded-full ${getSpeakerColorFromMap(speaker, speakerColors).bg}`} />
+                      {speaker}
+                    </button>
+                  ))}
+                  <div className="border-t border-slate-100 dark:border-slate-700 mt-1 pt-1">
+                    {addingSpeakerInDropdown ?
+                      <div className="px-2 py-1 flex items-center gap-1">
+                        <input
+                          ref={newSpeakerInputRef}
+                          type="text"
+                          value={newSpeakerName}
+                          onChange={(e) => setNewSpeakerName(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') handleAddNewSpeaker();
+                            if (e.key === 'Escape') {
+                              setAddingSpeakerInDropdown(false);
+                              setNewSpeakerName('');
+                            }
+                          }}
+                          placeholder="Speaker name"
+                          className="flex-1 text-base sm:text-sm text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-700 border border-emerald-300 dark:border-emerald-600 rounded-lg px-2 py-1.5 sm:py-0.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 placeholder:text-slate-400"
+                        />
+                        <button
+                          onClick={handleAddNewSpeaker}
+                          className="p-1.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 active:bg-emerald-800 transition-colors flex-shrink-0"
+                          aria-label="Add speaker"
+                        >
+                          <CheckIcon className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          onClick={() => { setAddingSpeakerInDropdown(false); setNewSpeakerName(''); }}
+                          className="p-1.5 bg-slate-200 dark:bg-slate-600 text-slate-600 dark:text-slate-300 rounded-lg hover:bg-slate-300 dark:hover:bg-slate-500 active:bg-slate-400 transition-colors flex-shrink-0"
+                          aria-label="Cancel"
+                        >
+                          <XIcon className="h-3.5 w-3.5" />
+                        </button>
+                      </div> :
+                      <button
+                        onClick={() => setAddingSpeakerInDropdown(true)}
+                        className="w-full text-left px-3 py-2.5 sm:py-1.5 text-sm flex items-center gap-2 text-slate-500 dark:text-slate-400 hover:text-emerald-600 dark:hover:text-emerald-400 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
+                      >
+                        <PlusIcon className="h-3.5 w-3.5" />
+                        Add Speaker
+                      </button>
+                    }
+                  </div>
+                </div>
+              )}
+            </div>
+            <div className="flex items-center gap-1 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+              <button
+                onClick={handleSplit}
+                className="p-1.5 sm:p-1 text-slate-400 dark:text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400 active:text-indigo-700 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 active:bg-indigo-100 dark:active:bg-indigo-950/70 rounded transition-colors"
+                title="Split this section"
+                aria-label="Split section">
+                <SplitIcon className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          </div>
+
+          {isEditing ?
+          <div className="relative">
+              <textarea
+              ref={textareaRef}
+              value={editValue}
+              onChange={handleTextareaChange}
+              onKeyDown={handleKeyDown}
+              onBlur={handleSave}
+              className="w-full text-sm sm:text-base text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 border border-indigo-300 dark:border-indigo-700 rounded-md p-2 focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none overflow-hidden"
+              rows={1} />
+              <div className="text-xs text-slate-400 dark:text-slate-500 mt-1">
+                Press Enter to save, Shift+Enter for new line
+              </div>
+            </div> :
+          <p
+            onClick={handleEditStart}
+            className="text-sm sm:text-base text-slate-700 dark:text-slate-300 leading-relaxed cursor-text hover:bg-white dark:hover:bg-slate-800 hover:shadow-sm rounded px-1 -mx-1 transition-all">
+              {segment.text}
+            </p>
+          }
+        </div>
+      </div>
+
+      {!isMobile && nextSegmentId &&
+      <div className="flex items-center pl-14 sm:pl-20 pr-2 -my-0.5">
+          <div className="flex-1 flex items-center justify-center">
+            <button
+            onClick={() => onMergeSegments(segment.id, nextSegmentId)}
+            className="flex items-center gap-1.5 px-2.5 py-0.5 text-xs text-slate-400 dark:text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 rounded-full transition-all opacity-0 hover:opacity-100 focus:opacity-100"
+            title="Merge with next section"
+            aria-label="Merge sections">
+              <MergeIcon className="h-3 w-3" />
+              <span>Merge</span>
+            </button>
+          </div>
+        </div>
+      }
+    </>
+  );
+});
+
 interface TranscriptTextProps {
   segments: TranscriptSegment[];
   currentTime: number;
@@ -59,17 +352,9 @@ export function TranscriptText({
   speakerColors = {},
   onAddSpeakerFromDropdown
 }: TranscriptTextProps) {
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editValue, setEditValue] = useState('');
   const [speakerDropdownId, setSpeakerDropdownId] = useState<string | null>(null);
-  const [addingSpeakerInDropdown, setAddingSpeakerInDropdown] = useState(false);
-  const [newSpeakerName, setNewSpeakerName] = useState('');
   const [userScrolled, setUserScrolled] = useState(false);
   const userScrollTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const dropdownRef = useRef<HTMLDivElement>(null);
-  const newSpeakerInputRef = useRef<HTMLInputElement>(null);
-  const activeSegmentRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const isAutoScrolling = useRef(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -110,45 +395,25 @@ export function TranscriptText({
     setSelectedIds(new Set());
   }, []);
 
-  useEffect(() => {
-    if (editingId && textareaRef.current) {
-      textareaRef.current.style.height = 'auto';
-      textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
-      textareaRef.current.focus();
-    }
-  }, [editingId, editValue]);
-
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
-        setSpeakerDropdownId(null);
-        setAddingSpeakerInDropdown(false);
-        setNewSpeakerName('');
+  const activeSegmentId = useMemo(() => {
+    for (let i = segments.length - 1; i >= 0; i--) {
+      if (currentTime >= segments[i].startTime && currentTime < segments[i].endTime) {
+        return segments[i].id;
       }
-    };
-    if (speakerDropdownId) {
-      document.addEventListener('mousedown', handleClickOutside);
     }
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [speakerDropdownId]);
+    return null;
+  }, [segments, currentTime]);
 
   useEffect(() => {
-    if (addingSpeakerInDropdown && newSpeakerInputRef.current) {
-      newSpeakerInputRef.current.focus();
-    }
-  }, [addingSpeakerInDropdown]);
-
-  useEffect(() => {
-    if (!isPlaying || editingId || userScrolled) return;
-    if (activeSegmentRef.current && scrollContainerRef.current) {
+    if (!isPlaying || userScrolled) return;
+    if (!activeSegmentId || !scrollContainerRef.current) return;
+    const el = scrollContainerRef.current.querySelector('[data-active]');
+    if (el) {
       isAutoScrolling.current = true;
-      activeSegmentRef.current.scrollIntoView({
-        behavior: 'smooth',
-        block: 'center',
-      });
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
       setTimeout(() => { isAutoScrolling.current = false; }, 500);
     }
-  }, [currentTime, isPlaying, editingId, userScrolled]);
+  }, [activeSegmentId, isPlaying, userScrolled]);
 
   useEffect(() => {
     const container = scrollContainerRef.current;
@@ -177,63 +442,9 @@ export function TranscriptText({
     }
   }, [isPlaying]);
 
-  const handleEditStart = (segment: TranscriptSegment) => {
-    setEditingId(segment.id);
-    setEditValue(segment.text);
-  };
-  const handleSave = (id: string) => {
-    if (editValue.trim()) {
-      onUpdateSegment(id, editValue.trim());
-    }
-    setEditingId(null);
-  };
-  const handleKeyDown = (e: React.KeyboardEvent, id: string) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSave(id);
-    }
-    if (e.key === 'Escape') {
-      setEditingId(null);
-    }
-  };
-  const handleSplit = (segment: TranscriptSegment) => {
-    const midpoint = Math.floor(segment.text.length / 2);
-    let splitAt = midpoint;
-    for (let i = 0; i <= 20; i++) {
-      if (midpoint + i < segment.text.length && segment.text[midpoint + i] === ' ') {
-        splitAt = midpoint + i;
-        break;
-      }
-      if (midpoint - i >= 0 && segment.text[midpoint - i] === ' ') {
-        splitAt = midpoint - i;
-        break;
-      }
-    }
-    onSplitSegment(segment.id, splitAt);
-  };
-
-  const getSpeakerColor = (speaker: string) => {
-    return getSpeakerColorFromMap(speaker, speakerColors).border;
-  };
-
-  const getSpeakerDotColor = (speaker: string) => {
-    return getSpeakerColorFromMap(speaker, speakerColors).bg;
-  };
-
-  const handleAddNewSpeaker = (segmentId: string) => {
-    const trimmed = newSpeakerName.trim();
-    if (!trimmed) {
-      setAddingSpeakerInDropdown(false);
-      setNewSpeakerName('');
-      return;
-    }
-    if (onAddSpeakerFromDropdown) {
-      onAddSpeakerFromDropdown(segmentId, trimmed);
-    }
-    setSpeakerDropdownId(null);
-    setAddingSpeakerInDropdown(false);
-    setNewSpeakerName('');
-  };
+  const handleSetSpeakerDropdownId = useCallback((id: string | null) => {
+    setSpeakerDropdownId(id);
+  }, []);
 
   if (segments.length === 0) {
     return (
@@ -271,161 +482,27 @@ export function TranscriptText({
 
       <div ref={scrollContainerRef} className="flex-1 overflow-y-auto overscroll-contain px-2 sm:px-8 py-3 sm:py-6 space-y-0 sm:space-y-1">
         {segments.map((segment, index) => {
-          const isActive = currentTime >= segment.startTime && currentTime < segment.endTime;
-          const isEditing = editingId === segment.id;
-          const speakerColor = getSpeakerColor(segment.speaker);
           const nextSegment = index < segments.length - 1 ? segments[index + 1] : null;
-          const showDropdown = speakerDropdownId === segment.id;
-          const isSelected = selectedIds.has(segment.id);
           return (
-            <Fragment key={segment.id}>
-              <div
-                ref={isActive ? activeSegmentRef : undefined}
-                className={`flex gap-1 sm:gap-4 group transition-colors py-2 sm:p-2 sm:-mx-2 rounded-lg ${isActive ? 'bg-indigo-50/50 dark:bg-indigo-950/30' : ''}`}
-              >
-                <div className="flex flex-col items-center gap-1 flex-shrink-0 pt-1">
-                  {isMobile && (
-                    <input
-                      type="checkbox"
-                      checked={isSelected}
-                      onChange={() => toggleSelect(segment.id)}
-                      className="h-4 w-4 text-indigo-600 border-slate-300 dark:border-slate-600 rounded cursor-pointer flex-shrink-0 mb-0.5"
-                    />
-                  )}
-                  <button
-                    onClick={() => onSeek(segment.startTime)}
-                    className={`text-[10px] sm:text-xs font-medium tabular-nums hover:underline w-10 sm:w-16 text-center sm:text-right ${isActive ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400 dark:text-slate-500'}`}
-                  >
-                    {formatDuration(segment.startTime)}
-                  </button>
-                </div>
-
-                <div className={`flex-1 border-l-2 pl-2 sm:pl-4 min-w-0 ${speakerColor}`}>
-                  <div className="flex items-center justify-between mb-1">
-                    <div className="relative">
-                      <button
-                        onClick={() => {
-                          setSpeakerDropdownId(showDropdown ? null : segment.id);
-                          setAddingSpeakerInDropdown(false);
-                          setNewSpeakerName('');
-                        }}
-                        className="flex items-center gap-1 font-semibold text-sm text-slate-900 dark:text-white hover:text-indigo-600 dark:hover:text-indigo-400 active:text-indigo-700 transition-colors rounded px-1.5 py-1 -mx-1.5 -my-1 hover:bg-slate-100 dark:hover:bg-slate-800 active:bg-slate-200 dark:active:bg-slate-700"
-                        title="Click to change speaker">
-                        {segment.speaker}
-                        <ChevronDownIcon className="h-3 w-3 opacity-60 sm:opacity-0 sm:group-hover:opacity-60 transition-opacity" />
-                      </button>
-                      {showDropdown && (
-                        <div
-                          ref={dropdownRef}
-                          className="absolute left-0 top-full mt-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg z-30 min-w-[180px] py-1">
-                          {allSpeakers.map((speaker) => (
-                            <button
-                              key={speaker}
-                              onClick={() => {
-                                if (onChangeSegmentSpeaker && speaker !== segment.speaker) {
-                                  onChangeSegmentSpeaker(segment.id, speaker);
-                                }
-                                setSpeakerDropdownId(null);
-                              }}
-                              className={`w-full text-left px-3 py-2.5 sm:py-1.5 text-sm flex items-center gap-2 transition-colors ${speaker === segment.speaker ? 'bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 font-medium' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 active:bg-slate-100 dark:active:bg-slate-600'}`}>
-                              <span className={`w-2 h-2 rounded-full ${getSpeakerDotColor(speaker)}`} />
-                              {speaker}
-                            </button>
-                          ))}
-                          <div className="border-t border-slate-100 dark:border-slate-700 mt-1 pt-1">
-                            {addingSpeakerInDropdown ?
-                              <div className="px-2 py-1 flex items-center gap-1">
-                                <input
-                                  ref={newSpeakerInputRef}
-                                  type="text"
-                                  value={newSpeakerName}
-                                  onChange={(e) => setNewSpeakerName(e.target.value)}
-                                  onKeyDown={(e) => {
-                                    if (e.key === 'Enter') handleAddNewSpeaker(segment.id);
-                                    if (e.key === 'Escape') {
-                                      setAddingSpeakerInDropdown(false);
-                                      setNewSpeakerName('');
-                                    }
-                                  }}
-                                  placeholder="Speaker name"
-                                  className="flex-1 text-base sm:text-sm text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-700 border border-emerald-300 dark:border-emerald-600 rounded-lg px-2 py-1.5 sm:py-0.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 placeholder:text-slate-400"
-                                />
-                                <button
-                                  onClick={() => handleAddNewSpeaker(segment.id)}
-                                  className="p-1.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 active:bg-emerald-800 transition-colors flex-shrink-0"
-                                  aria-label="Add speaker"
-                                >
-                                  <CheckIcon className="h-3.5 w-3.5" />
-                                </button>
-                                <button
-                                  onClick={() => { setAddingSpeakerInDropdown(false); setNewSpeakerName(''); }}
-                                  className="p-1.5 bg-slate-200 dark:bg-slate-600 text-slate-600 dark:text-slate-300 rounded-lg hover:bg-slate-300 dark:hover:bg-slate-500 active:bg-slate-400 transition-colors flex-shrink-0"
-                                  aria-label="Cancel"
-                                >
-                                  <XIcon className="h-3.5 w-3.5" />
-                                </button>
-                              </div> :
-                              <button
-                                onClick={() => setAddingSpeakerInDropdown(true)}
-                                className="w-full text-left px-3 py-2.5 sm:py-1.5 text-sm flex items-center gap-2 text-slate-500 dark:text-slate-400 hover:text-emerald-600 dark:hover:text-emerald-400 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
-                              >
-                                <PlusIcon className="h-3.5 w-3.5" />
-                                Add Speaker
-                              </button>
-                            }
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-1 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
-                      <button
-                        onClick={() => handleSplit(segment)}
-                        className="p-1.5 sm:p-1 text-slate-400 dark:text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400 active:text-indigo-700 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 active:bg-indigo-100 dark:active:bg-indigo-950/70 rounded transition-colors"
-                        title="Split this section"
-                        aria-label="Split section">
-                        <SplitIcon className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                  </div>
-
-                  {isEditing ?
-                  <div className="relative">
-                      <textarea
-                      ref={textareaRef}
-                      value={editValue}
-                      onChange={(e) => setEditValue(e.target.value)}
-                      onKeyDown={(e) => handleKeyDown(e, segment.id)}
-                      onBlur={() => handleSave(segment.id)}
-                      className="w-full text-sm sm:text-base text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 border border-indigo-300 dark:border-indigo-700 rounded-md p-2 focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none overflow-hidden"
-                      rows={1} />
-                      <div className="text-xs text-slate-400 dark:text-slate-500 mt-1">
-                        Press Enter to save, Shift+Enter for new line
-                      </div>
-                    </div> :
-                  <p
-                    onClick={() => handleEditStart(segment)}
-                    className="text-sm sm:text-base text-slate-700 dark:text-slate-300 leading-relaxed cursor-text hover:bg-white dark:hover:bg-slate-800 hover:shadow-sm rounded px-1 -mx-1 transition-all">
-                      {segment.text}
-                    </p>
-                  }
-                </div>
-              </div>
-
-              {!isMobile && nextSegment &&
-              <div className="flex items-center pl-14 sm:pl-20 pr-2 -my-0.5">
-                  <div className="flex-1 flex items-center justify-center">
-                    <button
-                    onClick={() => onMergeSegments(segment.id, nextSegment.id)}
-                    className="flex items-center gap-1.5 px-2.5 py-0.5 text-xs text-slate-400 dark:text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 rounded-full transition-all opacity-0 hover:opacity-100 focus:opacity-100"
-                    title="Merge with next section"
-                    aria-label="Merge sections">
-                      <MergeIcon className="h-3 w-3" />
-                      <span>Merge</span>
-                    </button>
-                  </div>
-                </div>
-              }
-            </Fragment>
+            <SegmentRow
+              key={segment.id}
+              segment={segment}
+              isActive={activeSegmentId === segment.id}
+              isMobile={isMobile}
+              isSelected={selectedIds.has(segment.id)}
+              speakerColors={speakerColors}
+              allSpeakers={allSpeakers}
+              nextSegmentId={nextSegment?.id || null}
+              onSeek={onSeek}
+              onUpdateSegment={onUpdateSegment}
+              onMergeSegments={onMergeSegments}
+              onSplitSegment={onSplitSegment}
+              onChangeSegmentSpeaker={onChangeSegmentSpeaker}
+              onAddSpeakerFromDropdown={onAddSpeakerFromDropdown}
+              onToggleSelect={toggleSelect}
+              speakerDropdownId={speakerDropdownId}
+              onSetSpeakerDropdownId={handleSetSpeakerDropdownId}
+            />
           );
         })}
       </div>

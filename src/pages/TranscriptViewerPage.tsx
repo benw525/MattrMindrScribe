@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState, useRef } from 'react';
+import React, { useCallback, useEffect, useState, useRef, useMemo } from 'react';
 import {
   useParams,
   useNavigate,
@@ -234,15 +234,20 @@ export function TranscriptViewerPage() {
     };
   }, []);
 
-  const pushUndo = (description: string) => {
+  const transcriptRef = useRef(transcript);
+  transcriptRef.current = transcript;
+
+  const pushUndo = useCallback((description: string) => {
+    const t = transcriptRef.current;
+    if (!t) return;
     setUndoStack((prev) => [
     ...prev,
     {
-      segments: [...transcript.segments],
+      segments: [...t.segments],
       description
     }]
     );
-  };
+  }, []);
   const handleUndo = () => {
     if (undoStack.length === 0) return;
     const last = undoStack[undoStack.length - 1];
@@ -268,11 +273,13 @@ export function TranscriptViewerPage() {
       toast.error('Failed to save version');
     }
   };
-  const handleUpdateSegment = (segmentId: string, newText: string) => {
-    const oldSegment = transcript.segments.find((s) => s.id === segmentId);
+  const handleUpdateSegment = useCallback((segmentId: string, newText: string) => {
+    const t = transcriptRef.current;
+    if (!t) return;
+    const oldSegment = t.segments.find((s) => s.id === segmentId);
     if (!oldSegment || oldSegment.text === newText) return;
     pushUndo('Edit segment text');
-    const newSegments = transcript.segments.map((s) =>
+    const newSegments = t.segments.map((s) =>
     s.id === segmentId ?
     {
       ...s,
@@ -280,17 +287,19 @@ export function TranscriptViewerPage() {
     } :
     s
     );
-    updateTranscript(transcript.id, {
+    updateTranscript(t.id, {
       segments: newSegments
     });
     autoSave('Edit segment text');
-  };
-  const handleMergeSegments = (firstId: string, secondId: string) => {
-    const firstIdx = transcript.segments.findIndex((s) => s.id === firstId);
-    const secondIdx = transcript.segments.findIndex((s) => s.id === secondId);
+  }, [pushUndo, updateTranscript, autoSave]);
+  const handleMergeSegments = useCallback((firstId: string, secondId: string) => {
+    const t = transcriptRef.current;
+    if (!t) return;
+    const firstIdx = t.segments.findIndex((s) => s.id === firstId);
+    const secondIdx = t.segments.findIndex((s) => s.id === secondId);
     if (firstIdx === -1 || secondIdx === -1) return;
-    const first = transcript.segments[firstIdx];
-    const second = transcript.segments[secondIdx];
+    const first = t.segments[firstIdx];
+    const second = t.segments[secondIdx];
     pushUndo('Merge sections');
     const merged: TranscriptSegment = {
       id: first.id,
@@ -299,18 +308,20 @@ export function TranscriptViewerPage() {
       speaker: first.speaker,
       text: `${first.text} ${second.text}`
     };
-    const newSegments = [...transcript.segments];
+    const newSegments = [...t.segments];
     newSegments.splice(firstIdx, 2, merged);
-    updateTranscript(transcript.id, {
+    updateTranscript(t.id, {
       segments: newSegments
     });
     autoSave('Merge sections');
     toast.success('Sections merged');
-  };
-  const handleSplitSegment = (segmentId: string, splitPosition: number) => {
-    const idx = transcript.segments.findIndex((s) => s.id === segmentId);
+  }, [pushUndo, updateTranscript, autoSave]);
+  const handleSplitSegment = useCallback((segmentId: string, splitPosition: number) => {
+    const t = transcriptRef.current;
+    if (!t) return;
+    const idx = t.segments.findIndex((s) => s.id === segmentId);
     if (idx === -1) return;
-    const segment = transcript.segments[idx];
+    const segment = t.segments[idx];
     if (splitPosition <= 0 || splitPosition >= segment.text.length) return;
     pushUndo('Split section');
     const firstText = segment.text.slice(0, splitPosition).trim();
@@ -331,20 +342,23 @@ export function TranscriptViewerPage() {
       speaker: segment.speaker,
       text: secondText
     };
-    const newSegments = [...transcript.segments];
+    const newSegments = [...t.segments];
     newSegments.splice(idx, 1, firstHalf, secondHalf);
-    updateTranscript(transcript.id, {
+    updateTranscript(t.id, {
       segments: newSegments
     });
     autoSave('Split section');
     toast.success('Section split');
-  };
-  const segmentSpeakers = Array.from(
+  }, [pushUndo, updateTranscript, autoSave]);
+  const segmentSpeakers = useMemo(() => Array.from(
     new Set(transcript.segments.map((s) => s.speaker))
-  );
-  const uniqueSpeakers = Array.from(
+  ), [transcript.segments]);
+  const uniqueSpeakers = useMemo(() => Array.from(
     new Set([...segmentSpeakers, ...customSpeakers])
-  );
+  ), [segmentSpeakers, customSpeakers]);
+  const uniqueSpeakersRef = useRef(uniqueSpeakers);
+  uniqueSpeakersRef.current = uniqueSpeakers;
+
   const handleAddSpeaker = (name: string) => {
     const trimmed = name.trim();
     if (!trimmed) return;
@@ -426,17 +440,26 @@ export function TranscriptViewerPage() {
     setColorPickerSpeaker(null);
   };
 
-  const handleChangeSegmentSpeaker = (segmentId: string, newSpeaker: string) => {
-    const segment = transcript.segments.find((s) => s.id === segmentId);
+  const handleChangeSegmentSpeaker = useCallback((segmentId: string, newSpeaker: string) => {
+    const t = transcriptRef.current;
+    if (!t) return;
+    const segment = t.segments.find((s) => s.id === segmentId);
     if (!segment || segment.speaker === newSpeaker) return;
     pushUndo(`Change speaker for segment`);
-    const newSegments = transcript.segments.map((s) =>
+    const newSegments = t.segments.map((s) =>
       s.id === segmentId ? { ...s, speaker: newSpeaker } : s
     );
-    updateTranscript(transcript.id, { segments: newSegments });
+    updateTranscript(t.id, { segments: newSegments });
     autoSave('Change speaker');
     toast.success(`Changed speaker to "${newSpeaker}"`);
-  };
+  }, [pushUndo, updateTranscript, autoSave]);
+
+  const handleAddSpeakerFromDropdown = useCallback((segmentId: string, name: string) => {
+    if (!uniqueSpeakersRef.current.includes(name)) {
+      setCustomSpeakers(prev => [...prev, name]);
+    }
+    handleChangeSegmentSpeaker(segmentId, name);
+  }, [handleChangeSegmentSpeaker]);
 
   const getSpeakerDotColor = (speaker: string) => {
     return getSpeakerColorObj(speaker, speakerColors).bg;
@@ -887,12 +910,7 @@ export function TranscriptViewerPage() {
                 allSpeakers={uniqueSpeakers}
                 onChangeSegmentSpeaker={handleChangeSegmentSpeaker}
                 speakerColors={speakerColors}
-                onAddSpeakerFromDropdown={(segmentId, name) => {
-                  if (!uniqueSpeakers.includes(name)) {
-                    setCustomSpeakers(prev => [...prev, name]);
-                  }
-                  handleChangeSegmentSpeaker(segmentId, name);
-                }} />
+                onAddSpeakerFromDropdown={handleAddSpeakerFromDropdown} />
 
               </div>
 
@@ -987,12 +1005,7 @@ export function TranscriptViewerPage() {
                 allSpeakers={uniqueSpeakers}
                 onChangeSegmentSpeaker={handleChangeSegmentSpeaker}
                 speakerColors={speakerColors}
-                onAddSpeakerFromDropdown={(segmentId, name) => {
-                  if (!uniqueSpeakers.includes(name)) {
-                    setCustomSpeakers(prev => [...prev, name]);
-                  }
-                  handleChangeSegmentSpeaker(segmentId, name);
-                }} />
+                onAddSpeakerFromDropdown={handleAddSpeakerFromDropdown} />
 
                 </div>
             }
