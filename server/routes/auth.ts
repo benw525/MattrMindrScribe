@@ -88,7 +88,7 @@ router.post('/login', async (req: Request, res: Response) => {
 router.get('/me', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
     const result = await pool.query(
-      'SELECT id, email, full_name, role, subscription_tier, created_at FROM users WHERE id = $1',
+      'SELECT id, email, full_name, role, subscription_tier, created_at, auphonic_enabled FROM users WHERE id = $1',
       [req.userId]
     );
 
@@ -104,6 +104,7 @@ router.get('/me', authenticateToken, async (req: AuthRequest, res: Response) => 
       role: user.role,
       subscriptionTier: user.subscription_tier,
       createdAt: user.created_at,
+      auphonicEnabled: user.auphonic_enabled || false,
     });
   } catch (err) {
     console.error('Get user error:', err);
@@ -143,6 +144,35 @@ router.put('/change-password', authenticateToken, async (req: AuthRequest, res: 
     res.json({ message: 'Password changed successfully' });
   } catch (err) {
     console.error('Change password error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.patch('/settings', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const { auphonicEnabled } = req.body;
+
+    if (typeof auphonicEnabled === 'boolean') {
+      await pool.query('UPDATE users SET auphonic_enabled = $1 WHERE id = $2', [auphonicEnabled, req.userId]);
+    }
+
+    const result = await pool.query(
+      'SELECT id, email, full_name, role, subscription_tier, created_at, auphonic_enabled FROM users WHERE id = $1',
+      [req.userId]
+    );
+
+    const user = result.rows[0];
+    res.json({
+      id: user.id,
+      email: user.email,
+      fullName: user.full_name,
+      role: user.role,
+      subscriptionTier: user.subscription_tier,
+      createdAt: user.created_at,
+      auphonicEnabled: user.auphonic_enabled || false,
+    });
+  } catch (err) {
+    console.error('Update settings error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

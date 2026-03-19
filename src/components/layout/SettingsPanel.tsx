@@ -11,7 +11,8 @@ import {
   Link2OffIcon,
   LogOutIcon,
   CheckCircleIcon,
-  Loader2Icon } from
+  Loader2Icon,
+  SparklesIcon } from
 'lucide-react';
 import { useTheme } from '../../hooks/useTheme';
 import { useAuth } from '../../contexts/AuthContext';
@@ -316,6 +317,55 @@ function MattrMindrIntegration() {
   );
 }
 
+function AuphonicToggle() {
+  const { user, updateUser } = useAuth();
+  const [toggling, setToggling] = useState(false);
+
+  const handleToggle = async () => {
+    if (!user) return;
+    setToggling(true);
+    try {
+      const updated = await api.auth.updateSettings({ auphonicEnabled: !user.auphonicEnabled });
+      updateUser({ auphonicEnabled: updated.auphonicEnabled });
+      toast.success(updated.auphonicEnabled ? 'Auphonic audio cleanup enabled' : 'Auphonic audio cleanup disabled');
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to update setting');
+    } finally {
+      setToggling(false);
+    }
+  };
+
+  return (
+    <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-700">
+      <p className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2">
+        Audio Processing
+      </p>
+      <div className="flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg bg-slate-50 dark:bg-slate-700/50">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <SparklesIcon className="h-4 w-4 text-amber-500 dark:text-amber-400 flex-shrink-0" />
+          <div className="min-w-0">
+            <p className="text-xs font-medium text-slate-700 dark:text-slate-300">Auphonic Audio Cleanup</p>
+            <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">Noise reduction & loudness normalization before transcription</p>
+          </div>
+        </div>
+        <button
+          onClick={handleToggle}
+          disabled={toggling}
+          className={`relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 dark:focus:ring-offset-slate-800 disabled:opacity-50 ${
+            user?.auphonicEnabled ? 'bg-indigo-600' : 'bg-slate-300 dark:bg-slate-600'
+          }`}
+          role="switch"
+          aria-checked={user?.auphonicEnabled || false}>
+          <span
+            className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+              user?.auphonicEnabled ? 'translate-x-4' : 'translate-x-0'
+            }`} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export function SettingsPanel({ onClose, onChangePassword }: SettingsPanelProps) {
   const { theme, setTheme } = useTheme();
   const { user, logout } = useAuth();
@@ -412,6 +462,8 @@ export function SettingsPanel({ onClose, onChangePassword }: SettingsPanelProps)
             </button>
           </div>
         </div>
+
+        <AuphonicToggle />
 
         <MattrMindrIntegration />
 

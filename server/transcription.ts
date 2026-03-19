@@ -478,13 +478,17 @@ export async function processTranscription(transcriptId: string): Promise<void> 
     );
 
     const { rows } = await pool.query(
-      'SELECT file_url, type, filename, expected_speakers, recording_type, pipeline_log FROM transcripts WHERE id = $1',
+      `SELECT t.file_url, t.type, t.filename, t.expected_speakers, t.recording_type, t.pipeline_log, t.user_id,
+              u.auphonic_enabled
+       FROM transcripts t
+       JOIN users u ON u.id = t.user_id
+       WHERE t.id = $1`,
       [transcriptId]
     );
 
     if (rows.length === 0) throw new Error('Transcript not found');
 
-    const { file_url, filename, expected_speakers, recording_type, pipeline_log: existingLog } = rows[0];
+    const { file_url, filename, expected_speakers, recording_type, pipeline_log: existingLog, auphonic_enabled } = rows[0];
     let expectedSpeakers = expected_speakers ? parseInt(expected_speakers) : null;
     const recordingType: string | null = recording_type || null;
 
@@ -538,7 +542,7 @@ export async function processTranscription(transcriptId: string): Promise<void> 
 
       console.log(`[Transcription] Starting for "${filename}" (${transcriptId})${expectedSpeakers ? ` — expecting ${expectedSpeakers} speakers` : ''}`);
 
-      if (auphonicConfigured()) {
+      if (auphonic_enabled && auphonicConfigured()) {
         try {
           console.log(`[Transcription] Step 0: Auphonic audio cleanup...`);
           pipelineLog.auphonic = { status: 'processing', startedAt: new Date().toISOString() };
@@ -558,6 +562,8 @@ export async function processTranscription(transcriptId: string): Promise<void> 
           pipelineLog.auphonic = { status: 'error', error: err.message };
         }
         await savePipelineLog();
+      } else if (!auphonic_enabled) {
+        pipelineLog.auphonic = { status: 'skipped', reason: 'Not enabled in user settings' };
       } else {
         pipelineLog.auphonic = { status: 'skipped', reason: 'API key not configured' };
       }

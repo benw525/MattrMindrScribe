@@ -290,6 +290,8 @@ export const api = {
     me: () => request('/auth/me'),
     changePassword: (currentPassword: string, newPassword: string) =>
       request('/auth/change-password', { method: 'PUT', body: JSON.stringify({ currentPassword, newPassword }) }),
+    updateSettings: (settings: { auphonicEnabled?: boolean }) =>
+      request('/auth/settings', { method: 'PATCH', body: JSON.stringify(settings) }),
   },
   transcripts: {
     list: () => request('/transcripts'),

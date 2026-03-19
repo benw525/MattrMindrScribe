@@ -205,6 +205,12 @@ pool.query(`
   if (!err.message.includes('already exists')) console.error('Migration error (transcripts recording_type/practice_area):', err.message);
 });
 
+pool.query(`
+  ALTER TABLE users ADD COLUMN IF NOT EXISTS auphonic_enabled BOOLEAN DEFAULT FALSE;
+`).catch((err: any) => {
+  if (!err.message.includes('already exists')) console.error('Migration error (users auphonic_enabled):', err.message);
+});
+
 async function seedAdminAccounts() {
   const raw = process.env.ADMIN_ACCOUNTS;
   if (!raw) return;
