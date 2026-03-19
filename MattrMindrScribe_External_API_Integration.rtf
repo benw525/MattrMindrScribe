@@ -15,11 +15,13 @@ MattrMindrScribe exposes three read-only API endpoints under \f1 /api/external/ 
 
 \b\fs28 2. Authentication\b0\fs22\par
 \par
-\b Method: \b0 Static API Key via \f1 X-Api-Key \f0 header\par
+\b Method: \b0 Static API Key via \f1 X-Api-Key \f0 header or \f1 Authorization: Bearer \f0 header\par
 \b Base URL: \b0\f1 https://scribe.mattrmindr.com/api/external \f0\par
 \par
-Every request must include:\par
+Every request must include one of:\par
 \f1   X-Api-Key: <your-api-key>\par
+\f0 or:\par
+\f1   Authorization: Bearer <your-api-key>\par
 \f0\par
 The API key is configured as the \f1 EXTERNAL_API_KEY \f0 environment variable on the MattrMindrScribe server. The key maps to Jamie\'92s user account via the \f1 EXTERNAL_API_USER_EMAIL \f0 environment variable (set to \f1 jamie@mattrmindr.com\f0 ).\par
 \par
@@ -171,8 +173,9 @@ This app connects to the MattrMindrScribe API to read Jamie's legal transcripts,
 Base URL: https://scribe.mattrmindr.com/api/external\par
 Authentication: X-Api-Key header (store the key as SCRIBE_API_KEY environment secret)\par
 \par
-All requests must include:\par
-  Headers: \{ "X-Api-Key": process.env.SCRIBE_API_KEY \}\par
+All requests must include one of these headers:\par
+  \{ "X-Api-Key": process.env.SCRIBE_API_KEY \}\par
+  or: \{ "Authorization": "Bearer " + process.env.SCRIBE_API_KEY \}\par
 \par
 ## Available Endpoints\par
 \par

@@ -61,19 +61,35 @@ async function resolveApiKeyUser(): Promise<string | null> {
 }
 
 export async function authenticateApiKeyOrToken(req: AuthRequest, res: Response, next: NextFunction) {
-  const apiKey = req.headers['x-api-key'] as string | undefined;
   const configuredKey = process.env.EXTERNAL_API_KEY;
-
-  if (apiKey && configuredKey && apiKey === configuredKey) {
-    const userId = await resolveApiKeyUser();
-    if (userId) {
-      req.userId = userId;
-      return next();
-    }
-    return res.status(500).json({ error: 'API key user not configured' });
+  if (!configuredKey) {
+    return authenticateToken(req, res, next);
   }
 
-  return authenticateToken(req, res, next);
+  const xApiKey = req.headers['x-api-key'] as string | undefined;
+  const authHeader = req.headers['authorization'];
+  const bearerToken = authHeader && authHeader.startsWith('Bearer ') ? authHeader.slice(7) : undefined;
+
+  const candidateKey = xApiKey || bearerToken;
+
+  if (candidateKey) {
+    if (candidateKey === configuredKey) {
+      const userId = await resolveApiKeyUser();
+      if (userId) {
+        req.userId = userId;
+        return next();
+      }
+      return res.status(500).json({ error: 'API key user not configured' });
+    }
+
+    if (xApiKey) {
+      return res.status(401).json({ error: 'Invalid API key' });
+    }
+
+    return authenticateToken(req, res, next);
+  }
+
+  return res.status(401).json({ error: 'Authentication required' });
 }
 
 export function generateToken(userId: string): string {
