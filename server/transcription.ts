@@ -74,7 +74,35 @@ async function getAudioDuration(filePath: string): Promise<number | null> {
   return null;
 }
 
-const FORMATS_REQUIRING_CONVERSION = new Set(['.amr', '.wma', '.aiff', '.aif', '.au', '.ra', '.ram']);
+const WHISPER_SUPPORTED_FORMATS = new Set(['.flac', '.m4a', '.mp3', '.mp4', '.mpeg', '.mpga', '.oga', '.ogg', '.wav', '.webm']);
+
+async function ensureWhisperCompatible(
+  sourcePath: string,
+  workDir: string,
+): Promise<string> {
+  const ext = path.extname(sourcePath).toLowerCase();
+  if (WHISPER_SUPPORTED_FORMATS.has(ext)) {
+    return sourcePath;
+  }
+
+  const convertedPath = path.join(workDir, `converted_source.mp3`);
+  console.log(`[Transcription] Pre-converting ${ext} to mp3 (not natively supported by Whisper)`);
+  await new Promise<void>((resolve, reject) => {
+    const proc = spawn('ffmpeg', [
+      '-y', '-i', sourcePath,
+      '-vn', '-ar', '16000', '-ac', '1',
+      '-b:a', '64k', '-f', 'mp3',
+      convertedPath,
+    ]);
+    proc.stderr.on('data', () => {});
+    proc.on('close', (code) => {
+      if (code !== 0) return reject(new Error(`ffmpeg pre-conversion from ${ext} failed with code ${code}`));
+      resolve();
+    });
+    proc.on('error', reject);
+  });
+  return convertedPath;
+}
 
 async function splitAudioIntoChunks(
   sourcePath: string,
@@ -83,30 +111,9 @@ async function splitAudioIntoChunks(
 ): Promise<{ path: string; offsetSec: number }[]> {
   const fs = await import('fs');
   const fileSize = fs.statSync(sourcePath).size;
-  const ext = path.extname(sourcePath).toLowerCase();
 
-  if (fileSize <= MAX_CHUNK_SIZE && !FORMATS_REQUIRING_CONVERSION.has(ext)) {
+  if (fileSize <= MAX_CHUNK_SIZE) {
     return [{ path: sourcePath, offsetSec: 0 }];
-  }
-
-  if (fileSize <= MAX_CHUNK_SIZE && FORMATS_REQUIRING_CONVERSION.has(ext)) {
-    const convertedPath = path.join(workDir, 'converted.mp3');
-    console.log(`[Transcription] Converting ${ext} to mp3 for Whisper compatibility`);
-    await new Promise<void>((resolve, reject) => {
-      const proc = spawn('ffmpeg', [
-        '-y', '-i', sourcePath,
-        '-vn', '-ar', '16000', '-ac', '1',
-        '-b:a', '64k', '-f', 'mp3',
-        convertedPath,
-      ]);
-      proc.stderr.on('data', () => {});
-      proc.on('close', (code) => {
-        if (code !== 0) return reject(new Error(`ffmpeg conversion from ${ext} failed with code ${code}`));
-        resolve();
-      });
-      proc.on('error', reject);
-    });
-    return [{ path: convertedPath, offsetSec: 0 }];
   }
 
   if (!totalDuration || totalDuration <= 0) {
@@ -565,6 +572,8 @@ export async function processTranscription(transcriptId: string): Promise<void> 
       }
 
       await checkCancelled();
+
+      sourcePath = await ensureWhisperCompatible(sourcePath, workDir);
 
       console.log(`[Transcription] Starting AssemblyAI diarization with original file + WAV conversion in parallel...`);
 
