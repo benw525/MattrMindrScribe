@@ -74,6 +74,8 @@ async function getAudioDuration(filePath: string): Promise<number | null> {
   return null;
 }
 
+const FORMATS_REQUIRING_CONVERSION = new Set(['.amr', '.wma', '.aiff', '.aif', '.au', '.ra', '.ram']);
+
 async function splitAudioIntoChunks(
   sourcePath: string,
   workDir: string,
@@ -81,9 +83,30 @@ async function splitAudioIntoChunks(
 ): Promise<{ path: string; offsetSec: number }[]> {
   const fs = await import('fs');
   const fileSize = fs.statSync(sourcePath).size;
+  const ext = path.extname(sourcePath).toLowerCase();
 
-  if (fileSize <= MAX_CHUNK_SIZE) {
+  if (fileSize <= MAX_CHUNK_SIZE && !FORMATS_REQUIRING_CONVERSION.has(ext)) {
     return [{ path: sourcePath, offsetSec: 0 }];
+  }
+
+  if (fileSize <= MAX_CHUNK_SIZE && FORMATS_REQUIRING_CONVERSION.has(ext)) {
+    const convertedPath = path.join(workDir, 'converted.mp3');
+    console.log(`[Transcription] Converting ${ext} to mp3 for Whisper compatibility`);
+    await new Promise<void>((resolve, reject) => {
+      const proc = spawn('ffmpeg', [
+        '-y', '-i', sourcePath,
+        '-vn', '-ar', '16000', '-ac', '1',
+        '-b:a', '64k', '-f', 'mp3',
+        convertedPath,
+      ]);
+      proc.stderr.on('data', () => {});
+      proc.on('close', (code) => {
+        if (code !== 0) return reject(new Error(`ffmpeg conversion from ${ext} failed with code ${code}`));
+        resolve();
+      });
+      proc.on('error', reject);
+    });
+    return [{ path: convertedPath, offsetSec: 0 }];
   }
 
   if (!totalDuration || totalDuration <= 0) {
@@ -142,7 +165,12 @@ async function transcribeChunk(filePath: string, offsetSec: number = 0): Promise
     try {
       const buffer = await readFile(filePath);
       const ext = path.extname(filePath).toLowerCase();
-      const mimeFile = ext === '.mp3' ? 'audio.mp3' : ext === '.m4a' ? 'audio.m4a' : ext === '.mp4' ? 'audio.mp4' : ext === '.webm' ? 'audio.webm' : ext === '.ogg' ? 'audio.ogg' : 'audio.wav';
+      const MIME_MAP: Record<string, string> = {
+        '.mp3': 'audio.mp3', '.m4a': 'audio.m4a', '.mp4': 'audio.mp4',
+        '.webm': 'audio.webm', '.ogg': 'audio.ogg', '.wav': 'audio.wav',
+        '.flac': 'audio.flac', '.aac': 'audio.aac', '.opus': 'audio.ogg',
+      };
+      const mimeFile = MIME_MAP[ext] || 'audio.mp3';
       const file = await toFile(buffer, mimeFile);
 
       const response = await whisperClient.audio.transcriptions.create({
