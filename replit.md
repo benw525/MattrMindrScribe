@@ -107,6 +107,9 @@ A full-stack application for managing legal case recordings/transcripts. Feature
 - `POST /api/external/auth` - External auth (for MattrMindr inbound connections)
 - `POST /api/external/receive` - Receive file URL from MattrMindr for transcription
 - `GET /api/external/transcripts/:id/status` - Poll transcription status (for external callers)
+- `GET /api/external/transcripts` - List all transcripts for API key user (lightweight metadata, no segments); auth: X-Api-Key header or JWT
+- `GET /api/external/transcripts/:id/full` - Full transcript with segments, summaries, presigned media URL; auth: X-Api-Key or JWT
+- `GET /api/external/transcripts/:id/media` - Presigned S3 media download URL only; auth: X-Api-Key or JWT
 - `POST /api/media/token` - Get short-lived media access token (authenticated)
 - `GET /api/media/:filename?token=` - Serve media file with secure token
 
@@ -185,6 +188,15 @@ A full-stack application for managing legal case recordings/transcripts. Feature
 - `server/db.ts` imports `dotenv/config` directly to ensure DATABASE_URL is loaded before pool creation (ES module import hoisting)
 - S3 bucket `mattrmindrscribe-files` in `us-east-2` with CORS configured for `scribe.mattrmindr.com`
 - Env vars in `/home/ubuntu/mattrmindrscribe/.env`: DATABASE_URL, AWS keys, OPENAI_API_KEY, ANTHROPIC_API_KEY, ASSEMBLYAI_API_KEY, AUPHONIC_API_KEY, JWT_SECRET, ADMIN_ACCOUNTS, ADMIN_API_KEY, NODE_ENV=production, REPLIT_DEPLOYMENT=1
+
+## External Read-Only API (Jamie's Companion App)
+
+- Three read-only endpoints under `/api/external/` for Jamie's companion Replit app
+- Auth: Static API key via `X-Api-Key` header (falls back to JWT if no API key provided)
+- Env vars: `EXTERNAL_API_KEY` (the key string), `EXTERNAL_API_USER_EMAIL` (set to `jamie@mattrmindr.com`)
+- User resolution is cached after first lookup (lazy singleton)
+- Integration document: `MattrMindrScribe_External_API_Integration.rtf` (contains full API docs + agent prompt for companion app)
+- Middleware: `authenticateApiKeyOrToken()` in `server/middleware/auth.ts`
 
 ## Admin Accounts
 

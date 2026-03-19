@@ -7,9 +7,9 @@ import { v4 as uuidv4 } from 'uuid';
 import { Readable } from 'stream';
 import { pipeline } from 'stream/promises';
 import pool from '../db.js';
-import { generateToken, authenticateToken, AuthRequest } from '../middleware/auth.js';
+import { generateToken, authenticateToken, authenticateApiKeyOrToken, AuthRequest } from '../middleware/auth.js';
 import { processTranscription } from '../transcription.js';
-import { s3Configured, uploadFileToS3 } from '../s3.js';
+import { s3Configured, uploadFileToS3, isCloudStorageUrl, getKeyFromStorageUrl, getPresignedDownloadUrl } from '../s3.js';
 
 const router = Router();
 
@@ -240,6 +240,165 @@ router.post('/receive', authenticateToken, async (req: AuthRequest, res: Respons
     });
   } catch (err: any) {
     console.error('[External Receive] Error:', err.message);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.get('/transcripts', authenticateApiKeyOrToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT t.id, t.filename, t.description, t.status, t.type, t.duration, t.file_size,
+              t.recording_type, t.practice_area, t.created_at, t.folder_id,
+              f.name as folder_name,
+              (SELECT COUNT(*)::int FROM transcript_segments s WHERE s.transcript_id = t.id) as segment_count,
+              (SELECT COUNT(DISTINCT speaker) FROM transcript_segments s WHERE s.transcript_id = t.id) as speaker_count,
+              (SELECT COUNT(*)::int FROM transcript_summaries sm WHERE sm.transcript_id = t.id) as summary_count
+       FROM transcripts t
+       LEFT JOIN folders f ON f.id = t.folder_id
+       WHERE t.user_id = $1
+       ORDER BY t.created_at DESC`,
+      [req.userId]
+    );
+
+    const transcripts = rows.map(t => ({
+      id: t.id,
+      filename: t.filename,
+      description: t.description || '',
+      status: t.status,
+      type: t.type,
+      duration: t.duration,
+      fileSize: t.file_size,
+      recordingType: t.recording_type || null,
+      practiceArea: t.practice_area || null,
+      createdAt: t.created_at,
+      folderId: t.folder_id || null,
+      folderName: t.folder_name || null,
+      segmentCount: t.segment_count,
+      speakerCount: t.speaker_count,
+      summaryCount: t.summary_count,
+    }));
+
+    res.json(transcripts);
+  } catch (err: any) {
+    console.error('[External List] Error:', err.message);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.get('/transcripts/:id/full', authenticateApiKeyOrToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+
+    const { rows: tRows } = await pool.query(
+      `SELECT t.id, t.filename, t.description, t.status, t.type, t.duration, t.file_size,
+              t.recording_type, t.practice_area, t.created_at, t.file_url,
+              f.name as folder_name
+       FROM transcripts t
+       LEFT JOIN folders f ON f.id = t.folder_id
+       WHERE t.id = $1 AND t.user_id = $2`,
+      [id, req.userId]
+    );
+
+    if (tRows.length === 0) {
+      return res.status(404).json({ error: 'Transcript not found' });
+    }
+
+    const t = tRows[0];
+
+    const { rows: segRows } = await pool.query(
+      `SELECT start_time, end_time, speaker, text
+       FROM transcript_segments
+       WHERE transcript_id = $1
+       ORDER BY segment_order`,
+      [id]
+    );
+
+    const { rows: sumRows } = await pool.query(
+      `SELECT id, agent_type, sub_type, summary, created_at
+       FROM transcript_summaries
+       WHERE transcript_id = $1
+       ORDER BY created_at DESC`,
+      [id]
+    );
+
+    let mediaUrl: string | null = null;
+    if (t.file_url && isCloudStorageUrl(t.file_url)) {
+      try {
+        const storageKey = getKeyFromStorageUrl(t.file_url);
+        mediaUrl = await getPresignedDownloadUrl(storageKey);
+      } catch (err: any) {
+        console.error('[External Full] Media URL error:', err.message);
+      }
+    }
+
+    res.json({
+      id: t.id,
+      filename: t.filename,
+      description: t.description || '',
+      status: t.status,
+      type: t.type,
+      duration: t.duration,
+      fileSize: t.file_size,
+      recordingType: t.recording_type || null,
+      practiceArea: t.practice_area || null,
+      createdAt: t.created_at,
+      folderName: t.folder_name || null,
+      segments: segRows.map(s => ({
+        startTime: s.start_time,
+        endTime: s.end_time,
+        speaker: s.speaker,
+        text: s.text,
+      })),
+      summaries: sumRows.map(s => ({
+        id: s.id,
+        agentType: s.agent_type,
+        subType: s.sub_type || null,
+        summary: s.summary,
+        createdAt: s.created_at,
+      })),
+      mediaUrl,
+    });
+  } catch (err: any) {
+    console.error('[External Full] Error:', err.message);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.get('/transcripts/:id/media', authenticateApiKeyOrToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+
+    const { rows } = await pool.query(
+      `SELECT id, filename, type, file_url FROM transcripts WHERE id = $1 AND user_id = $2`,
+      [id, req.userId]
+    );
+
+    if (rows.length === 0) {
+      return res.status(404).json({ error: 'Transcript not found' });
+    }
+
+    const t = rows[0];
+
+    if (!t.file_url) {
+      return res.status(404).json({ error: 'No media file associated with this transcript' });
+    }
+
+    if (!isCloudStorageUrl(t.file_url)) {
+      return res.status(400).json({ error: 'Media file is stored locally and cannot be accessed externally' });
+    }
+
+    const storageKey = getKeyFromStorageUrl(t.file_url);
+    const mediaUrl = await getPresignedDownloadUrl(storageKey);
+
+    res.json({
+      transcriptId: t.id,
+      filename: t.filename,
+      type: t.type,
+      mediaUrl,
+      expiresIn: 3600,
+    });
+  } catch (err: any) {
+    console.error('[External Media] Error:', err.message);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

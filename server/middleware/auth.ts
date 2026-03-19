@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
+import pool from '../db.js';
 
 const JWT_SECRET = process.env.JWT_SECRET;
 if (!JWT_SECRET) {
@@ -25,6 +26,54 @@ export function authenticateToken(req: AuthRequest, res: Response, next: NextFun
   } catch {
     return res.status(403).json({ error: 'Invalid or expired token' });
   }
+}
+
+let _apiKeyUserId: string | null = null;
+let _resolvePromise: Promise<string | null> | null = null;
+
+async function resolveApiKeyUser(): Promise<string | null> {
+  if (_apiKeyUserId) return _apiKeyUserId;
+
+  if (_resolvePromise) return _resolvePromise;
+
+  _resolvePromise = (async () => {
+    const apiKey = process.env.EXTERNAL_API_KEY;
+    const email = process.env.EXTERNAL_API_USER_EMAIL;
+    if (!apiKey || !email) return null;
+
+    try {
+      const { rows } = await pool.query('SELECT id FROM users WHERE email = $1', [email.toLowerCase()]);
+      if (rows.length > 0) {
+        _apiKeyUserId = rows[0].id;
+        console.log(`[Auth] External API key mapped to user: ${email}`);
+        return _apiKeyUserId;
+      } else {
+        console.error(`[Auth] EXTERNAL_API_USER_EMAIL user not found: ${email}`);
+      }
+    } catch (err: any) {
+      console.error(`[Auth] Failed to resolve API key user:`, err.message);
+    }
+    _resolvePromise = null;
+    return null;
+  })();
+
+  return _resolvePromise;
+}
+
+export async function authenticateApiKeyOrToken(req: AuthRequest, res: Response, next: NextFunction) {
+  const apiKey = req.headers['x-api-key'] as string | undefined;
+  const configuredKey = process.env.EXTERNAL_API_KEY;
+
+  if (apiKey && configuredKey && apiKey === configuredKey) {
+    const userId = await resolveApiKeyUser();
+    if (userId) {
+      req.userId = userId;
+      return next();
+    }
+    return res.status(500).json({ error: 'API key user not configured' });
+  }
+
+  return authenticateToken(req, res, next);
 }
 
 export function generateToken(userId: string): string {

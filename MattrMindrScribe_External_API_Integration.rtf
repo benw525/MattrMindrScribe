@@ -1,0 +1,232 @@
+{\rtf1\ansi\deff0
+{\fonttbl{\f0\fswiss Helvetica;}{\f1\fmodern Courier New;}}
+{\colortbl;\red0\green0\blue0;\red0\green0\blue128;\red128\green0\blue0;\red0\green100\blue0;}
+
+\paperw12240\paperh15840\margl1440\margr1440\margt1440\margb1440
+
+\pard\qc\b\fs36\cf2 MattrMindrScribe External API\par
+\b\fs28 Integration Guide for Jamie\'92s Companion App\par
+\pard\ql\b0\fs22\cf1\par
+
+\b\fs28 1. Overview\b0\fs22\par
+\par
+MattrMindrScribe exposes three read-only API endpoints under \f1 /api/external/ \f0 that allow a companion Replit app to access Jamie\'92s transcripts, AI summaries, and audio/video media files. Authentication uses a static API key passed via the \f1 X-Api-Key \f0 header.\par
+\par
+
+\b\fs28 2. Authentication\b0\fs22\par
+\par
+\b Method: \b0 Static API Key via \f1 X-Api-Key \f0 header\par
+\b Base URL: \b0\f1 https://scribe.mattrmindr.com/api/external \f0\par
+\par
+Every request must include:\par
+\f1   X-Api-Key: <your-api-key>\par
+\f0\par
+The API key is configured as the \f1 EXTERNAL_API_KEY \f0 environment variable on the MattrMindrScribe server. The key maps to Jamie\'92s user account via the \f1 EXTERNAL_API_USER_EMAIL \f0 environment variable (set to \f1 jamie@mattrmindr.com\f0 ).\par
+\par
+\b Error Responses:\b0\par
+\bullet  \f1 401 \f0 \'97 Missing or invalid API key/token\par
+\bullet  \f1 500 \f0 \'97 API key user not configured on server\par
+\par
+
+\b\fs28 3. Endpoints\b0\fs22\par
+\par
+
+\b\fs26 3.1 List Transcripts\b0\fs22\par
+\par
+\f1 GET /api/external/transcripts\f0\par
+\par
+Returns all transcripts for the authenticated user. Lightweight metadata only (no segments or summaries). Ordered by creation date, newest first.\par
+\par
+\b Response (200):\b0  Array of transcript objects:\par
+\f1\fs20\par
+[\par
+  \{\par
+    "id": "uuid-string",\par
+    "filename": "deposition-2024-01-15.mp3",\par
+    "description": "Smith v. Jones deposition",\par
+    "status": "completed",\par
+    "type": "audio",\par
+    "duration": 3600,\par
+    "fileSize": 45000000,\par
+    "recordingType": "deposition",\par
+    "practiceArea": "litigation",\par
+    "createdAt": "2024-01-15T10:30:00.000Z",\par
+    "folderId": "uuid-or-null",\par
+    "folderName": "Smith v. Jones",\par
+    "segmentCount": 450,\par
+    "speakerCount": 3,\par
+    "summaryCount": 2\par
+  \}\par
+]\par
+\f0\fs22\par
+\b Status values:\b0  \f1 pending \f0 | \f1 transcribing \f0 | \f1 diarizing \f0 | \f1 enhancing \f0 | \f1 completed \f0 | \f1 failed\f0\par
+\b Type values:\b0  \f1 audio \f0 | \f1 video\f0\par
+\par
+
+\b\fs26 3.2 Get Full Transcript\b0\fs22\par
+\par
+\f1 GET /api/external/transcripts/:id/full\f0\par
+\par
+Returns a single transcript with all segments, AI summaries, and a presigned S3 media download URL (1-hour expiry). Returns \f1 404 \f0 if the transcript does not exist or does not belong to the authenticated user.\par
+\par
+\b Response (200):\b0\par
+\f1\fs20\par
+\{\par
+  "id": "uuid-string",\par
+  "filename": "deposition-2024-01-15.mp3",\par
+  "description": "Smith v. Jones deposition",\par
+  "status": "completed",\par
+  "type": "audio",\par
+  "duration": 3600,\par
+  "fileSize": 45000000,\par
+  "recordingType": "deposition",\par
+  "practiceArea": "litigation",\par
+  "createdAt": "2024-01-15T10:30:00.000Z",\par
+  "folderName": "Smith v. Jones",\par
+  "segments": [\par
+    \{\par
+      "startTime": 0.0,\par
+      "endTime": 5.2,\par
+      "speaker": "Speaker 1",\par
+      "text": "Good morning, please state your name."\par
+    \}\par
+  ],\par
+  "summaries": [\par
+    \{\par
+      "id": "uuid-string",\par
+      "agentType": "legal-summary",\par
+      "subType": "key-points",\par
+      "summary": "The deposition covered...",\par
+      "createdAt": "2024-01-15T12:00:00.000Z"\par
+    \}\par
+  ],\par
+  "mediaUrl": "https://s3.us-east-2.amazonaws.com/...?X-Amz-..."\par
+\}\par
+\f0\fs22\par
+\b Notes:\b0\par
+\bullet  \f1 mediaUrl \f0 is a presigned S3 URL valid for 1 hour. It may be \f1 null \f0 if the media file is not in cloud storage.\par
+\bullet  \f1 segments \f0 are ordered chronologically by \f1 startTime\f0 .\par
+\bullet  \f1 summaries \f0 are ordered by creation date, newest first.\par
+\bullet  \f1 agentType \f0 values include: \f1 legal-summary\f0 , \f1 general-summary\f0 , \f1 action-items\f0 , etc.\par
+\par
+
+\b\fs26 3.3 Get Media URL\b0\fs22\par
+\par
+\f1 GET /api/external/transcripts/:id/media\f0\par
+\par
+Returns just the presigned S3 media download URL for a specific transcript. Useful when you only need the audio/video file without transcript data.\par
+\par
+\b Response (200):\b0\par
+\f1\fs20\par
+\{\par
+  "transcriptId": "uuid-string",\par
+  "filename": "deposition-2024-01-15.mp3",\par
+  "type": "audio",\par
+  "mediaUrl": "https://s3.us-east-2.amazonaws.com/...?X-Amz-...",\par
+  "expiresIn": 3600\par
+\}\par
+\f0\fs22\par
+\b Error Responses:\b0\par
+\bullet  \f1 404 \f0 \'97 Transcript not found or not owned by user\par
+\bullet  \f1 400 \f0 \'97 Media file stored locally (not accessible externally)\par
+\par
+
+\b\fs28 4. Error Response Format\b0\fs22\par
+\par
+All error responses follow this format:\par
+\f1\fs20\par
+\{\par
+  "error": "Human-readable error message"\par
+\}\par
+\f0\fs22\par
+\b Common HTTP status codes:\b0\par
+\bullet  \f1 200 \f0 \'97 Success\par
+\bullet  \f1 400 \f0 \'97 Bad request (invalid parameters)\par
+\bullet  \f1 401 \f0 \'97 Authentication required\par
+\bullet  \f1 403 \f0 \'97 Invalid or expired token\par
+\bullet  \f1 404 \f0 \'97 Resource not found\par
+\bullet  \f1 500 \f0 \'97 Internal server error\par
+\par
+
+\b\fs28 5. Environment Variables Required on Scribe Server\b0\fs22\par
+\par
+\f1 EXTERNAL_API_KEY \f0 \'97 The static API key string (generate with \f1 openssl rand -hex 32\f0 )\par
+\f1 EXTERNAL_API_USER_EMAIL \f0 \'97 Set to \f1 jamie@mattrmindr.com\f0\par
+\par
+These must be set on the EC2 server and PM2 restarted with \f1 --update-env \f0 or via full delete+start.\par
+\par
+
+\b\fs28 6. Agent Prompt for Jamie\'92s Companion App\b0\fs22\par
+\par
+Copy and paste the following prompt into the Replit Agent for Jamie\'92s companion app:\par
+\par
+\pard\li720\ri720\sa200
+\f1\fs18\cf4\par
+---BEGIN AGENT PROMPT---\par
+\par
+This app connects to the MattrMindrScribe API to read Jamie's legal transcripts, AI summaries, and media files. It is a read-only companion app.\par
+\par
+## API Configuration\par
+\par
+Base URL: https://scribe.mattrmindr.com/api/external\par
+Authentication: X-Api-Key header (store the key as SCRIBE_API_KEY environment secret)\par
+\par
+All requests must include:\par
+  Headers: \{ "X-Api-Key": process.env.SCRIBE_API_KEY \}\par
+\par
+## Available Endpoints\par
+\par
+### 1. List All Transcripts\par
+GET /api/external/transcripts\par
+Returns: Array of transcript metadata objects (no segments/summaries)\par
+Fields per transcript: id, filename, description, status, type, duration, fileSize, recordingType, practiceArea, createdAt, folderId, folderName, segmentCount, speakerCount, summaryCount\par
+Status values: pending | transcribing | diarizing | enhancing | completed | failed\par
+\par
+### 2. Get Full Transcript\par
+GET /api/external/transcripts/:id/full\par
+Returns: Complete transcript with segments array, summaries array, and presigned mediaUrl\par
+Each segment: \{ startTime, endTime, speaker, text \}\par
+Each summary: \{ id, agentType, subType, summary, createdAt \}\par
+mediaUrl: Presigned S3 URL valid for 1 hour (may be null)\par
+\par
+### 3. Get Media Download URL\par
+GET /api/external/transcripts/:id/media\par
+Returns: \{ transcriptId, filename, type, mediaUrl, expiresIn: 3600 \}\par
+Use this when you only need the audio/video file\par
+\par
+## Error Handling\par
+All errors return \{ "error": "message" \}\par
+401 = missing/invalid API key\par
+404 = transcript not found or not owned by user\par
+500 = server error (retry after a moment)\par
+\par
+## Implementation Notes\par
+- All data is read-only. There are no write endpoints.\par
+- Media URLs expire after 1 hour. Fetch a new one via /media endpoint when needed.\par
+- Transcripts in 'pending', 'transcribing', 'diarizing', or 'enhancing' status are still being processed. Poll the list endpoint or check status to see when they complete.\par
+- The API returns all of Jamie's transcripts. Use the folderId/folderName fields to organize by case.\par
+- Segments are ordered chronologically. Use startTime/endTime for playback sync.\par
+- Audio files are typically MP3/M4A/WAV. Video files are typically MP4/MOV.\par
+- S3 bucket is in us-east-2. Presigned URLs are direct S3 downloads.\par
+\par
+---END AGENT PROMPT---\par
+\pard\ql\f0\fs22\cf1\par
+
+\b\fs28 7. Setup Checklist\b0\fs22\par
+\par
+\pard{\pntext 1. }\fi-360\li720
+Generate an API key: \f1 openssl rand -hex 32\f0\par
+\pard{\pntext 2. }\fi-360\li720
+Set \f1 EXTERNAL_API_KEY \f0 on the EC2 server (PM2 env or .env file)\par
+\pard{\pntext 3. }\fi-360\li720
+Set \f1 EXTERNAL_API_USER_EMAIL=jamie@mattrmindr.com \f0 on the EC2 server\par
+\pard{\pntext 4. }\fi-360\li720
+Restart PM2: \f1 pm2 delete mattrmindrscribe && pm2 start npm --name "mattrmindrscribe" -- run start\f0\par
+\pard{\pntext 5. }\fi-360\li720
+Set \f1 SCRIBE_API_KEY \f0 in Jamie\'92s companion Replit app (same key value)\par
+\pard{\pntext 6. }\fi-360\li720
+Paste the agent prompt from Section 6 into the companion app\'92s Replit Agent\par
+\pard{\pntext 7. }\fi-360\li720
+Test with: \f1 curl -H "X-Api-Key: YOUR_KEY" https://scribe.mattrmindr.com/api/external/transcripts\f0\par
+\pard\ql\par
+}
