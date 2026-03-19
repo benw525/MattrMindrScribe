@@ -191,10 +191,11 @@ pool.query(`
 `).catch((err: any) => console.error('Migration error (mattrmindr_connections):', err.message));
 
 pool.query(`
+  ALTER TABLE folders ADD COLUMN IF NOT EXISTS case_number VARCHAR(255) DEFAULT NULL;
   ALTER TABLE folders ADD COLUMN IF NOT EXISTS mattrmindr_case_id VARCHAR(255) DEFAULT NULL;
   ALTER TABLE folders ADD COLUMN IF NOT EXISTS mattrmindr_case_name VARCHAR(255) DEFAULT NULL;
 `).catch((err: any) => {
-  if (!err.message.includes('already exists')) console.error('Migration error (folders mattrmindr):', err.message);
+  if (!err.message.includes('already exists')) console.error('Migration error (folders):', err.message);
 });
 
 pool.query(`
