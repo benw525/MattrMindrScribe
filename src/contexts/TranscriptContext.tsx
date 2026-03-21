@@ -136,7 +136,15 @@ export function TranscriptProvider({ children }: { children: ReactNode }) {
       const toSend = entry ? entry.mergedUpdates : mergedUpdates;
       pendingUpdatesRef.current.delete(id);
       try {
-        await api.transcripts.update(id, toSend);
+        const response = await api.transcripts.update(id, toSend);
+        if (response && response.segments && 'segments' in toSend) {
+          setTranscripts((prev) => prev.map((t) => {
+            if (t.id === id) {
+              return { ...t, segments: response.segments };
+            }
+            return t;
+          }));
+        }
       } catch (err) {
         console.error('Failed to update transcript:', err);
         if (rollback) {

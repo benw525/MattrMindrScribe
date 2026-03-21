@@ -120,6 +120,13 @@ export function TranscriptViewerPage() {
       .finally(() => setDirectLoading(false));
   }, [id, contextTranscript, transcriptsLoading, directLoading, directFetchedId]);
 
+  const segmentIdsKey = useMemo(() => {
+    if (!transcript) return '';
+    return transcript.segments.map(s => s.id).join(',');
+  }, [transcript?.segments]);
+
+  const prevSegmentIdsKeyRef = useRef(segmentIdsKey);
+
   useEffect(() => {
     if (!id) return;
     api.transcripts.getVersions(id).then((v: TranscriptVersion[]) => {
@@ -132,6 +139,16 @@ export function TranscriptViewerPage() {
       setAnnotations(a || []);
     }).catch(() => {});
   }, [id]);
+
+  useEffect(() => {
+    if (!id || !segmentIdsKey) return;
+    if (prevSegmentIdsKeyRef.current && prevSegmentIdsKeyRef.current !== segmentIdsKey) {
+      api.annotations.list(id).then((a: TranscriptAnnotation[]) => {
+        setAnnotations(a || []);
+      }).catch(() => {});
+    }
+    prevSegmentIdsKeyRef.current = segmentIdsKey;
+  }, [id, segmentIdsKey]);
 
   useEffect(() => {
     api.transcripts.getAgents().then((a: any[]) => {
