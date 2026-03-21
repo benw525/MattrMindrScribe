@@ -587,8 +587,19 @@ router.patch('/:id', async (req: AuthRequest, res: Response) => {
       try {
         await client.query('BEGIN');
         await client.query('SELECT id FROM transcripts WHERE id = $1 FOR UPDATE', [id]);
+
+        const oldSegsResult = await client.query(
+          `SELECT id, start_time, end_time, speaker, text FROM transcript_segments WHERE transcript_id = $1 ORDER BY segment_order`,
+          [id]
+        );
+        const oldSegs = oldSegsResult.rows;
+        const oldSegMap = new Map<string, typeof oldSegs[0]>();
+        for (const s of oldSegs) oldSegMap.set(s.id, s);
+
         await client.query('DELETE FROM transcript_segments WHERE transcript_id = $1', [id]);
         const BATCH_SIZE = 200;
+        const idMapping = new Map<string, string>();
+
         for (let b = 0; b < segments.length; b += BATCH_SIZE) {
           const batch = segments.slice(b, b + BATCH_SIZE);
           const vals: any[] = [];
@@ -599,12 +610,39 @@ router.patch('/:id', async (req: AuthRequest, res: Response) => {
             placeholders.push(`($${offset+1}, $${offset+2}, $${offset+3}, $${offset+4}, $${offset+5}, $${offset+6})`);
             vals.push(id, seg.startTime, seg.endTime, seg.speaker, seg.text, b + i);
           }
-          await client.query(
+          const insertResult = await client.query(
             `INSERT INTO transcript_segments (transcript_id, start_time, end_time, speaker, text, segment_order)
-             VALUES ${placeholders.join(', ')}`,
+             VALUES ${placeholders.join(', ')}
+             RETURNING id, start_time, end_time, speaker, text`,
             vals
           );
+
+          for (let i = 0; i < batch.length; i++) {
+            const clientId = batch[i].id;
+            const newDbId = insertResult.rows[i].id;
+            if (clientId && oldSegMap.has(clientId)) {
+              idMapping.set(clientId, newDbId);
+            }
+          }
         }
+
+        const hasAnnotations = await client.query(
+          `SELECT COUNT(*) FROM transcript_annotations WHERE transcript_id = $1`,
+          [id]
+        );
+        if (parseInt(hasAnnotations.rows[0].count) > 0) {
+          for (const [oldId, newId] of idMapping) {
+            await client.query(
+              `UPDATE transcript_annotations SET segment_id = $1 WHERE transcript_id = $2 AND segment_id = $3`,
+              [newId, id, oldId]
+            );
+          }
+          await client.query(
+            `DELETE FROM transcript_annotations WHERE transcript_id = $1 AND segment_id NOT IN (SELECT id FROM transcript_segments WHERE transcript_id = $1)`,
+            [id]
+          );
+        }
+
         await client.query('COMMIT');
       } catch (txErr) {
         await client.query('ROLLBACK');
@@ -1147,6 +1185,7 @@ router.get('/:id/summaries', async (req: AuthRequest, res: Response) => {
 router.get('/:id/export/:format', async (req: AuthRequest, res: Response) => {
   try {
     const { id, format } = req.params;
+    const includeAnnotations = req.query.annotations === 'true';
 
     if (!['txt', 'docx', 'pdf'].includes(format)) {
       return res.status(400).json({ error: 'Invalid format. Use txt, docx, or pdf.' });
@@ -1162,11 +1201,37 @@ router.get('/:id/export/:format', async (req: AuthRequest, res: Response) => {
     const transcript = tResult.rows[0];
 
     const sResult = await pool.query(
-      `SELECT speaker, text, start_time, end_time FROM transcript_segments
+      `SELECT id, speaker, text, start_time, end_time FROM transcript_segments
        WHERE transcript_id = $1 ORDER BY segment_order`,
       [id]
     );
     const segments = sResult.rows;
+
+    interface Annotation {
+      type: string;
+      segment_id: string;
+      text: string;
+    }
+
+    let annotationsBySegment: Record<string, Annotation[]> = {};
+    let bookmarkedSegments = new Set<string>();
+
+    if (includeAnnotations) {
+      const aResult = await pool.query(
+        `SELECT type, segment_id, text FROM transcript_annotations
+         WHERE transcript_id = $1 AND user_id = $2
+         ORDER BY created_at`,
+        [id, req.userId]
+      );
+      for (const a of aResult.rows) {
+        if (a.type === 'bookmark') {
+          bookmarkedSegments.add(a.segment_id);
+        } else if (a.type === 'note') {
+          if (!annotationsBySegment[a.segment_id]) annotationsBySegment[a.segment_id] = [];
+          annotationsBySegment[a.segment_id].push(a);
+        }
+      }
+    }
 
     const formatTime = (seconds: number) => {
       const h = Math.floor(seconds / 3600);
@@ -1182,7 +1247,15 @@ router.get('/:id/export/:format', async (req: AuthRequest, res: Response) => {
       let text = `${displayName}\n`;
       text += `${'='.repeat(displayName.length)}\n\n`;
       for (const seg of segments) {
-        text += `[${formatTime(seg.start_time)}] ${seg.speaker}\n${seg.text}\n\n`;
+        const bookmark = bookmarkedSegments.has(seg.id) ? ' ★' : '';
+        text += `[${formatTime(seg.start_time)}] ${seg.speaker}${bookmark}\n${seg.text}\n`;
+        const notes = annotationsBySegment[seg.id];
+        if (notes && notes.length > 0) {
+          for (const note of notes) {
+            text += `    📝 Note: ${note.text}\n`;
+          }
+        }
+        text += '\n';
       }
       res.setHeader('Content-Type', 'text/plain; charset=utf-8');
       res.setHeader('Content-Disposition', `attachment; filename="${safeName}.txt"`);
@@ -1208,12 +1281,17 @@ router.get('/:id/export/:format', async (req: AuthRequest, res: Response) => {
       ];
 
       for (const seg of segments) {
+        const isBookmarked = bookmarkedSegments.has(seg.id);
+        const speakerRuns: any[] = [
+          new TextRun({ text: `[${formatTime(seg.start_time)}] `, color: '888888', size: 20 }),
+          new TextRun({ text: seg.speaker, bold: true, size: 22 }),
+        ];
+        if (isBookmarked) {
+          speakerRuns.push(new TextRun({ text: '  ★ Bookmarked', color: 'D97706', size: 18, italics: true }));
+        }
         children.push(
           new Paragraph({
-            children: [
-              new TextRun({ text: `[${formatTime(seg.start_time)}] `, color: '888888', size: 20 }),
-              new TextRun({ text: seg.speaker, bold: true, size: 22 }),
-            ],
+            children: speakerRuns,
             spacing: { before: 200 },
             border: { bottom: { style: BorderStyle.SINGLE, size: 1, color: 'DDDDDD' } },
           }),
@@ -1222,6 +1300,22 @@ router.get('/:id/export/:format', async (req: AuthRequest, res: Response) => {
             spacing: { after: 120 },
           })
         );
+
+        const notes = annotationsBySegment[seg.id];
+        if (notes && notes.length > 0) {
+          for (const note of notes) {
+            children.push(
+              new Paragraph({
+                children: [
+                  new TextRun({ text: '   Note: ', bold: true, color: 'D97706', size: 20 }),
+                  new TextRun({ text: note.text, italics: true, color: '555555', size: 20 }),
+                ],
+                spacing: { after: 80 },
+                indent: { left: 360 },
+              })
+            );
+          }
+        }
       }
 
       const doc = new Document({
@@ -1256,9 +1350,25 @@ router.get('/:id/export/:format', async (req: AuthRequest, res: Response) => {
         doc.fontSize(9).font('Helvetica').fillColor('#888888')
           .text(`[${formatTime(seg.start_time)}] `, { continued: true });
         doc.fontSize(11).font('Helvetica-Bold').fillColor('#000000')
-          .text(seg.speaker);
+          .text(seg.speaker, { continued: bookmarkedSegments.has(seg.id) });
+        if (bookmarkedSegments.has(seg.id)) {
+          doc.fontSize(9).font('Helvetica-Oblique').fillColor('#D97706')
+            .text('  ★ Bookmarked');
+        }
         doc.fontSize(10).font('Helvetica').fillColor('#333333')
           .text(seg.text);
+
+        const notes = annotationsBySegment[seg.id];
+        if (notes && notes.length > 0) {
+          for (const note of notes) {
+            if (doc.y > 700) doc.addPage();
+            doc.fontSize(9).font('Helvetica-Bold').fillColor('#D97706')
+              .text('   Note: ', { continued: true, indent: 20 });
+            doc.font('Helvetica-Oblique').fillColor('#555555')
+              .text(note.text);
+          }
+        }
+
         doc.moveDown(0.5);
       }
 

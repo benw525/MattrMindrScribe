@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
-import { MergeIcon, SplitIcon, ChevronDownIcon, PlusIcon, CheckIcon, XIcon, BookmarkIcon, StickyNoteIcon, Trash2Icon, PencilIcon } from 'lucide-react';
+import { MergeIcon, SplitIcon, ChevronDownIcon, PlusIcon, CheckIcon, XIcon, BookmarkIcon, StickyNoteIcon, Trash2Icon, PencilIcon, XCircleIcon } from 'lucide-react';
 import { TranscriptSegment, TranscriptAnnotation } from '../../types/transcript';
 import { formatDuration } from '../../utils/formatters';
 
@@ -135,6 +135,7 @@ interface SegmentRowProps {
   onAddNote: (segmentId: string) => void;
   onUpdateNote: (annotationId: string, text: string) => void;
   onDeleteNote: (annotationId: string) => void;
+  onDeleteSegment: (segmentId: string) => void;
 }
 
 const SegmentRow = React.memo(function SegmentRow({
@@ -158,6 +159,7 @@ const SegmentRow = React.memo(function SegmentRow({
   onAddNote,
   onUpdateNote,
   onDeleteNote,
+  onDeleteSegment,
 }: SegmentRowProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState('');
@@ -381,6 +383,13 @@ const SegmentRow = React.memo(function SegmentRow({
                 aria-label="Split section">
                 <SplitIcon className="h-3.5 w-3.5" />
               </button>
+              <button
+                onClick={() => onDeleteSegment(segment.id)}
+                className="p-1.5 sm:p-1 text-slate-400 dark:text-slate-500 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/50 rounded transition-colors"
+                title="Delete this segment"
+                aria-label="Delete segment">
+                <Trash2Icon className="h-3.5 w-3.5" />
+              </button>
             </div>
           </div>
 
@@ -451,6 +460,7 @@ interface TranscriptTextProps {
   onAddNote?: (segmentId: string) => void;
   onUpdateNote?: (annotationId: string, text: string) => void;
   onDeleteNote?: (annotationId: string) => void;
+  onDeleteSegment?: (segmentId: string) => void;
   showBookmarksOnly?: boolean;
 }
 export const TranscriptText = React.memo(function TranscriptText({
@@ -470,6 +480,7 @@ export const TranscriptText = React.memo(function TranscriptText({
   onAddNote,
   onUpdateNote,
   onDeleteNote,
+  onDeleteSegment,
   showBookmarksOnly = false,
 }: TranscriptTextProps) {
   const [userScrolled, setUserScrolled] = useState(false);
@@ -601,6 +612,10 @@ export const TranscriptText = React.memo(function TranscriptText({
     onDeleteNote?.(annotationId);
   }, [onDeleteNote]);
 
+  const handleDeleteSegment = useCallback((segmentId: string) => {
+    onDeleteSegment?.(segmentId);
+  }, [onDeleteSegment]);
+
   if (segments.length === 0) {
     return (
       <div className="flex-1 flex items-center justify-center p-8 text-slate-500 dark:text-slate-400">
@@ -663,6 +678,7 @@ export const TranscriptText = React.memo(function TranscriptText({
               onAddNote={handleAddNote}
               onUpdateNote={handleUpdateNote}
               onDeleteNote={handleDeleteNote}
+              onDeleteSegment={handleDeleteSegment}
             />
           );
         })}

@@ -356,6 +356,18 @@ export function TranscriptViewerPage() {
     autoSave('Split section');
     toast.success('Section split');
   }, [pushUndo, updateTranscript, autoSave]);
+  const handleDeleteSegment = useCallback((segmentId: string) => {
+    const t = transcriptRef.current;
+    if (!t) return;
+    const idx = t.segments.findIndex((s) => s.id === segmentId);
+    if (idx === -1) return;
+    if (!window.confirm('Delete this segment? This action can be undone with Undo.')) return;
+    pushUndo('Delete segment');
+    const newSegments = t.segments.filter((s) => s.id !== segmentId);
+    updateTranscript(t.id, { segments: newSegments });
+    autoSave('Delete segment');
+    toast.success('Segment deleted');
+  }, [pushUndo, updateTranscript, autoSave]);
   const segmentSpeakers = useMemo(() => Array.from(
     new Set(transcript.segments.map((s) => s.speaker))
   ), [transcript.segments]);
@@ -987,6 +999,7 @@ export function TranscriptViewerPage() {
                 onAddNote={handleAddNote}
                 onUpdateNote={handleUpdateNote}
                 onDeleteNote={handleDeleteNote}
+                onDeleteSegment={handleDeleteSegment}
                 showBookmarksOnly={showBookmarksOnly} />
 
               </div>
@@ -1090,6 +1103,7 @@ export function TranscriptViewerPage() {
                 onAddNote={handleAddNote}
                 onUpdateNote={handleUpdateNote}
                 onDeleteNote={handleDeleteNote}
+                onDeleteSegment={handleDeleteSegment}
                 showBookmarksOnly={showBookmarksOnly} />
 
                 </div>

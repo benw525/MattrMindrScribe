@@ -15,7 +15,9 @@ import {
   FileTypeIcon,
   FileIcon,
   ChevronDownIcon,
-  SendIcon } from
+  SendIcon,
+  ToggleLeftIcon,
+  ToggleRightIcon } from
 'lucide-react';
 import { toast } from 'sonner';
 
@@ -59,6 +61,7 @@ export function TranscriptToolbar({
   const navigate = useNavigate();
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [includeAnnotations, setIncludeAnnotations] = useState(false);
   const exportBtnRef = useRef<HTMLButtonElement>(null);
   const exportMenuRef = useRef<HTMLDivElement>(null);
   const [menuPos, setMenuPos] = useState({ top: 0, left: 0 });
@@ -93,7 +96,8 @@ export function TranscriptToolbar({
     setExporting(true);
     try {
       const token = localStorage.getItem('auth_token');
-      const response = await fetch(`/api/transcripts/${transcriptId}/export/${format}`, {
+      const exportUrl = `/api/transcripts/${transcriptId}/export/${format}${includeAnnotations ? '?annotations=true' : ''}`;
+      const response = await fetch(exportUrl, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!response.ok) {
@@ -106,14 +110,14 @@ export function TranscriptToolbar({
       const filenameMatch = disposition.match(/filename="?([^"]+)"?/);
       const filename = filenameMatch ? filenameMatch[1] : `transcript.${format}`;
 
-      const url = URL.createObjectURL(blob);
+      const blobUrl = URL.createObjectURL(blob);
       const a = document.createElement('a');
-      a.href = url;
+      a.href = blobUrl;
       a.download = filename;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      URL.revokeObjectURL(blobUrl);
 
       toast.success(`Exported as ${format.toUpperCase()}`);
     } catch (err: any) {
@@ -191,6 +195,18 @@ export function TranscriptToolbar({
             ref={exportMenuRef}
             style={{ position: 'fixed', top: menuPos.top, left: menuPos.left, zIndex: 9999 }}
             className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-xl w-56 py-1 overflow-hidden">
+            <button
+              onClick={() => setIncludeAnnotations(!includeAnnotations)}
+              className="w-full flex items-center gap-3 px-3 py-2.5 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors text-left">
+              {includeAnnotations ?
+                <ToggleRightIcon className="h-4 w-4 text-amber-500 flex-shrink-0" /> :
+                <ToggleLeftIcon className="h-4 w-4 text-slate-400 flex-shrink-0" />
+              }
+              <span className={includeAnnotations ? 'text-amber-600 dark:text-amber-400 font-medium' : ''}>
+                Include Notes
+              </span>
+            </button>
+            <div className="border-t border-slate-100 dark:border-slate-700 my-1" />
             {EXPORT_FORMATS.map((fmt) => {
               const Icon = fmt.icon;
               return (
