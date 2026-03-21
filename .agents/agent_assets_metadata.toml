@@ -6,3 +6,9 @@ id = "iIUig75pvgKPuTIz758u1"
 uri = "file://MattrMindrScribe_Lag_Analysis.rtf"
 type = "unspecified"
 title = "Comprehensive Lag Analysis (Updated) - Safari-Specific Issues Added"
+
+[[outputs]]
+id = "j4CZgICPy1K6HEWh_mmIK"
+uri = "file://MattrMindrScribe_Pipeline_Overview.docx"
+type = "word_document"
+title = "MattrMindrScribe Pipeline Overview"
