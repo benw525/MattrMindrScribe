@@ -638,7 +638,7 @@ router.patch('/:id', async (req: AuthRequest, res: Response) => {
             );
           }
           await client.query(
-            `DELETE FROM transcript_annotations WHERE transcript_id = $1 AND segment_id NOT IN (SELECT id FROM transcript_segments WHERE transcript_id = $1)`,
+            `DELETE FROM transcript_annotations WHERE transcript_id = $1 AND segment_id NOT IN (SELECT id::text FROM transcript_segments WHERE transcript_id = $1)`,
             [id]
           );
         }
