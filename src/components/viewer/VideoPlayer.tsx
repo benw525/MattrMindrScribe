@@ -9,6 +9,7 @@ interface VideoPlayerProps {
   onTogglePlay: () => void;
   onSeek: (time: number) => void;
   mediaUrl?: string | null;
+  playbackRate?: number;
 }
 
 export function VideoPlayer({
@@ -18,6 +19,7 @@ export function VideoPlayer({
   onTogglePlay,
   onSeek,
   mediaUrl,
+  playbackRate = 1,
 }: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const isSeeking = useRef(false);
@@ -39,6 +41,12 @@ export function VideoPlayer({
       video.pause();
     }
   }, [isPlaying]);
+
+  useEffect(() => {
+    if (videoRef.current) {
+      videoRef.current.playbackRate = playbackRate;
+    }
+  }, [playbackRate]);
 
   useEffect(() => {
     const video = videoRef.current;

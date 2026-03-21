@@ -948,7 +948,8 @@ export function TranscriptViewerPage() {
                   duration={transcript.duration}
                   onTogglePlay={togglePlayPause}
                   onSeek={seek}
-                  mediaUrl={mediaUrl} />
+                  mediaUrl={mediaUrl}
+                  playbackRate={playbackRate} />
 
                     <div className="mt-6 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4 shadow-sm">
                       <h4 className="text-sm font-semibold text-slate-900 dark:text-white mb-2">
@@ -996,7 +997,8 @@ export function TranscriptViewerPage() {
                 duration={transcript.duration}
                 onTogglePlay={togglePlayPause}
                 onSeek={seek}
-                mediaUrl={mediaUrl} />
+                mediaUrl={mediaUrl}
+                playbackRate={playbackRate} />
 
                 </div> :
 
