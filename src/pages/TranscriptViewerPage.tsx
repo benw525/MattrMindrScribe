@@ -212,30 +212,15 @@ export function TranscriptViewerPage() {
       window.removeEventListener('mouseup', handleMouseUp);
     };
   }, []);
-  if (!transcript) {
-    if (transcriptsLoading || directLoading) {
-      return (
-        <div className="flex-1 flex items-center justify-center bg-slate-50 dark:bg-slate-950">
-          <div className="h-8 w-8 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
-        </div>);
-    }
-    return (
-      <div className="flex-1 flex flex-col items-center justify-center bg-slate-50 dark:bg-slate-950">
-        <h2 className="text-xl font-semibold text-slate-900 dark:text-white mb-2">
-          Transcript not found
-        </h2>
-        <button
-          onClick={() => navigate('/app')}
-          className="text-indigo-600 dark:text-indigo-400 hover:underline">
-          Return to Dashboard
-        </button>
-      </div>);
-  }
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingDescriptionRef = useRef<string | null>(null);
+  const transcriptRef = useRef(transcript);
+  transcriptRef.current = transcript;
+  const uniqueSpeakersRef = useRef<string[]>([]);
 
   const autoSave = useCallback((description: string) => {
-    if (!transcript) return;
+    const t = transcriptRef.current;
+    if (!t) return;
     pendingDescriptionRef.current = description;
     if (saveTimerRef.current) {
       clearTimeout(saveTimerRef.current);
@@ -243,7 +228,7 @@ export function TranscriptViewerPage() {
     saveTimerRef.current = setTimeout(async () => {
       try {
         const desc = pendingDescriptionRef.current || description;
-        const newVersion = await api.transcripts.createVersion(transcript.id, desc);
+        const newVersion = await api.transcripts.createVersion(t.id, desc);
         setVersions((prev) => [newVersion, ...prev]);
         pendingDescriptionRef.current = null;
       } catch (err) {
@@ -258,9 +243,6 @@ export function TranscriptViewerPage() {
     };
   }, []);
 
-  const transcriptRef = useRef(transcript);
-  transcriptRef.current = transcript;
-
   const pushUndo = useCallback((description: string) => {
     const t = transcriptRef.current;
     if (!t) return;
@@ -273,23 +255,26 @@ export function TranscriptViewerPage() {
     );
   }, []);
   const handleUndo = useCallback(() => {
-    if (undoStack.length === 0) return;
+    const t = transcriptRef.current;
+    if (!t || undoStack.length === 0) return;
     const last = undoStack[undoStack.length - 1];
-    updateTranscript(transcript.id, {
+    updateTranscript(t.id, {
       segments: last.segments
     });
     setUndoStack((prev) => prev.slice(0, -1));
     autoSave(`Undo: ${last.description}`);
     toast.success(`Undone: ${last.description}`);
-  }, [undoStack, transcript.id, updateTranscript, autoSave]);
+  }, [undoStack, transcript?.id, updateTranscript, autoSave]);
 
   const handleSave = useCallback(async () => {
+    const t = transcriptRef.current;
+    if (!t) return;
     if (saveTimerRef.current) {
       clearTimeout(saveTimerRef.current);
       saveTimerRef.current = null;
     }
     try {
-      const newVersion = await api.transcripts.createVersion(transcript.id, 'Manual save');
+      const newVersion = await api.transcripts.createVersion(t.id, 'Manual save');
       setVersions((prev) => [newVersion, ...prev]);
       setUndoStack([]);
       toast.success('Transcript saved');
@@ -297,7 +282,7 @@ export function TranscriptViewerPage() {
       console.error('Failed to save version:', err);
       toast.error('Failed to save version');
     }
-  }, [transcript.id]);
+  }, [transcript?.id]);
   const handleUpdateSegment = useCallback((segmentId: string, newText: string) => {
     const t = transcriptRef.current;
     if (!t) return;
@@ -408,16 +393,16 @@ export function TranscriptViewerPage() {
     const newSegments = [...t.segments];
     newSegments.splice(idx + 1, 0, newSegment);
 
-    updateTranscriptLocal(transcript.id, { segments: newSegments });
+    updateTranscriptLocal(t.id, { segments: newSegments });
     toast.success('New segment added — type your text and press Enter to save');
   }, [pushUndo, updateTranscriptLocal, transcript?.id]);
-  const segmentSpeakers = useMemo(() => Array.from(
-    new Set(transcript.segments.map((s) => s.speaker))
-  ), [transcript.segments]);
+  const segmentSpeakers = useMemo(() => {
+    if (!transcript) return [];
+    return Array.from(new Set(transcript.segments.map((s) => s.speaker)));
+  }, [transcript?.segments]);
   const uniqueSpeakers = useMemo(() => Array.from(
     new Set([...segmentSpeakers, ...customSpeakers])
   ), [segmentSpeakers, customSpeakers]);
-  const uniqueSpeakersRef = useRef(uniqueSpeakers);
   uniqueSpeakersRef.current = uniqueSpeakers;
 
   const handleAddSpeaker = (name: string) => {
@@ -468,7 +453,8 @@ export function TranscriptViewerPage() {
   };
 
   const handleRenameSpeaker = (oldName: string, newName: string) => {
-    if (!newName.trim() || newName.trim() === oldName) {
+    const t = transcriptRef.current;
+    if (!t || !newName.trim() || newName.trim() === oldName) {
       setEditingSpeaker(null);
       return;
     }
@@ -478,10 +464,10 @@ export function TranscriptViewerPage() {
       return;
     }
     pushUndo(`Rename speaker "${oldName}"`);
-    const newSegments = transcript.segments.map((s) =>
+    const newSegments = t.segments.map((s) =>
       s.speaker === oldName ? { ...s, speaker: trimmed } : s
     );
-    updateTranscript(transcript.id, { segments: newSegments });
+    updateTranscript(t.id, { segments: newSegments });
     setCustomSpeakers(prev => prev.map(s => s === oldName ? trimmed : s));
     setSpeakerColors(prev => {
       if (prev[oldName]) {
@@ -575,6 +561,55 @@ export function TranscriptViewerPage() {
   const getSpeakerBorderColor = useCallback((speaker: string) => {
     return getSpeakerColorObj(speaker, speakerColors).border;
   }, [speakerColors]);
+
+  const agentNames = useMemo(() => {
+    const map: Record<string, string> = {};
+    agents.forEach(a => { map[a.id] = a.name; });
+    return map;
+  }, [agents]);
+
+  const handleRevertVersion = useCallback((versionId: string) => {
+    const t = transcriptRef.current;
+    if (!t) return;
+    const version = versions.find((v) => v.id === versionId);
+    if (version) {
+      pushUndo('Revert to version');
+      updateTranscript(t.id, {
+        segments: version.segments
+      });
+      autoSave('Revert to version');
+      toast.success('Reverted to previous version');
+      setShowHistory(false);
+    }
+  }, [versions, transcript?.id, pushUndo, updateTranscript, autoSave]);
+  const isProcessing = useMemo(() => {
+    if (!transcript) return false;
+    return transcript.status === 'processing' || transcript.status === 'pending' || transcript.status === 'resuming';
+  }, [transcript?.status]);
+
+  const isSharedView = !!transcript?.sharePermission;
+  const isReadOnly = transcript?.sharePermission === 'view';
+
+  if (!transcript) {
+    if (transcriptsLoading || directLoading) {
+      return (
+        <div className="flex-1 flex items-center justify-center bg-slate-50 dark:bg-slate-950">
+          <div className="h-8 w-8 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+        </div>);
+    }
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center bg-slate-50 dark:bg-slate-950">
+        <h2 className="text-xl font-semibold text-slate-900 dark:text-white mb-2">
+          Transcript not found
+        </h2>
+        <button
+          onClick={() => navigate('/app')}
+          className="text-indigo-600 dark:text-indigo-400 hover:underline">
+          Return to Dashboard
+        </button>
+      </div>);
+  }
+
   const handleSelectAgent = async (agentId: string, subTypeId: string, customDescription?: string) => {
     if (!transcript) return;
     setLoadingAgentId(agentId);
@@ -634,31 +669,6 @@ export function TranscriptViewerPage() {
       setStreamingContent('');
     }
   };
-
-  const agentNames = useMemo(() => {
-    const map: Record<string, string> = {};
-    agents.forEach(a => { map[a.id] = a.name; });
-    return map;
-  }, [agents]);
-
-  const handleRevertVersion = useCallback((versionId: string) => {
-    const version = versions.find((v) => v.id === versionId);
-    if (version) {
-      pushUndo('Revert to version');
-      updateTranscript(transcript.id, {
-        segments: version.segments
-      });
-      autoSave('Revert to version');
-      toast.success('Reverted to previous version');
-      setShowHistory(false);
-    }
-  }, [versions, transcript.id, pushUndo, updateTranscript, autoSave]);
-  const isProcessing = useMemo(() =>
-    transcript.status === 'processing' || transcript.status === 'pending' || transcript.status === 'resuming',
-  [transcript.status]);
-
-  const isSharedView = !!transcript.sharePermission;
-  const isReadOnly = transcript.sharePermission === 'view';
 
   return (
     <div className="flex-1 flex flex-col h-full bg-white dark:bg-slate-950 relative overflow-hidden">
