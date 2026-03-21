@@ -97,6 +97,13 @@ router.delete('/:id', async (req: AuthRequest, res: Response) => {
       [id, req.userId]
     );
 
+    await pool.query(
+      `UPDATE shares SET revoked_at = NOW()
+       WHERE resource_type = 'folder' AND resource_id = $1
+       AND owner_user_id = $2 AND revoked_at IS NULL`,
+      [id, req.userId]
+    );
+
     const result = await pool.query(
       'DELETE FROM folders WHERE id = $1 AND user_id = $2 RETURNING id',
       [id, req.userId]

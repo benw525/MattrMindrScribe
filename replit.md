@@ -17,6 +17,7 @@ A full-stack application for managing legal case recordings/transcripts. Feature
 - Version history for transcripts (persisted to DB, loaded on page open)
 - Per-segment speaker reassignment (click speaker name to change via dropdown)
 - Present mode for hearings
+- Coworking & sharing: invite other users by email to view or edit transcripts and folders; folder-level sharing inherits to all transcripts within; most-permissive-wins when multiple shares exist; "Shared with Me" sidebar section groups items by sharer; permission-gated viewer (view-only hides edit controls, shows banner); optimistic locking with 409 conflict detection; movement warnings when moving transcripts affects shared access; soft-delete shares (revoked_at)
 - Admin user with unlimited access
 
 ## Tech Stack
@@ -42,6 +43,7 @@ A full-stack application for managing legal case recordings/transcripts. Feature
 - `src/components/` - Reusable UI components
 - `src/contexts/AuthContext.tsx` - Auth state management
 - `src/contexts/TranscriptContext.tsx` - Transcript/folder state management
+- `src/contexts/SharedContext.tsx` - Shared items state management (shared-with-me data)
 - `src/contexts/ThemeContext.tsx` - Dark/light theme
 - `src/utils/api.ts` - API client utility
 - `src/hooks/useAudioPlayer.ts` - Real HTML5 audio/video playback hook with secure media token
@@ -61,6 +63,8 @@ A full-stack application for managing legal case recordings/transcripts. Feature
 - `server/routes/folders.ts` - Folder CRUD + move transcripts + MattrMindr case linking
 - `server/routes/mattrmindr.ts` - MattrMindr integration API (connect, disconnect, status, case search proxy, send files)
 - `server/routes/annotations.ts` - CRUD for transcript annotations (notes between segments, bookmarks on segments)
+- `server/routes/shares.ts` - Sharing API (create, list, update permission, revoke, shared-with-me, folder transcripts, move-check)
+- `server/checkAccess.ts` - Permission checking helper (folder inheritance, most-permissive-wins, direct+folder share resolution)
 - `server/routes/external.ts` - External API for inbound integrations (auth, receive files for transcription, transcription status)
 - `server/replit_integrations/` - OpenAI AI Integrations (audio, chat, image, batch utilities)
 
@@ -83,6 +87,13 @@ A full-stack application for managing legal case recordings/transcripts. Feature
 - `POST /api/transcripts/:id/annotations` - Create annotation (type: note or bookmark, segmentId required)
 - `PATCH /api/transcripts/:id/annotations/:annotationId` - Update annotation text
 - `DELETE /api/transcripts/:id/annotations/:annotationId` - Delete annotation
+- `POST /api/shares` - Create share (email, resourceType, resourceId, permission)
+- `GET /api/shares/resource/:type/:id` - List shares for a resource
+- `PATCH /api/shares/:shareId` - Update share permission
+- `DELETE /api/shares/:shareId` - Revoke share (soft delete)
+- `GET /api/shares/shared-with-me` - List items shared with current user
+- `GET /api/shares/folder/:folderId/transcripts` - List transcripts in a shared folder
+- `GET /api/shares/move-check` - Check if moving transcripts affects shared access
 - `GET /api/transcripts` - List user transcripts
 - `GET /api/transcripts/:id/detail` - Get single transcript with segments (fallback for page reload)
 - `POST /api/transcripts/presigned-upload` - Get presigned S3 URL for direct browser upload
@@ -129,6 +140,7 @@ A full-stack application for managing legal case recordings/transcripts. Feature
 - `transcript_summaries` - AI-generated legal summaries (per-agent, per-transcript)
 - `transcripts.pipeline_log` - JSONB column storing per-step results (whisper, diarization, refinement) with status, stats, and errors
 - `mattrmindr_connections` - MattrMindr integration connections (one per user, stores base_url, email, auth_token)
+- `shares` - Sharing records (resource_type, resource_id, owner_user_id, shared_with_id, permission, revoked_at for soft-delete)
 - `folders.mattrmindr_case_id` / `folders.mattrmindr_case_name` - Links a folder to a MattrMindr case
 
 ## Amazon S3 Storage

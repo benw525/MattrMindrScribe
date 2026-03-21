@@ -5,7 +5,7 @@ import {
   Link,
   useOutletContext } from
 'react-router-dom';
-import { ChevronLeftIcon, EditIcon, CheckIcon, XIcon, PlusIcon, Trash2Icon, PaletteIcon, UsersIcon, MergeIcon, BookmarkIcon } from 'lucide-react';
+import { ChevronLeftIcon, EditIcon, CheckIcon, XIcon, PlusIcon, Trash2Icon, PaletteIcon, UsersIcon, MergeIcon, BookmarkIcon, Share2Icon, EyeIcon, PencilIcon } from 'lucide-react';
 import { AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
 import { useTranscripts } from '../hooks/useTranscripts';
@@ -22,6 +22,7 @@ import { AISummaryPanel } from '../components/viewer/AISummaryPanel';
 import { PipelineSummary } from '../components/viewer/PipelineSummary';
 import { SendToMattrMindrModal } from '../components/viewer/SendToMattrMindrModal';
 import { Transcript, TranscriptSegment, TranscriptVersion, TranscriptAnnotation } from '../types/transcript';
+import { ShareModal } from '../components/sharing/ShareModal';
 import { api } from '../utils/api';
 interface UndoEntry {
   segments: TranscriptSegment[];
@@ -89,6 +90,7 @@ export function TranscriptViewerPage() {
   const [showSummaryPanel, setShowSummaryPanel] = useState(false);
   const [showSendToMattrMindr, setShowSendToMattrMindr] = useState(false);
   const [mattrmindrConnected, setMattrmindrConnected] = useState(false);
+  const [showShareModal, setShowShareModal] = useState(false);
   const [annotations, setAnnotations] = useState<TranscriptAnnotation[]>([]);
   const [showBookmarksOnly, setShowBookmarksOnly] = useState(false);
   const [agents, setAgents] = useState<{ id: string; name: string; icon: string; description: string; subTypes: { id: string; name: string; description: string }[] }[]>([]);
@@ -654,8 +656,24 @@ export function TranscriptViewerPage() {
   const isProcessing = useMemo(() =>
     transcript.status === 'processing' || transcript.status === 'pending' || transcript.status === 'resuming',
   [transcript.status]);
+
+  const isSharedView = !!transcript.sharePermission;
+  const isReadOnly = transcript.sharePermission === 'view';
+
   return (
     <div className="flex-1 flex flex-col h-full bg-white dark:bg-slate-950 relative overflow-hidden">
+      {/* Shared transcript banner */}
+      {isSharedView && (
+        <div className={`flex-shrink-0 px-4 py-2 text-sm font-medium flex items-center gap-2 ${
+          isReadOnly
+            ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-200 border-b border-amber-200 dark:border-amber-800'
+            : 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-200 border-b border-emerald-200 dark:border-emerald-800'
+        }`}>
+          {isReadOnly ? <EyeIcon className="h-4 w-4 flex-shrink-0" /> : <PencilIcon className="h-4 w-4 flex-shrink-0" />}
+          Shared by {transcript.sharedBy || 'someone'} &mdash; {isReadOnly ? 'View Only' : 'Can Edit'}
+        </div>
+      )}
+
       {/* Top Bar */}
       <header className="flex-shrink-0 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 z-10">
         <div className="px-3 sm:px-6 py-2 sm:py-2.5 flex items-center gap-2 sm:gap-4">
@@ -667,7 +685,7 @@ export function TranscriptViewerPage() {
           <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
             <MetadataEditor
               transcript={transcript}
-              onUpdate={(updates) => updateTranscript(transcript.id, updates)} />
+              onUpdate={isReadOnly ? undefined : (updates) => updateTranscript(transcript.id, updates)} />
             <div className="hidden sm:block flex-shrink-0">
               <StatusBadge status={transcript.status} />
             </div>
@@ -692,7 +710,9 @@ export function TranscriptViewerPage() {
             ))}
             onShowSummaries={() => setShowSummaryPanel(true)}
             summaryCount={summaries.length}
-            onSendToMattrMindr={mattrmindrConnected && transcript.status === 'completed' ? () => setShowSendToMattrMindr(true) : undefined} />
+            onSendToMattrMindr={mattrmindrConnected && transcript.status === 'completed' ? () => setShowSendToMattrMindr(true) : undefined}
+            readOnly={isReadOnly}
+            onShare={!isSharedView ? () => setShowShareModal(true) : undefined} />
         </div>
       </header>
 
@@ -760,6 +780,7 @@ export function TranscriptViewerPage() {
                 <span className="hidden sm:inline">{showBookmarksOnly ? 'All' : 'Bookmarks'}</span>
               </button>
             )}
+            {!isReadOnly && (
             <div className="relative flex-shrink-0" ref={speakerManagerRef}>
               <button
                 onClick={() => {
@@ -969,6 +990,7 @@ export function TranscriptViewerPage() {
                 </div>
               }
             </div>
+            )}
           </div>
         </div>
       }
@@ -1028,20 +1050,20 @@ export function TranscriptViewerPage() {
                 currentTime={currentTime}
                 isPlaying={isPlaying}
                 onSeek={seek}
-                onUpdateSegment={handleUpdateSegment}
-                onMergeSegments={handleMergeSegments}
-                onSplitSegment={handleSplitSegment}
+                onUpdateSegment={isReadOnly ? undefined : handleUpdateSegment}
+                onMergeSegments={isReadOnly ? undefined : handleMergeSegments}
+                onSplitSegment={isReadOnly ? undefined : handleSplitSegment}
                 allSpeakers={uniqueSpeakers}
-                onChangeSegmentSpeaker={handleChangeSegmentSpeaker}
+                onChangeSegmentSpeaker={isReadOnly ? undefined : handleChangeSegmentSpeaker}
                 speakerColors={speakerColors}
-                onAddSpeakerFromDropdown={handleAddSpeakerFromDropdown}
+                onAddSpeakerFromDropdown={isReadOnly ? undefined : handleAddSpeakerFromDropdown}
                 annotations={annotations}
-                onToggleBookmark={handleToggleBookmark}
-                onAddNote={handleAddNote}
-                onUpdateNote={handleUpdateNote}
-                onDeleteNote={handleDeleteNote}
-                onDeleteSegment={handleDeleteSegment}
-                onAddSegmentAfter={handleAddSegmentAfter}
+                onToggleBookmark={isReadOnly ? undefined : handleToggleBookmark}
+                onAddNote={isReadOnly ? undefined : handleAddNote}
+                onUpdateNote={isReadOnly ? undefined : handleUpdateNote}
+                onDeleteNote={isReadOnly ? undefined : handleDeleteNote}
+                onDeleteSegment={isReadOnly ? undefined : handleDeleteSegment}
+                onAddSegmentAfter={isReadOnly ? undefined : handleAddSegmentAfter}
                 showBookmarksOnly={showBookmarksOnly} />
 
               </div>
@@ -1133,20 +1155,20 @@ export function TranscriptViewerPage() {
                 currentTime={currentTime}
                 isPlaying={isPlaying}
                 onSeek={seek}
-                onUpdateSegment={handleUpdateSegment}
-                onMergeSegments={handleMergeSegments}
-                onSplitSegment={handleSplitSegment}
+                onUpdateSegment={isReadOnly ? undefined : handleUpdateSegment}
+                onMergeSegments={isReadOnly ? undefined : handleMergeSegments}
+                onSplitSegment={isReadOnly ? undefined : handleSplitSegment}
                 allSpeakers={uniqueSpeakers}
-                onChangeSegmentSpeaker={handleChangeSegmentSpeaker}
+                onChangeSegmentSpeaker={isReadOnly ? undefined : handleChangeSegmentSpeaker}
                 speakerColors={speakerColors}
-                onAddSpeakerFromDropdown={handleAddSpeakerFromDropdown}
+                onAddSpeakerFromDropdown={isReadOnly ? undefined : handleAddSpeakerFromDropdown}
                 annotations={annotations}
-                onToggleBookmark={handleToggleBookmark}
-                onAddNote={handleAddNote}
-                onUpdateNote={handleUpdateNote}
-                onDeleteNote={handleDeleteNote}
-                onDeleteSegment={handleDeleteSegment}
-                onAddSegmentAfter={handleAddSegmentAfter}
+                onToggleBookmark={isReadOnly ? undefined : handleToggleBookmark}
+                onAddNote={isReadOnly ? undefined : handleAddNote}
+                onUpdateNote={isReadOnly ? undefined : handleUpdateNote}
+                onDeleteNote={isReadOnly ? undefined : handleDeleteNote}
+                onDeleteSegment={isReadOnly ? undefined : handleDeleteSegment}
+                onAddSegmentAfter={isReadOnly ? undefined : handleAddSegmentAfter}
                 showBookmarksOnly={showBookmarksOnly} />
 
                 </div>
@@ -1214,6 +1236,15 @@ export function TranscriptViewerPage() {
           refreshData();
         }} />
       }
+
+      {showShareModal && transcript && (
+        <ShareModal
+          resourceType="transcript"
+          resourceId={transcript.id}
+          resourceName={transcript.filename}
+          onClose={() => setShowShareModal(false)}
+        />
+      )}
 
       {!isProcessing &&
       <AudioPlayer

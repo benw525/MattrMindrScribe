@@ -114,6 +114,9 @@ function InlineNote({ annotation, onUpdate, onDelete }: InlineNoteProps) {
   );
 }
 
+const noop = () => {};
+const noop2 = (_a: string, _b: string) => {};
+
 interface SegmentRowProps {
   segment: TranscriptSegment;
   isActive: boolean;
@@ -125,44 +128,46 @@ interface SegmentRowProps {
   nextSegmentId: string | null;
   notesAfter: TranscriptAnnotation[];
   onSeek: (time: number) => void;
-  onUpdateSegment: (id: string, newText: string) => void;
-  onMergeSegments: (firstId: string, secondId: string) => void;
-  onSplitSegment: (id: string, splitPosition: number) => void;
+  onUpdateSegment?: (id: string, newText: string) => void;
+  onMergeSegments?: (firstId: string, secondId: string) => void;
+  onSplitSegment?: (id: string, splitPosition: number) => void;
   onChangeSegmentSpeaker?: (segmentId: string, newSpeaker: string) => void;
   onAddSpeakerFromDropdown?: (segmentId: string, name: string) => void;
   onToggleSelect: (id: string) => void;
-  onToggleBookmark: (segmentId: string) => void;
-  onAddNote: (segmentId: string) => void;
-  onUpdateNote: (annotationId: string, text: string) => void;
-  onDeleteNote: (annotationId: string) => void;
-  onDeleteSegment: (segmentId: string) => void;
-  onAddSegmentAfter: (segmentId: string) => void;
+  onToggleBookmark?: (segmentId: string) => void;
+  onAddNote?: (segmentId: string) => void;
+  onUpdateNote?: (annotationId: string, text: string) => void;
+  onDeleteNote?: (annotationId: string) => void;
+  onDeleteSegment?: (segmentId: string) => void;
+  onAddSegmentAfter?: (segmentId: string) => void;
 }
 
-const SegmentRow = React.memo(function SegmentRow({
-  segment,
-  isActive,
-  isMobile,
-  isSelected,
-  isBookmarked,
-  speakerColors,
-  allSpeakers,
-  nextSegmentId,
-  notesAfter,
-  onSeek,
-  onUpdateSegment,
-  onMergeSegments,
-  onSplitSegment,
-  onChangeSegmentSpeaker,
-  onAddSpeakerFromDropdown,
-  onToggleSelect,
-  onToggleBookmark,
-  onAddNote,
-  onUpdateNote,
-  onDeleteNote,
-  onDeleteSegment,
-  onAddSegmentAfter,
-}: SegmentRowProps) {
+const SegmentRow = React.memo(function SegmentRow(props: SegmentRowProps) {
+  const {
+    segment,
+    isActive,
+    isMobile,
+    isSelected,
+    isBookmarked,
+    speakerColors,
+    allSpeakers,
+    nextSegmentId,
+    notesAfter,
+    onSeek,
+    onUpdateSegment = noop2,
+    onMergeSegments = noop2,
+    onSplitSegment = noop2,
+    onChangeSegmentSpeaker,
+    onAddSpeakerFromDropdown,
+    onToggleSelect,
+    onToggleBookmark = noop,
+    onAddNote = noop,
+    onUpdateNote = noop2,
+    onDeleteNote = noop,
+    onDeleteSegment = noop,
+    onAddSegmentAfter = noop,
+  } = props;
+  const readOnly = !props.onUpdateSegment;
   const isNewEmpty = segment.text === '' && segment.id.startsWith('new-');
   const [isEditing, setIsEditing] = useState(isNewEmpty);
   const [editValue, setEditValue] = useState('');
@@ -211,9 +216,10 @@ const SegmentRow = React.memo(function SegmentRow({
   }, [showDropdown]);
 
   const handleEditStart = useCallback(() => {
+    if (readOnly) return;
     setIsEditing(true);
     setEditValue(segment.text);
-  }, [segment.text]);
+  }, [segment.text, readOnly]);
 
   const handleSave = useCallback(() => {
     if (editValue.trim() !== segment.text) {
@@ -293,15 +299,15 @@ const SegmentRow = React.memo(function SegmentRow({
           <div className="flex items-center justify-between mb-1">
             <div className="relative" ref={dropdownRef}>
               <button
-                onClick={() => {
+                onClick={readOnly ? undefined : () => {
                   setShowDropdown(prev => !prev);
                   setAddingSpeakerInDropdown(false);
                   setNewSpeakerName('');
                 }}
-                className="flex items-center gap-1 font-semibold text-sm text-slate-900 dark:text-white hover:text-indigo-600 dark:hover:text-indigo-400 active:text-indigo-700 transition-colors rounded px-1.5 py-1 -mx-1.5 -my-1 hover:bg-slate-100 dark:hover:bg-slate-800 active:bg-slate-200 dark:active:bg-slate-700"
-                title="Click to change speaker">
+                className={`flex items-center gap-1 font-semibold text-sm text-slate-900 dark:text-white transition-colors rounded px-1.5 py-1 -mx-1.5 -my-1 ${readOnly ? 'cursor-default' : 'hover:text-indigo-600 dark:hover:text-indigo-400 active:text-indigo-700 hover:bg-slate-100 dark:hover:bg-slate-800 active:bg-slate-200 dark:active:bg-slate-700'}`}
+                title={readOnly ? segment.speaker : "Click to change speaker"}>
                 {segment.speaker}
-                <ChevronDownIcon className="h-3 w-3 opacity-60 sm:opacity-0 sm:group-hover:opacity-60 transition-opacity" />
+                {!readOnly && <ChevronDownIcon className="h-3 w-3 opacity-60 sm:opacity-0 sm:group-hover:opacity-60 transition-opacity" />}
               </button>
               {showDropdown && (
                 <div
@@ -365,43 +371,45 @@ const SegmentRow = React.memo(function SegmentRow({
                 </div>
               )}
             </div>
-            <div className={`flex items-center gap-1 transition-opacity ${isBookmarked ? 'opacity-100' : 'sm:opacity-0 sm:group-hover:opacity-100'}`}>
-              <button
-                onClick={() => onToggleBookmark(segment.id)}
-                className={`p-1.5 sm:p-1 rounded transition-colors ${isBookmarked ? 'text-amber-500 dark:text-amber-400' : 'text-slate-400 dark:text-slate-500 hover:text-amber-500 dark:hover:text-amber-400'} hover:bg-amber-50 dark:hover:bg-amber-950/50`}
-                title={isBookmarked ? 'Remove bookmark' : 'Bookmark this segment'}
-                aria-label="Toggle bookmark">
-                <BookmarkIcon className="h-3.5 w-3.5" fill={isBookmarked ? 'currentColor' : 'none'} />
-              </button>
-              <button
-                onClick={() => onAddNote(segment.id)}
-                className="p-1.5 sm:p-1 text-slate-400 dark:text-slate-500 hover:text-amber-600 dark:hover:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/50 rounded transition-colors"
-                title="Add a note after this segment"
-                aria-label="Add note">
-                <StickyNoteIcon className="h-3.5 w-3.5" />
-              </button>
-              <button
-                onClick={handleEditStart}
-                className={`p-1.5 sm:p-1 rounded transition-colors ${isEditing ? 'text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/50' : 'text-slate-400 dark:text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/50'}`}
-                title="Edit text"
-                aria-label="Edit text">
-                <PencilIcon className="h-3.5 w-3.5" />
-              </button>
-              <button
-                onClick={handleSplit}
-                className="p-1.5 sm:p-1 text-slate-400 dark:text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400 active:text-indigo-700 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 active:bg-indigo-100 dark:active:bg-indigo-950/70 rounded transition-colors"
-                title="Split this section"
-                aria-label="Split section">
-                <SplitIcon className="h-3.5 w-3.5" />
-              </button>
-              <button
-                onClick={() => onDeleteSegment(segment.id)}
-                className="p-1.5 sm:p-1 text-slate-400 dark:text-slate-500 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/50 rounded transition-colors"
-                title="Delete this segment"
-                aria-label="Delete segment">
-                <Trash2Icon className="h-3.5 w-3.5" />
-              </button>
-            </div>
+            {!readOnly && (
+              <div className={`flex items-center gap-1 transition-opacity ${isBookmarked ? 'opacity-100' : 'sm:opacity-0 sm:group-hover:opacity-100'}`}>
+                <button
+                  onClick={() => onToggleBookmark(segment.id)}
+                  className={`p-1.5 sm:p-1 rounded transition-colors ${isBookmarked ? 'text-amber-500 dark:text-amber-400' : 'text-slate-400 dark:text-slate-500 hover:text-amber-500 dark:hover:text-amber-400'} hover:bg-amber-50 dark:hover:bg-amber-950/50`}
+                  title={isBookmarked ? 'Remove bookmark' : 'Bookmark this segment'}
+                  aria-label="Toggle bookmark">
+                  <BookmarkIcon className="h-3.5 w-3.5" fill={isBookmarked ? 'currentColor' : 'none'} />
+                </button>
+                <button
+                  onClick={() => onAddNote(segment.id)}
+                  className="p-1.5 sm:p-1 text-slate-400 dark:text-slate-500 hover:text-amber-600 dark:hover:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/50 rounded transition-colors"
+                  title="Add a note after this segment"
+                  aria-label="Add note">
+                  <StickyNoteIcon className="h-3.5 w-3.5" />
+                </button>
+                <button
+                  onClick={handleEditStart}
+                  className={`p-1.5 sm:p-1 rounded transition-colors ${isEditing ? 'text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/50' : 'text-slate-400 dark:text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/50'}`}
+                  title="Edit text"
+                  aria-label="Edit text">
+                  <PencilIcon className="h-3.5 w-3.5" />
+                </button>
+                <button
+                  onClick={handleSplit}
+                  className="p-1.5 sm:p-1 text-slate-400 dark:text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400 active:text-indigo-700 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 active:bg-indigo-100 dark:active:bg-indigo-950/70 rounded transition-colors"
+                  title="Split this section"
+                  aria-label="Split section">
+                  <SplitIcon className="h-3.5 w-3.5" />
+                </button>
+                <button
+                  onClick={() => onDeleteSegment(segment.id)}
+                  className="p-1.5 sm:p-1 text-slate-400 dark:text-slate-500 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/50 rounded transition-colors"
+                  title="Delete this segment"
+                  aria-label="Delete segment">
+                  <Trash2Icon className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            )}
           </div>
 
           {isEditing ?
@@ -419,9 +427,9 @@ const SegmentRow = React.memo(function SegmentRow({
               </div>
             </div> :
           <p
-            onClick={handleEditStart}
-            className={`text-sm sm:text-base leading-relaxed cursor-text hover:bg-white dark:hover:bg-slate-800 hover:shadow-sm rounded px-1 -mx-1 transition-all ${segment.text ? 'text-slate-700 dark:text-slate-300' : 'text-slate-400 dark:text-slate-500 italic'}`}>
-              {segment.text || 'Click to add text...'}
+            onClick={readOnly ? undefined : handleEditStart}
+            className={`text-sm sm:text-base leading-relaxed rounded px-1 -mx-1 transition-all ${readOnly ? '' : 'cursor-text hover:bg-white dark:hover:bg-slate-800 hover:shadow-sm'} ${segment.text ? 'text-slate-700 dark:text-slate-300' : 'text-slate-400 dark:text-slate-500 italic'}`}>
+              {segment.text || (readOnly ? '(empty)' : 'Click to add text...')}
             </p>
           }
         </div>
@@ -436,7 +444,7 @@ const SegmentRow = React.memo(function SegmentRow({
         />
       ))}
 
-      {!isMobile &&
+      {!isMobile && !readOnly &&
       <div className="flex items-center pl-14 sm:pl-20 pr-2 -my-0.5">
           <div className="flex-1 flex items-center justify-center gap-3">
             {nextSegmentId &&
@@ -469,9 +477,9 @@ interface TranscriptTextProps {
   currentTime: number;
   isPlaying?: boolean;
   onSeek: (time: number) => void;
-  onUpdateSegment: (id: string, newText: string) => void;
-  onMergeSegments: (firstId: string, secondId: string) => void;
-  onSplitSegment: (id: string, splitPosition: number) => void;
+  onUpdateSegment?: (id: string, newText: string) => void;
+  onMergeSegments?: (firstId: string, secondId: string) => void;
+  onSplitSegment?: (id: string, splitPosition: number) => void;
   allSpeakers?: string[];
   onChangeSegmentSpeaker?: (segmentId: string, newSpeaker: string) => void;
   speakerColors?: Record<string, string>;
@@ -533,7 +541,7 @@ export const TranscriptText = React.memo(function TranscriptText({
   }, []);
 
   const handleMergeSelected = useCallback(() => {
-    if (selectedIds.size < 2) return;
+    if (selectedIds.size < 2 || !onMergeSegments) return;
     const sorted = segments
       .filter(s => selectedIds.has(s.id))
       .sort((a, b) => a.startTime - b.startTime);

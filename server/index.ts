@@ -31,8 +31,10 @@ import folderRoutes from './routes/folders.js';
 import mattrmindrRoutes from './routes/mattrmindr.js';
 import externalRoutes from './routes/external.js';
 import annotationRoutes from './routes/annotations.js';
+import shareRoutes from './routes/shares.js';
 import { authenticateToken } from './middleware/auth.js';
 import pool from './db.js';
+import { checkTranscriptAccessByFileUrl } from './checkAccess.js';
 import { deduplicateExistingSegments, processTranscription } from './transcription.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -71,11 +73,8 @@ app.post('/api/media/token', authenticateToken as any, async (req: any, res) => 
   const { filename } = req.body;
   if (!filename) return res.status(400).json({ error: 'Filename required' });
 
-  const { rows } = await pool.query(
-    'SELECT id FROM transcripts WHERE file_url = $1 AND user_id = $2 LIMIT 1',
-    [filename, req.userId]
-  );
-  if (rows.length === 0) {
+  const access = await checkTranscriptAccessByFileUrl(req.userId, filename);
+  if (access.permission === 'none') {
     return res.status(403).json({ error: 'Access denied' });
   }
 
@@ -139,6 +138,7 @@ app.use('/api/transcripts', transcriptRoutes);
 app.use('/api/folders', folderRoutes);
 app.use('/api/mattrmindr', mattrmindrRoutes);
 app.use('/api/transcripts', annotationRoutes);
+app.use('/api/shares', shareRoutes);
 app.use('/api/external', externalRoutes);
 
 app.get('/api/health', (_req, res) => {
@@ -248,6 +248,29 @@ pool.query(`
   ALTER TABLE transcript_annotations ADD CONSTRAINT chk_annotation_type CHECK (type IN ('note', 'bookmark'));
 `).catch((err: any) => {
   if (!err.message.includes('already exists')) console.error('Migration error (transcript_annotations):', err.message);
+});
+
+pool.query(`
+  CREATE TABLE IF NOT EXISTS shares (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    resource_type VARCHAR(20) NOT NULL,
+    resource_id UUID NOT NULL,
+    owner_user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    shared_with_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    permission VARCHAR(10) NOT NULL DEFAULT 'view',
+    created_at TIMESTAMP DEFAULT NOW(),
+    revoked_at TIMESTAMP DEFAULT NULL,
+    revoked_by UUID DEFAULT NULL REFERENCES users(id) ON DELETE SET NULL,
+    CONSTRAINT chk_share_resource_type CHECK (resource_type IN ('transcript', 'folder')),
+    CONSTRAINT chk_share_permission CHECK (permission IN ('view', 'edit')),
+    CONSTRAINT chk_share_not_self CHECK (owner_user_id != shared_with_id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_shares_resource ON shares(resource_type, resource_id);
+  CREATE INDEX IF NOT EXISTS idx_shares_owner ON shares(owner_user_id);
+  CREATE INDEX IF NOT EXISTS idx_shares_active_shared_with
+    ON shares(shared_with_id) WHERE revoked_at IS NULL;
+`).catch((err: any) => {
+  if (!err.message.includes('already exists')) console.error('Migration error (shares):', err.message);
 });
 
 async function seedAdminAccounts() {

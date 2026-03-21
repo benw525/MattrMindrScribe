@@ -4,6 +4,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'sonner';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { TranscriptProvider } from './contexts/TranscriptContext';
+import { SharedProvider } from './contexts/SharedContext';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { AppLayout } from './components/layout/AppLayout';
 import { DashboardPage } from './pages/DashboardPage';
@@ -114,31 +115,33 @@ export function App() {
         <MobileResumeHandler />
         <AuthProvider>
           <TranscriptProvider>
-            <BrowserRouter>
-              <Routes>
-                <Route path="/" element={<LandingPage />} />
-                <Route path="/login" element={<AuthPage />} />
-                <Route
-                  path="/app"
-                  element={
-                    <ProtectedRoute>
-                      <AppLayout />
-                    </ProtectedRoute>
-                  }>
-                  <Route index element={<DashboardPage />} />
-                  <Route path="transcript/:id" element={<TranscriptViewerPage />} />
-                </Route>
-                <Route
-                  path="/app/transcript/:id/present"
-                  element={
-                    <ProtectedRoute>
-                      <PresentModePage />
-                    </ProtectedRoute>
-                  } />
-                <Route path="*" element={<Navigate to="/" replace />} />
-              </Routes>
-            </BrowserRouter>
-            <Toaster position="bottom-right" richColors />
+            <SharedProvider>
+              <BrowserRouter>
+                <Routes>
+                  <Route path="/" element={<LandingPage />} />
+                  <Route path="/login" element={<AuthPage />} />
+                  <Route
+                    path="/app"
+                    element={
+                      <ProtectedRoute>
+                        <AppLayout />
+                      </ProtectedRoute>
+                    }>
+                    <Route index element={<DashboardPage />} />
+                    <Route path="transcript/:id" element={<TranscriptViewerPage />} />
+                  </Route>
+                  <Route
+                    path="/app/transcript/:id/present"
+                    element={
+                      <ProtectedRoute>
+                        <PresentModePage />
+                      </ProtectedRoute>
+                    } />
+                  <Route path="*" element={<Navigate to="/" replace />} />
+                </Routes>
+              </BrowserRouter>
+              <Toaster position="bottom-right" richColors />
+            </SharedProvider>
           </TranscriptProvider>
         </AuthProvider>
       </ThemeProvider>

@@ -136,18 +136,34 @@ export function TranscriptProvider({ children }: { children: ReactNode }) {
       const toSend = entry ? entry.mergedUpdates : mergedUpdates;
       pendingUpdatesRef.current.delete(id);
       try {
-        const response = await api.transcripts.update(id, toSend);
-        if (response && response.segments && 'segments' in toSend) {
+        const payload: Record<string, unknown> = { ...toSend };
+        if ('segments' in toSend && rollback?.updatedAt) {
+          payload.expectedUpdatedAt = rollback.updatedAt;
+        }
+        const response = await api.transcripts.update(id, payload);
+        if (response) {
           setTranscripts((prev) => prev.map((t) => {
             if (t.id === id) {
-              return { ...t, segments: response.segments };
+              const patch: Partial<Transcript> = {};
+              if (response.segments && 'segments' in toSend) patch.segments = response.segments;
+              if (response.updatedAt) patch.updatedAt = response.updatedAt;
+              return Object.keys(patch).length > 0 ? { ...t, ...patch } : t;
             }
             return t;
           }));
         }
-      } catch (err) {
+      } catch (err: unknown) {
+        const httpErr = err as { status?: number };
         console.error('Failed to update transcript:', err);
-        if (rollback) {
+        if (httpErr?.status === 409) {
+          toast.error('This transcript was modified by another user. Please reload to see the latest version.', {
+            duration: 8000,
+            action: {
+              label: 'Reload',
+              onClick: () => refreshData(),
+            },
+          });
+        } else if (rollback) {
           setTranscripts((prev) => prev.map((t) => (t.id === id ? rollback : t)));
           toast.error('Failed to save changes');
         }
@@ -194,6 +210,21 @@ export function TranscriptProvider({ children }: { children: ReactNode }) {
 
   const moveTranscripts = useCallback(async (ids: string[], folderId: string | null) => {
     try {
+      const fromFolderId = transcripts.find(t => ids.includes(t.id))?.folderId;
+      if (fromFolderId || folderId) {
+        try {
+          const check = await api.shares.moveCheck(ids, fromFolderId, folderId);
+          if (check.affectedUsers && check.affectedUsers.length > 0) {
+            const names = check.affectedUsers.map((u: any) => u.name || u.email).join(', ');
+            const ok = window.confirm(
+              `Moving these transcripts will affect shared access for: ${names}.\n\nDo you want to continue?`
+            );
+            if (!ok) return;
+          }
+        } catch {
+        }
+      }
+
       await api.folders.moveTranscripts(ids, folderId);
       setTranscripts((prev) =>
         prev.map((t) => (ids.includes(t.id) ? { ...t, folderId } : t))
@@ -201,7 +232,7 @@ export function TranscriptProvider({ children }: { children: ReactNode }) {
     } catch (err) {
       console.error('Failed to move transcripts:', err);
     }
-  }, []);
+  }, [transcripts]);
 
   const contextValue = useMemo(() => ({
     transcripts,

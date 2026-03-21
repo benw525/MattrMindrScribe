@@ -1,6 +1,7 @@
 import { Router, Response } from 'express';
 import pool from '../db.js';
 import { authenticateToken, AuthRequest } from '../middleware/auth.js';
+import { checkAccess } from '../checkAccess.js';
 
 const router = Router();
 
@@ -10,11 +11,8 @@ router.get('/:transcriptId/annotations', async (req: AuthRequest, res: Response)
   try {
     const { transcriptId } = req.params;
 
-    const ownership = await pool.query(
-      'SELECT id FROM transcripts WHERE id = $1 AND user_id = $2',
-      [transcriptId, req.userId]
-    );
-    if (ownership.rows.length === 0) {
+    const access = await checkAccess(req.userId!, 'transcript', transcriptId);
+    if (access.permission === 'none') {
       return res.status(404).json({ error: 'Transcript not found' });
     }
 
@@ -45,12 +43,12 @@ router.post('/:transcriptId/annotations', async (req: AuthRequest, res: Response
       return res.status(400).json({ error: 'type must be "note" or "bookmark"' });
     }
 
-    const ownership = await pool.query(
-      'SELECT id FROM transcripts WHERE id = $1 AND user_id = $2',
-      [transcriptId, req.userId]
-    );
-    if (ownership.rows.length === 0) {
+    const access = await checkAccess(req.userId!, 'transcript', transcriptId);
+    if (access.permission === 'none') {
       return res.status(404).json({ error: 'Transcript not found' });
+    }
+    if (!access.isOwner && access.permission !== 'edit') {
+      return res.status(403).json({ error: 'You do not have edit permission' });
     }
 
     if (type === 'bookmark') {
@@ -84,6 +82,14 @@ router.patch('/:transcriptId/annotations/:annotationId', async (req: AuthRequest
     const { transcriptId, annotationId } = req.params;
     const { text } = req.body;
 
+    const access = await checkAccess(req.userId!, 'transcript', transcriptId);
+    if (access.permission === 'none') {
+      return res.status(404).json({ error: 'Transcript not found' });
+    }
+    if (!access.isOwner && access.permission !== 'edit') {
+      return res.status(403).json({ error: 'You do not have edit permission' });
+    }
+
     const { rows } = await pool.query(
       `UPDATE transcript_annotations SET text = $1, updated_at = NOW()
        WHERE id = $2 AND transcript_id = $3 AND user_id = $4
@@ -105,6 +111,14 @@ router.patch('/:transcriptId/annotations/:annotationId', async (req: AuthRequest
 router.delete('/:transcriptId/annotations/:annotationId', async (req: AuthRequest, res: Response) => {
   try {
     const { transcriptId, annotationId } = req.params;
+
+    const access = await checkAccess(req.userId!, 'transcript', transcriptId);
+    if (access.permission === 'none') {
+      return res.status(404).json({ error: 'Transcript not found' });
+    }
+    if (!access.isOwner && access.permission !== 'edit') {
+      return res.status(403).json({ error: 'You do not have edit permission' });
+    }
 
     const { rowCount } = await pool.query(
       'DELETE FROM transcript_annotations WHERE id = $1 AND transcript_id = $2 AND user_id = $3',

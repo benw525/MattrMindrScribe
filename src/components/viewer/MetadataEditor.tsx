@@ -8,7 +8,7 @@ import {
 '../../utils/formatters';
 interface MetadataEditorProps {
   transcript: Transcript;
-  onUpdate: (updates: Partial<Transcript>) => void;
+  onUpdate?: (updates: Partial<Transcript>) => void;
 }
 export function MetadataEditor({ transcript, onUpdate }: MetadataEditorProps) {
   const [isEditingTitle, setIsEditingTitle] = useState(false);
@@ -21,7 +21,7 @@ export function MetadataEditor({ transcript, onUpdate }: MetadataEditorProps) {
     if (isEditingTitle && titleInputRef.current) titleInputRef.current.focus();
   }, [isEditingTitle]);
   const handleSaveTitle = () => {
-    if (titleValue.trim() && titleValue !== transcript.filename) {
+    if (titleValue.trim() && titleValue !== transcript.filename && onUpdate) {
       onUpdate({
         filename: titleValue.trim()
       });
@@ -70,13 +70,14 @@ export function MetadataEditor({ transcript, onUpdate }: MetadataEditorProps) {
           <h1 className="text-base sm:text-xl font-bold text-slate-900 dark:text-white truncate max-w-[70vw] sm:max-w-md">
             {transcript.filename}
           </h1>
-          <button
-          onClick={() => setIsEditingTitle(true)}
-          className="p-1 text-slate-400 opacity-0 group-hover:opacity-100 hover:text-indigo-600 dark:hover:text-indigo-400 transition-all rounded flex-shrink-0"
-          aria-label="Edit title">
-
-            <EditIcon className="h-4 w-4" />
-          </button>
+          {onUpdate && (
+            <button
+            onClick={() => setIsEditingTitle(true)}
+            className="p-1 text-slate-400 opacity-0 group-hover:opacity-100 hover:text-indigo-600 dark:hover:text-indigo-400 transition-all rounded flex-shrink-0"
+            aria-label="Edit title">
+              <EditIcon className="h-4 w-4" />
+            </button>
+          )}
         </div>
       }
 
