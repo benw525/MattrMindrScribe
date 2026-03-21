@@ -381,6 +381,13 @@ const SegmentRow = React.memo(function SegmentRow({
                 <StickyNoteIcon className="h-3.5 w-3.5" />
               </button>
               <button
+                onClick={handleEditStart}
+                className={`p-1.5 sm:p-1 rounded transition-colors ${isEditing ? 'text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/50' : 'text-slate-400 dark:text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/50'}`}
+                title="Edit text"
+                aria-label="Edit text">
+                <PencilIcon className="h-3.5 w-3.5" />
+              </button>
+              <button
                 onClick={handleSplit}
                 className="p-1.5 sm:p-1 text-slate-400 dark:text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400 active:text-indigo-700 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 active:bg-indigo-100 dark:active:bg-indigo-950/70 rounded transition-colors"
                 title="Split this section"
