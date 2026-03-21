@@ -60,6 +60,7 @@ A full-stack application for managing legal case recordings/transcripts. Feature
 - `server/speakerRefinement.ts` - Claude Opus 4 speaker refinement via Anthropic streaming API; simplified, concise prompts that leverage Claude's natural understanding of legal proceedings; two-pass deposition refinement: Pass 1 identifies speaker roster from first 80 segments, Pass 2 uses roster for full transcript refinement; Claude returns `{segments: [{label, text}], identifications}` — both corrected speaker labels AND cleaned text (punctuation, time formatting, capitalization) while preserving filler words verbatim; SINGLE_CALL_LIMIT=800, BATCH_SIZE=700 (respects Claude Opus 4's 32K max output token limit); Q&A post-processing corrects short misattributed utterances using examiner/deponent alternation logic; conditionally sends only the matching recording-type section to Claude; post-batch normalization eliminates generic "Speaker N" leakage; auto-defaults 5 expected speakers for depositions
 - `server/routes/folders.ts` - Folder CRUD + move transcripts + MattrMindr case linking
 - `server/routes/mattrmindr.ts` - MattrMindr integration API (connect, disconnect, status, case search proxy, send files)
+- `server/routes/annotations.ts` - CRUD for transcript annotations (notes between segments, bookmarks on segments)
 - `server/routes/external.ts` - External API for inbound integrations (auth, receive files for transcription, transcription status)
 - `server/replit_integrations/` - OpenAI AI Integrations (audio, chat, image, batch utilities)
 
@@ -78,6 +79,10 @@ A full-stack application for managing legal case recordings/transcripts. Feature
 - `GET /api/auth/me` - Get current user
 - `PUT /api/auth/change-password` - Change password (authenticated)
 - `PATCH /api/auth/settings` - Update user settings (auphonicEnabled toggle)
+- `GET /api/transcripts/:id/annotations` - List annotations (notes + bookmarks) for a transcript
+- `POST /api/transcripts/:id/annotations` - Create annotation (type: note or bookmark, segmentId required)
+- `PATCH /api/transcripts/:id/annotations/:annotationId` - Update annotation text
+- `DELETE /api/transcripts/:id/annotations/:annotationId` - Delete annotation
 - `GET /api/transcripts` - List user transcripts
 - `GET /api/transcripts/:id/detail` - Get single transcript with segments (fallback for page reload)
 - `POST /api/transcripts/presigned-upload` - Get presigned S3 URL for direct browser upload

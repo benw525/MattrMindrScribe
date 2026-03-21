@@ -438,4 +438,14 @@ export const api = {
     sendTranscript: (transcriptId: string, caseId: string, caseName: string) =>
       request(`/mattrmindr/send-transcript/${transcriptId}`, { method: 'POST', body: JSON.stringify({ caseId, caseName }) }),
   },
+  annotations: {
+    list: (transcriptId: string) =>
+      request(`/transcripts/${transcriptId}/annotations`),
+    create: (transcriptId: string, data: { type: 'note' | 'bookmark'; segmentId: string; text?: string }) =>
+      request(`/transcripts/${transcriptId}/annotations`, { method: 'POST', body: JSON.stringify(data) }),
+    update: (transcriptId: string, annotationId: string, text: string) =>
+      request(`/transcripts/${transcriptId}/annotations/${annotationId}`, { method: 'PATCH', body: JSON.stringify({ text }) }),
+    delete: (transcriptId: string, annotationId: string) =>
+      request(`/transcripts/${transcriptId}/annotations/${annotationId}`, { method: 'DELETE' }),
+  },
 };

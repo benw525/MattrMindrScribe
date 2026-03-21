@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
-import { MergeIcon, SplitIcon, ChevronDownIcon, PlusIcon, CheckIcon, XIcon } from 'lucide-react';
-import { TranscriptSegment } from '../../types/transcript';
+import { MergeIcon, SplitIcon, ChevronDownIcon, PlusIcon, CheckIcon, XIcon, BookmarkIcon, StickyNoteIcon, Trash2Icon, PencilIcon } from 'lucide-react';
+import { TranscriptSegment, TranscriptAnnotation } from '../../types/transcript';
 import { formatDuration } from '../../utils/formatters';
 
 const SPEAKER_COLOR_OPTIONS = [
@@ -33,14 +33,97 @@ function getSpeakerColorFromMap(speaker: string, colorMap: Record<string, string
   return SPEAKER_COLOR_OPTIONS[getDefaultColorIndex(speaker)];
 }
 
+interface InlineNoteProps {
+  annotation: TranscriptAnnotation;
+  onUpdate: (id: string, text: string) => void;
+  onDelete: (id: string) => void;
+}
+
+function InlineNote({ annotation, onUpdate, onDelete }: InlineNoteProps) {
+  const [editing, setEditing] = useState(false);
+  const [editText, setEditText] = useState(annotation.text);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    if (editing && textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+      textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
+      textareaRef.current.focus();
+    }
+  }, [editing]);
+
+  const handleSave = () => {
+    if (editText.trim() !== annotation.text) {
+      onUpdate(annotation.id, editText.trim());
+    }
+    setEditing(false);
+  };
+
+  return (
+    <div className="mx-2 sm:mx-0 sm:ml-16 sm:mr-2 my-2 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/50 rounded-lg px-3 py-2 group/note">
+      <div className="flex items-start gap-2">
+        <StickyNoteIcon className="h-3.5 w-3.5 text-amber-500 dark:text-amber-400 flex-shrink-0 mt-0.5" />
+        <div className="flex-1 min-w-0">
+          {editing ? (
+            <div>
+              <textarea
+                ref={textareaRef}
+                value={editText}
+                onChange={(e) => {
+                  setEditText(e.target.value);
+                  if (textareaRef.current) {
+                    textareaRef.current.style.height = 'auto';
+                    textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
+                  }
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSave(); }
+                  if (e.key === 'Escape') { setEditing(false); setEditText(annotation.text); }
+                }}
+                className="w-full text-sm text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 border border-amber-300 dark:border-amber-700 rounded-md p-2 focus:outline-none focus:ring-2 focus:ring-amber-500 resize-none overflow-hidden"
+                rows={1}
+                placeholder="Type your note..."
+              />
+              <div className="flex items-center gap-2 mt-1">
+                <button onClick={handleSave} className="text-xs text-amber-600 dark:text-amber-400 hover:underline">Save</button>
+                <button onClick={() => { setEditing(false); setEditText(annotation.text); }} className="text-xs text-slate-400 hover:underline">Cancel</button>
+              </div>
+            </div>
+          ) : (
+            <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed whitespace-pre-wrap">
+              {annotation.text || <span className="italic text-slate-400">Empty note</span>}
+            </p>
+          )}
+        </div>
+        <div className="flex items-center gap-0.5 opacity-0 group-hover/note:opacity-100 transition-opacity flex-shrink-0">
+          <button
+            onClick={() => { setEditing(true); setEditText(annotation.text); }}
+            className="p-1 text-slate-400 hover:text-amber-600 dark:hover:text-amber-400 rounded transition-colors"
+            title="Edit note">
+            <PencilIcon className="h-3 w-3" />
+          </button>
+          <button
+            onClick={() => onDelete(annotation.id)}
+            className="p-1 text-slate-400 hover:text-red-500 dark:hover:text-red-400 rounded transition-colors"
+            title="Delete note">
+            <Trash2Icon className="h-3 w-3" />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 interface SegmentRowProps {
   segment: TranscriptSegment;
   isActive: boolean;
   isMobile: boolean;
   isSelected: boolean;
+  isBookmarked: boolean;
   speakerColors: Record<string, string>;
   allSpeakers: string[];
   nextSegmentId: string | null;
+  notesAfter: TranscriptAnnotation[];
   onSeek: (time: number) => void;
   onUpdateSegment: (id: string, newText: string) => void;
   onMergeSegments: (firstId: string, secondId: string) => void;
@@ -48,6 +131,10 @@ interface SegmentRowProps {
   onChangeSegmentSpeaker?: (segmentId: string, newSpeaker: string) => void;
   onAddSpeakerFromDropdown?: (segmentId: string, name: string) => void;
   onToggleSelect: (id: string) => void;
+  onToggleBookmark: (segmentId: string) => void;
+  onAddNote: (segmentId: string) => void;
+  onUpdateNote: (annotationId: string, text: string) => void;
+  onDeleteNote: (annotationId: string) => void;
 }
 
 const SegmentRow = React.memo(function SegmentRow({
@@ -55,9 +142,11 @@ const SegmentRow = React.memo(function SegmentRow({
   isActive,
   isMobile,
   isSelected,
+  isBookmarked,
   speakerColors,
   allSpeakers,
   nextSegmentId,
+  notesAfter,
   onSeek,
   onUpdateSegment,
   onMergeSegments,
@@ -65,6 +154,10 @@ const SegmentRow = React.memo(function SegmentRow({
   onChangeSegmentSpeaker,
   onAddSpeakerFromDropdown,
   onToggleSelect,
+  onToggleBookmark,
+  onAddNote,
+  onUpdateNote,
+  onDeleteNote,
 }: SegmentRowProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState('');
@@ -266,7 +359,21 @@ const SegmentRow = React.memo(function SegmentRow({
                 </div>
               )}
             </div>
-            <div className="flex items-center gap-1 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+            <div className={`flex items-center gap-1 transition-opacity ${isBookmarked ? 'opacity-100' : 'sm:opacity-0 sm:group-hover:opacity-100'}`}>
+              <button
+                onClick={() => onToggleBookmark(segment.id)}
+                className={`p-1.5 sm:p-1 rounded transition-colors ${isBookmarked ? 'text-amber-500 dark:text-amber-400' : 'text-slate-400 dark:text-slate-500 hover:text-amber-500 dark:hover:text-amber-400'} hover:bg-amber-50 dark:hover:bg-amber-950/50`}
+                title={isBookmarked ? 'Remove bookmark' : 'Bookmark this segment'}
+                aria-label="Toggle bookmark">
+                <BookmarkIcon className="h-3.5 w-3.5" fill={isBookmarked ? 'currentColor' : 'none'} />
+              </button>
+              <button
+                onClick={() => onAddNote(segment.id)}
+                className="p-1.5 sm:p-1 text-slate-400 dark:text-slate-500 hover:text-amber-600 dark:hover:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/50 rounded transition-colors"
+                title="Add a note after this segment"
+                aria-label="Add note">
+                <StickyNoteIcon className="h-3.5 w-3.5" />
+              </button>
               <button
                 onClick={handleSplit}
                 className="p-1.5 sm:p-1 text-slate-400 dark:text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400 active:text-indigo-700 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 active:bg-indigo-100 dark:active:bg-indigo-950/70 rounded transition-colors"
@@ -300,6 +407,15 @@ const SegmentRow = React.memo(function SegmentRow({
         </div>
       </div>
 
+      {notesAfter.map(note => (
+        <InlineNote
+          key={note.id}
+          annotation={note}
+          onUpdate={onUpdateNote}
+          onDelete={onDeleteNote}
+        />
+      ))}
+
       {!isMobile && nextSegmentId &&
       <div className="flex items-center pl-14 sm:pl-20 pr-2 -my-0.5">
           <div className="flex-1 flex items-center justify-center">
@@ -330,6 +446,12 @@ interface TranscriptTextProps {
   onChangeSegmentSpeaker?: (segmentId: string, newSpeaker: string) => void;
   speakerColors?: Record<string, string>;
   onAddSpeakerFromDropdown?: (segmentId: string, name: string) => void;
+  annotations?: TranscriptAnnotation[];
+  onToggleBookmark?: (segmentId: string) => void;
+  onAddNote?: (segmentId: string) => void;
+  onUpdateNote?: (annotationId: string, text: string) => void;
+  onDeleteNote?: (annotationId: string) => void;
+  showBookmarksOnly?: boolean;
 }
 export const TranscriptText = React.memo(function TranscriptText({
   segments,
@@ -342,7 +464,13 @@ export const TranscriptText = React.memo(function TranscriptText({
   allSpeakers = [],
   onChangeSegmentSpeaker,
   speakerColors = {},
-  onAddSpeakerFromDropdown
+  onAddSpeakerFromDropdown,
+  annotations = [],
+  onToggleBookmark,
+  onAddNote,
+  onUpdateNote,
+  onDeleteNote,
+  showBookmarksOnly = false,
 }: TranscriptTextProps) {
   const [userScrolled, setUserScrolled] = useState(false);
   const userScrollTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -433,6 +561,46 @@ export const TranscriptText = React.memo(function TranscriptText({
     }
   }, [isPlaying]);
 
+  const bookmarkedIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const a of annotations) {
+      if (a.type === 'bookmark') ids.add(a.segmentId);
+    }
+    return ids;
+  }, [annotations]);
+
+  const notesBySegment = useMemo(() => {
+    const map: Record<string, TranscriptAnnotation[]> = {};
+    for (const a of annotations) {
+      if (a.type === 'note') {
+        if (!map[a.segmentId]) map[a.segmentId] = [];
+        map[a.segmentId].push(a);
+      }
+    }
+    return map;
+  }, [annotations]);
+
+  const displaySegments = useMemo(() => {
+    if (!showBookmarksOnly) return segments;
+    return segments.filter(s => bookmarkedIds.has(s.id));
+  }, [segments, showBookmarksOnly, bookmarkedIds]);
+
+  const handleToggleBookmark = useCallback((segmentId: string) => {
+    onToggleBookmark?.(segmentId);
+  }, [onToggleBookmark]);
+
+  const handleAddNote = useCallback((segmentId: string) => {
+    onAddNote?.(segmentId);
+  }, [onAddNote]);
+
+  const handleUpdateNote = useCallback((annotationId: string, text: string) => {
+    onUpdateNote?.(annotationId, text);
+  }, [onUpdateNote]);
+
+  const handleDeleteNote = useCallback((annotationId: string) => {
+    onDeleteNote?.(annotationId);
+  }, [onDeleteNote]);
+
   if (segments.length === 0) {
     return (
       <div className="flex-1 flex items-center justify-center p-8 text-slate-500 dark:text-slate-400">
@@ -468,8 +636,10 @@ export const TranscriptText = React.memo(function TranscriptText({
       )}
 
       <div ref={scrollContainerRef} className="flex-1 overflow-y-auto overscroll-contain px-2 sm:px-8 py-3 sm:py-6 space-y-0 sm:space-y-1">
-        {segments.map((segment, index) => {
-          const nextSegment = index < segments.length - 1 ? segments[index + 1] : null;
+        {displaySegments.map((segment, index) => {
+          const nextSegment = index < displaySegments.length - 1 ? displaySegments[index + 1] : null;
+          const segNotes = notesBySegment[segment.id] || [];
+          const isBookmarked = bookmarkedIds.has(segment.id);
           return (
             <SegmentRow
               key={segment.id}
@@ -477,9 +647,11 @@ export const TranscriptText = React.memo(function TranscriptText({
               isActive={activeSegmentId === segment.id}
               isMobile={isMobile}
               isSelected={selectedIds.has(segment.id)}
+              isBookmarked={isBookmarked}
               speakerColors={speakerColors}
               allSpeakers={allSpeakers}
               nextSegmentId={nextSegment?.id || null}
+              notesAfter={segNotes}
               onSeek={onSeek}
               onUpdateSegment={onUpdateSegment}
               onMergeSegments={onMergeSegments}
@@ -487,6 +659,10 @@ export const TranscriptText = React.memo(function TranscriptText({
               onChangeSegmentSpeaker={onChangeSegmentSpeaker}
               onAddSpeakerFromDropdown={onAddSpeakerFromDropdown}
               onToggleSelect={toggleSelect}
+              onToggleBookmark={handleToggleBookmark}
+              onAddNote={handleAddNote}
+              onUpdateNote={handleUpdateNote}
+              onDeleteNote={handleDeleteNote}
             />
           );
         })}

@@ -5,7 +5,7 @@ import {
   Link,
   useOutletContext } from
 'react-router-dom';
-import { ChevronLeftIcon, EditIcon, CheckIcon, XIcon, PlusIcon, Trash2Icon, PaletteIcon, UsersIcon, MergeIcon } from 'lucide-react';
+import { ChevronLeftIcon, EditIcon, CheckIcon, XIcon, PlusIcon, Trash2Icon, PaletteIcon, UsersIcon, MergeIcon, BookmarkIcon } from 'lucide-react';
 import { AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
 import { useTranscripts } from '../hooks/useTranscripts';
@@ -21,7 +21,7 @@ import { AISummarizeModal } from '../components/viewer/AISummarizeModal';
 import { AISummaryPanel } from '../components/viewer/AISummaryPanel';
 import { PipelineSummary } from '../components/viewer/PipelineSummary';
 import { SendToMattrMindrModal } from '../components/viewer/SendToMattrMindrModal';
-import { Transcript, TranscriptSegment, TranscriptVersion } from '../types/transcript';
+import { Transcript, TranscriptSegment, TranscriptVersion, TranscriptAnnotation } from '../types/transcript';
 import { api } from '../utils/api';
 interface UndoEntry {
   segments: TranscriptSegment[];
@@ -89,6 +89,8 @@ export function TranscriptViewerPage() {
   const [showSummaryPanel, setShowSummaryPanel] = useState(false);
   const [showSendToMattrMindr, setShowSendToMattrMindr] = useState(false);
   const [mattrmindrConnected, setMattrmindrConnected] = useState(false);
+  const [annotations, setAnnotations] = useState<TranscriptAnnotation[]>([]);
+  const [showBookmarksOnly, setShowBookmarksOnly] = useState(false);
   const [agents, setAgents] = useState<{ id: string; name: string; icon: string; description: string; subTypes: { id: string; name: string; description: string }[] }[]>([]);
   const [summaries, setSummaries] = useState<{ id: string; agentType: string; subType: string | null; subTypeName: string | null; summary: string; modelUsed: string; createdAt: string }[]>([]);
   const [loadingAgentId, setLoadingAgentId] = useState<string | null>(null);
@@ -125,6 +127,9 @@ export function TranscriptViewerPage() {
     }).catch(() => {});
     api.transcripts.getSummaries(id).then((s: any[]) => {
       setSummaries(s || []);
+    }).catch(() => {});
+    api.annotations.list(id).then((a: TranscriptAnnotation[]) => {
+      setAnnotations(a || []);
     }).catch(() => {});
   }, [id]);
 
@@ -462,6 +467,52 @@ export function TranscriptViewerPage() {
     handleChangeSegmentSpeaker(segmentId, name);
   }, [handleChangeSegmentSpeaker]);
 
+  const handleToggleBookmark = useCallback(async (segmentId: string) => {
+    if (!id) return;
+    const existing = annotations.find(a => a.type === 'bookmark' && a.segmentId === segmentId);
+    if (existing) {
+      try {
+        await api.annotations.delete(id, existing.id);
+        setAnnotations(prev => {
+          const next = prev.filter(a => a.id !== existing.id);
+          if (!next.some(a => a.type === 'bookmark')) {
+            setShowBookmarksOnly(false);
+          }
+          return next;
+        });
+      } catch { toast.error('Failed to remove bookmark'); }
+    } else {
+      try {
+        const created = await api.annotations.create(id, { type: 'bookmark', segmentId });
+        setAnnotations(prev => [...prev, created]);
+      } catch { toast.error('Failed to add bookmark'); }
+    }
+  }, [id, annotations]);
+
+  const handleAddNote = useCallback(async (segmentId: string) => {
+    if (!id) return;
+    try {
+      const created = await api.annotations.create(id, { type: 'note', segmentId, text: '' });
+      setAnnotations(prev => [...prev, created]);
+    } catch { toast.error('Failed to add note'); }
+  }, [id]);
+
+  const handleUpdateNote = useCallback(async (annotationId: string, text: string) => {
+    if (!id) return;
+    try {
+      const updated = await api.annotations.update(id, annotationId, text);
+      setAnnotations(prev => prev.map(a => a.id === annotationId ? updated : a));
+    } catch { toast.error('Failed to update note'); }
+  }, [id]);
+
+  const handleDeleteNote = useCallback(async (annotationId: string) => {
+    if (!id) return;
+    try {
+      await api.annotations.delete(id, annotationId);
+      setAnnotations(prev => prev.filter(a => a.id !== annotationId));
+    } catch { toast.error('Failed to delete note'); }
+  }, [id]);
+
   const getSpeakerDotColor = useCallback((speaker: string) => {
     return getSpeakerColorObj(speaker, speakerColors).bg;
   }, [speakerColors]);
@@ -643,6 +694,19 @@ export function TranscriptViewerPage() {
               );
             })}
             </div>
+            {annotations.some(a => a.type === 'bookmark') && (
+              <button
+                onClick={() => setShowBookmarksOnly(!showBookmarksOnly)}
+                className={`flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium transition-colors whitespace-nowrap flex-shrink-0 border ${
+                  showBookmarksOnly
+                    ? 'bg-amber-50 dark:bg-amber-950/40 border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-300'
+                    : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:border-amber-400 dark:hover:border-amber-600 hover:text-amber-600 dark:hover:text-amber-400'
+                }`}
+                title={showBookmarksOnly ? 'Show all segments' : 'Show bookmarked only'}>
+                <BookmarkIcon className="h-3 w-3" fill={showBookmarksOnly ? 'currentColor' : 'none'} />
+                <span className="hidden sm:inline">{showBookmarksOnly ? 'All' : 'Bookmarks'}</span>
+              </button>
+            )}
             <div className="relative flex-shrink-0" ref={speakerManagerRef}>
               <button
                 onClick={() => {
@@ -917,7 +981,13 @@ export function TranscriptViewerPage() {
                 allSpeakers={uniqueSpeakers}
                 onChangeSegmentSpeaker={handleChangeSegmentSpeaker}
                 speakerColors={speakerColors}
-                onAddSpeakerFromDropdown={handleAddSpeakerFromDropdown} />
+                onAddSpeakerFromDropdown={handleAddSpeakerFromDropdown}
+                annotations={annotations}
+                onToggleBookmark={handleToggleBookmark}
+                onAddNote={handleAddNote}
+                onUpdateNote={handleUpdateNote}
+                onDeleteNote={handleDeleteNote}
+                showBookmarksOnly={showBookmarksOnly} />
 
               </div>
 
@@ -1014,7 +1084,13 @@ export function TranscriptViewerPage() {
                 allSpeakers={uniqueSpeakers}
                 onChangeSegmentSpeaker={handleChangeSegmentSpeaker}
                 speakerColors={speakerColors}
-                onAddSpeakerFromDropdown={handleAddSpeakerFromDropdown} />
+                onAddSpeakerFromDropdown={handleAddSpeakerFromDropdown}
+                annotations={annotations}
+                onToggleBookmark={handleToggleBookmark}
+                onAddNote={handleAddNote}
+                onUpdateNote={handleUpdateNote}
+                onDeleteNote={handleDeleteNote}
+                showBookmarksOnly={showBookmarksOnly} />
 
                 </div>
             }

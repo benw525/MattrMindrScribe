@@ -13,6 +13,7 @@ import transcriptRoutes from './routes/transcripts.js';
 import folderRoutes from './routes/folders.js';
 import mattrmindrRoutes from './routes/mattrmindr.js';
 import externalRoutes from './routes/external.js';
+import annotationRoutes from './routes/annotations.js';
 import { authenticateToken } from './middleware/auth.js';
 import pool from './db.js';
 import { deduplicateExistingSegments, processTranscription } from './transcription.js';
@@ -120,6 +121,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/transcripts', transcriptRoutes);
 app.use('/api/folders', folderRoutes);
 app.use('/api/mattrmindr', mattrmindrRoutes);
+app.use('/api/transcripts', annotationRoutes);
 app.use('/api/external', externalRoutes);
 
 app.get('/api/health', (_req, res) => {
@@ -209,6 +211,26 @@ pool.query(`
   ALTER TABLE users ADD COLUMN IF NOT EXISTS auphonic_enabled BOOLEAN DEFAULT FALSE;
 `).catch((err: any) => {
   if (!err.message.includes('already exists')) console.error('Migration error (users auphonic_enabled):', err.message);
+});
+
+pool.query(`
+  CREATE TABLE IF NOT EXISTS transcript_annotations (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    transcript_id UUID NOT NULL REFERENCES transcripts(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    type VARCHAR(20) NOT NULL DEFAULT 'note',
+    segment_id VARCHAR(255) NOT NULL,
+    text TEXT DEFAULT '',
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
+  );
+  CREATE INDEX IF NOT EXISTS idx_annotations_transcript ON transcript_annotations(transcript_id);
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_annotations_bookmark_unique
+    ON transcript_annotations(transcript_id, user_id, segment_id) WHERE type = 'bookmark';
+  ALTER TABLE transcript_annotations DROP CONSTRAINT IF EXISTS chk_annotation_type;
+  ALTER TABLE transcript_annotations ADD CONSTRAINT chk_annotation_type CHECK (type IN ('note', 'bookmark'));
+`).catch((err: any) => {
+  if (!err.message.includes('already exists')) console.error('Migration error (transcript_annotations):', err.message);
 });
 
 async function seedAdminAccounts() {

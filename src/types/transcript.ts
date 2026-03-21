@@ -55,6 +55,15 @@ export interface TranscriptVersion {
   changeDescription: string;
 }
 
+export interface TranscriptAnnotation {
+  id: string;
+  type: 'note' | 'bookmark';
+  segmentId: string;
+  text: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
 export interface Folder {
   id: string;
   name: string;
