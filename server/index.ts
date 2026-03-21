@@ -1,4 +1,21 @@
 import 'dotenv/config';
+
+const REQUIRED_ENV_VARS = [
+  'DATABASE_URL',
+  'OPENAI_API_KEY',
+  'ANTHROPIC_API_KEY',
+  'ASSEMBLYAI_API_KEY',
+  'AUPHONIC_API_KEY',
+];
+
+for (const key of REQUIRED_ENV_VARS) {
+  if (!process.env[key]) {
+    console.error(`FATAL: Missing required environment variable: ${key}`);
+    console.error(`Check your .env file at ${process.cwd()}/.env`);
+    process.exit(1);
+  }
+}
+
 import express from 'express';
 import cors from 'cors';
 import path from 'path';

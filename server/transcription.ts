@@ -7,7 +7,7 @@ import { tmpdir } from 'os';
 import OpenAI, { toFile } from 'openai';
 import pool from './db.js';
 import { isCloudStorageUrl, getKeyFromStorageUrl, downloadFromS3 } from './s3.js';
-import { diarizeWithAssemblyAI, mapDiarizationToSegments } from './diarization.js';
+import { diarizeWithAssemblyAI, mapDiarizationToSegments, type EnrichedDiarizationResult } from './diarization.js';
 import { refineSpeakersWithGPT } from './speakerRefinement.js';
 import { cleanAudioWithAuphonic, auphonicConfigured } from './auphonic.js';
 
@@ -508,6 +508,7 @@ export async function processTranscription(transcriptId: string): Promise<void> 
     let duration: number | null = null;
     let diarizationError: string | null = null;
     let refinementError: string | null = null;
+    let enrichedDiarization: EnrichedDiarizationResult | null = null;
 
     if (hasCheckpoint) {
       console.log(`[Transcription] Resuming for "${filename}" (${transcriptId}) — ${existingSegments.length} segments from previous run, skipping to refinement`);
@@ -548,7 +549,7 @@ export async function processTranscription(transcriptId: string): Promise<void> 
           pipelineLog.auphonic = { status: 'processing', startedAt: new Date().toISOString() };
           await savePipelineLog();
 
-          const auphonicResult = await cleanAudioWithAuphonic(sourcePath, filename || `transcript_${transcriptId}`, checkCancelled);
+          const auphonicResult = await cleanAudioWithAuphonic(sourcePath, filename || `transcript_${transcriptId}`, checkCancelled, recordingType);
           auphonicCleanedPath = auphonicResult.cleanedFilePath;
           sourcePath = auphonicResult.cleanedFilePath;
           pipelineLog.auphonic = {
@@ -590,7 +591,9 @@ export async function processTranscription(transcriptId: string): Promise<void> 
             pipelineLog.diarization = { status: 'skipped', reason: 'API key not configured' };
             return null;
           }
-          return await diarizeWithAssemblyAI(sourcePath, expectedSpeakers);
+          const result = await diarizeWithAssemblyAI(sourcePath, expectedSpeakers);
+          enrichedDiarization = result;
+          return result.labels;
         } catch (err: any) {
           console.error(`[Transcription] AssemblyAI diarization failed (non-fatal):`, err.message);
           diarizationError = err.message;
@@ -716,8 +719,8 @@ export async function processTranscription(transcriptId: string): Promise<void> 
     await checkCancelled();
 
     try {
-      console.log(`[Transcription] Step 3: Claude Opus 4.6 speaker refinement...`);
-      allSegments = await refineSpeakersWithGPT(allSegments, expectedSpeakers, recordingType);
+      console.log(`[Transcription] Step 3: Claude Opus 4 speaker refinement...`);
+      allSegments = await refineSpeakersWithGPT(allSegments, expectedSpeakers, recordingType, enrichedDiarization);
       const uniqueSpeakers = [...new Set(allSegments.map(s => s.speaker))];
       const hasGenericLabels = uniqueSpeakers.some(s => /^Speaker\s*\d+$/i.test(s));
       console.log(`[Transcription] Refinement complete: ${uniqueSpeakers.length} speakers: ${uniqueSpeakers.join(', ')}${hasGenericLabels ? ' [WARNING: generic labels remain]' : ''}`);

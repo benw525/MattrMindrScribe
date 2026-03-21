@@ -1,4 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
+import type { EnrichedDiarizationResult } from './diarization.js';
 
 interface Segment {
   speaker: string;
@@ -75,6 +76,232 @@ Body cam recordings are often chaotic with overlapping speech, background noise 
 
   other: `This is an informal or miscellaneous recording. Identify speakers by name or role based on context clues — self-introductions, how they address each other, professional titles, relationship references. Use descriptive labels like "Officer", "Witness", "Narrator", "Interviewer", etc. when names are not available.`,
 };
+
+function buildEnrichedSystemPrompt(): string {
+  return `You are a transcript analyst specializing in legal audio for personal injury law firms. You receive enriched transcripts from body camera footage, depositions, hearings, recorded statements, and other legal recordings. Your job is to produce a clean, accurate, speaker-identified transcript suitable for use in legal proceedings.
+
+You will receive a JSON object containing utterances from AssemblyAI with the following data per utterance:
+- speaker: A generic label (A, B, C, etc.)
+- text: The transcribed speech
+- start / end: Timestamps in milliseconds
+- confidence: Overall utterance confidence (0.0 to 1.0)
+- words: Array of individual words with per-word confidence scores and speaker labels
+- sentiment: POSITIVE, NEGATIVE, or NEUTRAL with a confidence score
+- entities: Named entities detected (locations, persons, dates, etc.)
+
+You will also receive case context when available: known party names, officer names, incident location, and recording type.
+
+Your output is a refined transcript in a structured JSON format.
+
+---
+
+TASK 1: RADIO TRANSMISSION DETECTION
+
+Body camera and dash camera recordings frequently capture radio transmissions — dispatch calls, unit check-ins, cross-chatter from other units, and automated system broadcasts. These are NOT part of the on-scene interaction and must be labeled separately. Attorneys need to distinguish what was said at the scene from what came through the radio.
+
+Use the following converging signals to identify radio transmissions. No single signal is definitive — use the combination:
+
+ACOUSTIC SIGNALS (from AssemblyAI data):
+- Confidence scores: Radio audio is bandwidth-limited and compressed. Words from radio transmissions will consistently show LOWER per-word confidence scores than on-scene speech from the same recording. Look for clusters of words where confidence drops noticeably (typically 0.15-0.30 lower than the on-scene baseline). Establish the baseline from the highest-confidence speaker first, then flag speakers or segments that fall significantly below it.
+- Speaker clustering: Radio audio has a distinct acoustic profile (tinny, compressed, clipped). AssemblyAI typically clusters all radio audio under one or two speaker labels, separate from on-scene speakers. If a speaker label appears only in short bursts with consistently low confidence, it is likely radio.
+
+TEXTUAL SIGNALS (from transcript content):
+- Dispatch vocabulary: 10-codes (10-4, 10-97, 10-8), signal codes, unit numbers (Unit 247, Adam-12), status codes (code 3, code 4), phonetic alphabet (Alpha, Bravo, Charlie used for identifiers)
+- Dispatch sentence structure: "[Unit ID] [directive] [location/subject]" pattern — e.g., "Unit 247 respond to 1520 Oak Street" or "All units be advised suspect vehicle is a blue Honda"
+- Call-and-response patterns: Brief acknowledgments ("10-4", "copy", "en route") following dispatch directives
+- Address/description broadcasts: Unprompted location callouts, suspect descriptions, vehicle descriptions, BOLO alerts that have no conversational context with on-scene speakers
+- Lack of conversational continuity: Radio segments do not respond to or continue the on-scene conversation — they interrupt it
+
+SENTIMENT SIGNALS (from AssemblyAI data):
+- Radio transmissions are almost universally NEUTRAL sentiment with high sentiment confidence (>0.85). Dispatch communication is procedural and emotionless by design. On-scene interactions, especially in incidents involving injury, typically show varied sentiment.
+
+ENTITY SIGNALS (from AssemblyAI data):
+- Radio segments are dense with specific entity types: street addresses, unit/badge numbers, timestamps, vehicle descriptions. The entity density (entities per word) in radio segments is typically much higher than in conversational speech.
+
+IMPORTANT CAVEATS:
+- An officer at the scene may REPEAT information they heard on the radio to people at the scene. This is NOT a radio transmission — it is on-scene speech that happens to contain dispatch-like content. The distinguishing factor is the speaker label and confidence profile, not the vocabulary alone.
+- An officer may speak INTO the radio (keying up to dispatch). This IS on-scene speech — the officer is physically present. Label these as the officer, not as [RADIO]. You can add a note: "[Officer speaks into radio]" if contextually clear.
+- Some radio transmissions may be partially intelligible. If confidence is extremely low (<0.40) across an entire utterance and textual content suggests radio, label it as [RADIO - PARTIALLY UNINTELLIGIBLE] rather than guessing at content.
+- Do NOT alter the transcribed text of radio segments. Transcribe them as-is. The label is for identification, not removal.
+
+---
+
+TASK 2: SPEAKER IDENTIFICATION
+
+Replace generic speaker labels (A, B, C) with identified names or roles.
+
+Use these strategies in order of reliability:
+1. CASE CONTEXT: If the input includes known party names, officer names, or roles, match speakers to these using conversational cues (introductions, name usage, role references).
+2. SELF-IDENTIFICATION: Speakers who state their name, badge number, or title ("This is Officer Martinez, badge 4471").
+3. ROLE INFERENCE: Speakers whose language patterns clearly indicate a role — attorneys use legal terminology and ask structured questions; officers give Miranda warnings or describe observations; medical personnel use clinical language; witnesses describe events they saw.
+4. CONTEXTUAL CLUES: References by other speakers ("Mr. Johnson, can you describe..."), or environmental cues.
+5. UNKNOWN: If a speaker cannot be identified, use a descriptive placeholder: "Unidentified Male 1", "Unidentified Female 2", etc. NEVER guess a name. An incorrect speaker attribution in a legal transcript is worse than an unidentified speaker.
+
+---
+
+TASK 3: TRANSCRIPT REFINEMENT
+
+Clean up the raw transcript for readability and accuracy:
+- Correct obvious mistranscriptions where context makes the intended word clear (e.g., "rite" → "right" in legal context, "sore" → "saw"). Note corrections with [corrected] inline only if the correction is non-obvious.
+- Preserve verbal tics, false starts, and filler words (um, uh, you know) — these are legally significant in depositions and recorded statements. Do NOT clean them up.
+- Preserve profanity exactly as spoken. Do NOT censor or redact.
+- Mark unintelligible segments as [UNINTELLIGIBLE] rather than guessing. Include the timestamp range.
+- Mark crosstalk as [CROSSTALK] when multiple speakers overlap and individual words cannot be reliably attributed.
+- Normalize legal terminology to standard spelling (e.g., ensure "plaintiff" not "plane tiff").
+- Preserve timestamps at speaker transitions and at regular intervals (at minimum every 30 seconds of audio).
+
+---
+
+OUTPUT FORMAT
+
+Return a JSON object with this structure:
+
+{
+  "metadata": {
+    "recording_type": "body_camera | deposition | hearing | phone_call | other",
+    "duration_ms": <total duration>,
+    "speakers_identified": <count>,
+    "radio_segments_detected": <count>,
+    "confidence_baseline": <average confidence of highest-confidence on-scene speaker>,
+    "refinement_notes": "<any global notes about audio quality, issues encountered, etc.>"
+  },
+  "speakers": {
+    "A": {
+      "identified_as": "Officer Martinez",
+      "role": "law_enforcement",
+      "confidence_in_identification": "high | medium | low",
+      "basis": "Self-identified at 00:00:12 — stated name and badge number"
+    },
+    "B": {
+      "identified_as": "[RADIO]",
+      "role": "dispatch",
+      "confidence_in_identification": "high",
+      "basis": "Consistent low word confidence (avg 0.58), dispatch vocabulary, neutral sentiment, no conversational continuity with on-scene speakers"
+    }
+  },
+  "transcript": [
+    {
+      "speaker": "Officer Martinez",
+      "timestamp": "00:00:05",
+      "timestamp_ms": 5000,
+      "end_ms": 12000,
+      "text": "This is Officer Martinez, badge 4471, activating body camera.",
+      "type": "on_scene",
+      "corrections": []
+    },
+    {
+      "speaker": "[RADIO]",
+      "timestamp": "00:00:15",
+      "timestamp_ms": 15000,
+      "end_ms": 22000,
+      "text": "Unit 247 10-97 at 1520 Oak Street, code 3, possible 10-50 with injuries",
+      "type": "radio_transmission",
+      "radio_classification": "dispatch_directive",
+      "corrections": []
+    }
+  ]
+}
+
+RADIO CLASSIFICATION VALUES:
+- dispatch_directive: Dispatch issuing instructions to units
+- unit_acknowledgment: Officer/unit confirming receipt (10-4, copy, en route)
+- bolo_alert: Be On the Lookout broadcast
+- status_update: Unit reporting status (10-8 in service, 10-97 on scene)
+- cross_chatter: Communication between other units not involving the recording officer
+- system_broadcast: Automated system messages (time checks, channel identification)
+- unknown: Radio transmission that cannot be further classified
+
+---
+
+CRITICAL RULES:
+1. ACCURACY OVER COMPLETENESS. If you are not confident in a word, mark it [UNINTELLIGIBLE]. Courts rely on transcript accuracy.
+2. NEVER FABRICATE CONTENT. If audio is unclear, say so. Do not fill gaps with plausible-sounding text.
+3. PRESERVE THE RECORD. Every word spoken at the scene, including profanity, threats, slurs, emotional outbursts, and incomplete sentences, must be preserved exactly as spoken.
+4. RADIO SEGMENTS STAY IN THE TRANSCRIPT. They are labeled and classified, not removed. Attorneys may need the full radio traffic for timeline reconstruction.
+5. SPEAKER ATTRIBUTION ERRORS ARE SERIOUS. When in doubt, use a generic label rather than risk misattribution.
+6. TIMESTAMPS ARE LEGAL EVIDENCE. Ensure they are accurate and consistent. Never adjust timestamps to "clean up" the timeline.`;
+}
+
+function computeSpeakerStats(enrichedData: EnrichedDiarizationResult): Record<string, { avg_word_confidence: number; total_words: number; total_utterances: number }> {
+  const stats: Record<string, { totalConf: number; wordCount: number; utteranceCount: number }> = {};
+
+  for (const utterance of enrichedData.utterances) {
+    if (!stats[utterance.speaker]) {
+      stats[utterance.speaker] = { totalConf: 0, wordCount: 0, utteranceCount: 0 };
+    }
+    stats[utterance.speaker].utteranceCount++;
+    for (const word of utterance.words) {
+      stats[utterance.speaker].totalConf += word.confidence;
+      stats[utterance.speaker].wordCount++;
+    }
+  }
+
+  const result: Record<string, { avg_word_confidence: number; total_words: number; total_utterances: number }> = {};
+  for (const speaker of Object.keys(stats)) {
+    const s = stats[speaker];
+    result[speaker] = {
+      avg_word_confidence: s.wordCount > 0 ? Math.round((s.totalConf / s.wordCount) * 1000) / 1000 : 0,
+      total_words: s.wordCount,
+      total_utterances: s.utteranceCount,
+    };
+  }
+  return result;
+}
+
+function buildEnrichedUserMessage(
+  enrichedData: EnrichedDiarizationResult,
+  speakerStats: Record<string, { avg_word_confidence: number; total_words: number; total_utterances: number }>,
+  recordingType?: string | null,
+): string {
+  const payload = {
+    case_context: {
+      recording_type: recordingType || 'other',
+    },
+    utterances: enrichedData.utterances,
+    sentiment_analysis: enrichedData.sentiment_analysis_results,
+    entities: enrichedData.entities,
+  };
+
+  return `Analyze the following enriched transcript and produce the refined output per your instructions.
+
+SPEAKER CONFIDENCE SUMMARY (pre-computed):
+${JSON.stringify(speakerStats, null, 2)}
+
+This summary shows average word-level confidence per speaker. Speakers with significantly lower average confidence than the highest-confidence speaker are candidates for radio transmission labeling. Use this as a starting signal, then confirm with textual, sentiment, and entity analysis.
+
+FULL ENRICHED TRANSCRIPT:
+${JSON.stringify(payload)}`;
+}
+
+function parseEnrichedResponse(content: string): { transcript: any[]; speakers: Record<string, any>; metadata: any } | null {
+  const cleaned = content.replace(/```json\n?|```\n?/g, '').trim();
+  try {
+    const result = JSON.parse(cleaned);
+    if (result.transcript && Array.isArray(result.transcript)) {
+      return result;
+    }
+  } catch (e: any) {
+    const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      try {
+        const result = JSON.parse(jsonMatch[0]);
+        if (result.transcript && Array.isArray(result.transcript)) {
+          return result;
+        }
+      } catch {}
+    }
+  }
+  return null;
+}
+
+function convertEnrichedToSegments(enrichedResult: { transcript: any[]; speakers: Record<string, any> }): Segment[] {
+  return enrichedResult.transcript.map((entry: any) => ({
+    speaker: entry.speaker || 'Unknown',
+    text: entry.text || '',
+    startTime: (entry.timestamp_ms || 0) / 1000,
+    endTime: (entry.end_ms || entry.timestamp_ms || 0) / 1000,
+  }));
+}
 
 function getRecordingTypeLabel(recordingType: string | null): string {
   const labels: Record<string, string> = {
@@ -442,9 +669,59 @@ function applyDepositionQAPostProcessing(segments: Segment[], knownRoster?: { na
 export async function refineSpeakersWithGPT(
   segments: Segment[],
   expectedSpeakers?: number | null,
-  recordingType?: string | null
+  recordingType?: string | null,
+  enrichedData?: EnrichedDiarizationResult | null,
 ): Promise<Segment[]> {
   if (segments.length === 0) return segments;
+
+  if (enrichedData && enrichedData.utterances.length > 0) {
+    console.log(`[Speaker Refinement] Enriched data available — using enriched Claude Opus pipeline`);
+    console.log(`[Speaker Refinement] ${enrichedData.utterances.length} utterances, ${enrichedData.sentiment_analysis_results.length} sentiment results, ${enrichedData.entities.length} entities`);
+
+    try {
+      const speakerStats = computeSpeakerStats(enrichedData);
+      console.log(`[Speaker Refinement] Speaker confidence stats: ${JSON.stringify(speakerStats)}`);
+
+      const enrichedSystemPrompt = buildEnrichedSystemPrompt();
+      const enrichedUserMessage = buildEnrichedUserMessage(enrichedData, speakerStats, recordingType);
+
+      console.log(`[Speaker Refinement] Sending enriched data to Claude Opus 4 (max_tokens: 16000)...`);
+
+      let content = '';
+      const stream = anthropic.messages.stream({
+        model: 'claude-opus-4-20250514',
+        max_tokens: 16000,
+        temperature: 0.1,
+        system: enrichedSystemPrompt,
+        messages: [{ role: 'user', content: enrichedUserMessage }],
+      });
+
+      for await (const event of stream) {
+        if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
+          content += event.delta.text;
+        }
+      }
+
+      if (content) {
+        console.log(`[Speaker Refinement] Enriched Claude response length: ${content.length} chars`);
+        const enrichedResult = parseEnrichedResponse(content);
+        if (enrichedResult && enrichedResult.transcript.length > 0) {
+          const enrichedSegments = convertEnrichedToSegments(enrichedResult);
+          const radioCount = enrichedResult.transcript.filter((t: any) => t.type === 'radio_transmission').length;
+          const uniqueSpeakers = new Set(enrichedSegments.map(s => s.speaker));
+          console.log(`[Speaker Refinement] Enriched refinement complete: ${uniqueSpeakers.size} speakers, ${radioCount} radio segments detected`);
+          if (enrichedResult.metadata?.refinement_notes) {
+            console.log(`[Speaker Refinement] Notes: ${enrichedResult.metadata.refinement_notes}`);
+          }
+          return enrichedSegments;
+        } else {
+          console.log(`[Speaker Refinement] Enriched response did not parse to valid transcript — falling back to standard refinement`);
+        }
+      }
+    } catch (err: any) {
+      console.error(`[Speaker Refinement] Enriched pipeline failed — falling back to standard refinement:`, err.message);
+    }
+  }
 
   const speakerHint = expectedSpeakers
     ? `The recording is expected to have ${expectedSpeakers} speakers.`
