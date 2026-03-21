@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
-import { MergeIcon, SplitIcon, ChevronDownIcon, PlusIcon, CheckIcon, XIcon, BookmarkIcon, StickyNoteIcon, Trash2Icon, PencilIcon, XCircleIcon } from 'lucide-react';
+import { MergeIcon, SplitIcon, ChevronDownIcon, PlusIcon, CheckIcon, XIcon, BookmarkIcon, StickyNoteIcon, Trash2Icon, PencilIcon, XCircleIcon, PlusCircleIcon } from 'lucide-react';
 import { TranscriptSegment, TranscriptAnnotation } from '../../types/transcript';
 import { formatDuration } from '../../utils/formatters';
 
@@ -136,6 +136,7 @@ interface SegmentRowProps {
   onUpdateNote: (annotationId: string, text: string) => void;
   onDeleteNote: (annotationId: string) => void;
   onDeleteSegment: (segmentId: string) => void;
+  onAddSegmentAfter: (segmentId: string) => void;
 }
 
 const SegmentRow = React.memo(function SegmentRow({
@@ -160,6 +161,7 @@ const SegmentRow = React.memo(function SegmentRow({
   onUpdateNote,
   onDeleteNote,
   onDeleteSegment,
+  onAddSegmentAfter,
 }: SegmentRowProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState('');
@@ -425,9 +427,10 @@ const SegmentRow = React.memo(function SegmentRow({
         />
       ))}
 
-      {!isMobile && nextSegmentId &&
+      {!isMobile &&
       <div className="flex items-center pl-14 sm:pl-20 pr-2 -my-0.5">
-          <div className="flex-1 flex items-center justify-center">
+          <div className="flex-1 flex items-center justify-center gap-3">
+            {nextSegmentId &&
             <button
             onClick={() => onMergeSegments(segment.id, nextSegmentId)}
             className="flex items-center gap-1.5 px-2.5 py-0.5 text-xs text-slate-400 dark:text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 rounded-full transition-all opacity-0 hover:opacity-100 focus:opacity-100"
@@ -435,6 +438,15 @@ const SegmentRow = React.memo(function SegmentRow({
             aria-label="Merge sections">
               <MergeIcon className="h-3 w-3" />
               <span>Merge</span>
+            </button>
+            }
+            <button
+            onClick={() => onAddSegmentAfter(segment.id)}
+            className="flex items-center gap-1.5 px-2.5 py-0.5 text-xs text-slate-400 dark:text-slate-500 hover:text-emerald-600 dark:hover:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/50 rounded-full transition-all opacity-0 hover:opacity-100 focus:opacity-100"
+            title="Add a new segment after this one"
+            aria-label="Add segment">
+              <PlusCircleIcon className="h-3 w-3" />
+              <span>Add</span>
             </button>
           </div>
         </div>
@@ -461,6 +473,7 @@ interface TranscriptTextProps {
   onUpdateNote?: (annotationId: string, text: string) => void;
   onDeleteNote?: (annotationId: string) => void;
   onDeleteSegment?: (segmentId: string) => void;
+  onAddSegmentAfter?: (segmentId: string) => void;
   showBookmarksOnly?: boolean;
 }
 export const TranscriptText = React.memo(function TranscriptText({
@@ -481,6 +494,7 @@ export const TranscriptText = React.memo(function TranscriptText({
   onUpdateNote,
   onDeleteNote,
   onDeleteSegment,
+  onAddSegmentAfter,
   showBookmarksOnly = false,
 }: TranscriptTextProps) {
   const [userScrolled, setUserScrolled] = useState(false);
@@ -616,6 +630,10 @@ export const TranscriptText = React.memo(function TranscriptText({
     onDeleteSegment?.(segmentId);
   }, [onDeleteSegment]);
 
+  const handleAddSegmentAfter = useCallback((segmentId: string) => {
+    onAddSegmentAfter?.(segmentId);
+  }, [onAddSegmentAfter]);
+
   if (segments.length === 0) {
     return (
       <div className="flex-1 flex items-center justify-center p-8 text-slate-500 dark:text-slate-400">
@@ -679,6 +697,7 @@ export const TranscriptText = React.memo(function TranscriptText({
               onUpdateNote={handleUpdateNote}
               onDeleteNote={handleDeleteNote}
               onDeleteSegment={handleDeleteSegment}
+              onAddSegmentAfter={handleAddSegmentAfter}
             />
           );
         })}

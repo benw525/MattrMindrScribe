@@ -368,6 +368,29 @@ export function TranscriptViewerPage() {
     autoSave('Delete segment');
     toast.success('Segment deleted');
   }, [pushUndo, updateTranscript, autoSave]);
+  const handleAddSegmentAfter = useCallback((segmentId: string) => {
+    const t = transcriptRef.current;
+    if (!t) return;
+    const idx = t.segments.findIndex((s) => s.id === segmentId);
+    if (idx === -1) return;
+    const current = t.segments[idx];
+    const next = idx < t.segments.length - 1 ? t.segments[idx + 1] : null;
+    const newStart = current.endTime;
+    const newEnd = next ? next.startTime : current.endTime + 5;
+    const speaker = current.speaker;
+    pushUndo('Add segment');
+    const newSegment: TranscriptSegment = {
+      id: `new-${Date.now()}`,
+      startTime: newStart,
+      endTime: newEnd,
+      speaker,
+      text: ''
+    };
+    const newSegments = [...t.segments];
+    newSegments.splice(idx + 1, 0, newSegment);
+    updateTranscript(t.id, { segments: newSegments });
+    toast.success('New segment added — click the text area to type');
+  }, [pushUndo, updateTranscript]);
   const segmentSpeakers = useMemo(() => Array.from(
     new Set(transcript.segments.map((s) => s.speaker))
   ), [transcript.segments]);
@@ -1000,6 +1023,7 @@ export function TranscriptViewerPage() {
                 onUpdateNote={handleUpdateNote}
                 onDeleteNote={handleDeleteNote}
                 onDeleteSegment={handleDeleteSegment}
+                onAddSegmentAfter={handleAddSegmentAfter}
                 showBookmarksOnly={showBookmarksOnly} />
 
               </div>
@@ -1104,6 +1128,7 @@ export function TranscriptViewerPage() {
                 onUpdateNote={handleUpdateNote}
                 onDeleteNote={handleDeleteNote}
                 onDeleteSegment={handleDeleteSegment}
+                onAddSegmentAfter={handleAddSegmentAfter}
                 showBookmarksOnly={showBookmarksOnly} />
 
                 </div>
