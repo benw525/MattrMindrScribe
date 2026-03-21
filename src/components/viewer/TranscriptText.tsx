@@ -165,7 +165,7 @@ const SegmentRow = React.memo(function SegmentRow({
 }: SegmentRowProps) {
   const isNewEmpty = segment.text === '' && segment.id.startsWith('new-');
   const [isEditing, setIsEditing] = useState(isNewEmpty);
-  const [editValue, setEditValue] = useState(isNewEmpty ? '' : '');
+  const [editValue, setEditValue] = useState('');
   const [showDropdown, setShowDropdown] = useState(false);
   const [addingSpeakerInDropdown, setAddingSpeakerInDropdown] = useState(false);
   const [newSpeakerName, setNewSpeakerName] = useState('');
@@ -178,6 +178,7 @@ const SegmentRow = React.memo(function SegmentRow({
       textareaRef.current.style.height = 'auto';
       textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
       textareaRef.current.focus();
+      textareaRef.current.setSelectionRange(textareaRef.current.value.length, textareaRef.current.value.length);
     }
   }, [isEditing]);
 

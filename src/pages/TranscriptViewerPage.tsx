@@ -62,7 +62,7 @@ export function TranscriptViewerPage() {
     id: string;
   }>();
   const navigate = useNavigate();
-  const { transcripts, updateTranscript, refreshData, loading: transcriptsLoading } = useTranscripts();
+  const { transcripts, updateTranscript, updateTranscriptLocal, refreshData, loading: transcriptsLoading } = useTranscripts();
   const { sidebarHidden, setSidebarHidden } = useOutletContext<{
     selectedFolderId: string | null;
     sidebarHidden: boolean;
@@ -388,9 +388,10 @@ export function TranscriptViewerPage() {
     };
     const newSegments = [...t.segments];
     newSegments.splice(idx + 1, 0, newSegment);
-    updateTranscript(t.id, { segments: newSegments });
-    toast.success('New segment added — click the text area to type');
-  }, [pushUndo, updateTranscript]);
+
+    updateTranscriptLocal(transcript.id, { segments: newSegments });
+    toast.success('New segment added — type your text and press Enter to save');
+  }, [pushUndo, updateTranscriptLocal, transcript?.id]);
   const segmentSpeakers = useMemo(() => Array.from(
     new Set(transcript.segments.map((s) => s.speaker))
   ), [transcript.segments]);

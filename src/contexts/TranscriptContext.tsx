@@ -13,6 +13,7 @@ interface TranscriptContextType {
   startBackgroundUpload: (file: File, description?: string, folderId?: string, expectedSpeakers?: number | null, recordingType?: string, practiceArea?: string) => void;
   dismissUpload: (id: string) => void;
   updateTranscript: (id: string, updates: Partial<Transcript>) => void;
+  updateTranscriptLocal: (id: string, updates: Partial<Transcript>) => void;
   deleteTranscripts: (ids: string[]) => void;
   addFolder: (name: string, caseNumber: string, parentId?: string | null, mattrmindrCaseId?: string | null, mattrmindrCaseName?: string | null) => Promise<void>;
   deleteFolder: (id: string) => void;
@@ -98,6 +99,10 @@ export function TranscriptProvider({ children }: { children: ReactNode }) {
 
   const dismissUpload = useCallback((id: string) => {
     setActiveUploads((prev) => prev.filter((u) => u.id !== id));
+  }, []);
+
+  const updateTranscriptLocal = useCallback((id: string, updates: Partial<Transcript>) => {
+    setTranscripts((prev) => prev.map((t) => t.id === id ? { ...t, ...updates } : t));
   }, []);
 
   const pendingUpdatesRef = useRef<Map<string, { mergedUpdates: Partial<Transcript>; rollback: Transcript; timer: ReturnType<typeof setTimeout> }>>(new Map());
@@ -200,13 +205,14 @@ export function TranscriptProvider({ children }: { children: ReactNode }) {
     startBackgroundUpload,
     dismissUpload,
     updateTranscript,
+    updateTranscriptLocal,
     deleteTranscripts,
     addFolder,
     deleteFolder,
     renameFolder,
     moveTranscripts,
     refreshData,
-  }), [transcripts, folders, loading, activeUploads, addTranscript, uploadFile, startBackgroundUpload, dismissUpload, updateTranscript, deleteTranscripts, addFolder, deleteFolder, renameFolder, moveTranscripts, refreshData]);
+  }), [transcripts, folders, loading, activeUploads, addTranscript, uploadFile, startBackgroundUpload, dismissUpload, updateTranscript, updateTranscriptLocal, deleteTranscripts, addFolder, deleteFolder, renameFolder, moveTranscripts, refreshData]);
 
   return (
     <TranscriptContext.Provider value={contextValue}>
