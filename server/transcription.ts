@@ -6,7 +6,7 @@ import { randomUUID } from 'crypto';
 import { tmpdir } from 'os';
 import OpenAI, { toFile } from 'openai';
 import pool from './db.js';
-import { isCloudStorageUrl, getKeyFromStorageUrl, downloadFromS3 } from './s3.js';
+import { isCloudStorageUrl, getKeyFromStorageUrl, downloadFromS3, uploadFileToS3 } from './s3.js';
 import { diarizeWithAssemblyAI, mapDiarizationToSegments, type EnrichedDiarizationResult } from './diarization.js';
 import { refineSpeakersWithGPT } from './speakerRefinement.js';
 import { cleanAudioWithAuphonic, auphonicConfigured } from './auphonic.js';
@@ -75,6 +75,36 @@ async function getAudioDuration(filePath: string): Promise<number | null> {
 }
 
 const WHISPER_SUPPORTED_FORMATS = new Set(['.flac', '.m4a', '.mp3', '.mp4', '.mpeg', '.mpga', '.oga', '.ogg', '.wav', '.webm']);
+
+const BROWSER_PLAYABLE_FORMATS = new Set(['.mp3', '.wav', '.ogg', '.m4a', '.aac', '.flac', '.webm', '.mp4', '.oga']);
+
+async function convertToBrowserPlayable(
+  sourcePath: string,
+  workDir: string,
+): Promise<string | null> {
+  const ext = path.extname(sourcePath).toLowerCase();
+  if (BROWSER_PLAYABLE_FORMATS.has(ext)) {
+    return null;
+  }
+
+  const convertedPath = path.join(workDir, `browser_playable.mp3`);
+  console.log(`[Transcription] Converting ${ext} to mp3 for browser playback`);
+  await new Promise<void>((resolve, reject) => {
+    const proc = spawn('ffmpeg', [
+      '-y', '-i', sourcePath,
+      '-vn', '-ar', '44100', '-ac', '2',
+      '-b:a', '128k', '-f', 'mp3',
+      convertedPath,
+    ]);
+    proc.stderr.on('data', () => {});
+    proc.on('close', (code) => {
+      if (code !== 0) return reject(new Error(`ffmpeg browser-playable conversion from ${ext} failed with code ${code}`));
+      resolve();
+    });
+    proc.on('error', reject);
+  });
+  return convertedPath;
+}
 
 async function ensureWhisperCompatible(
   sourcePath: string,
@@ -540,6 +570,25 @@ export async function processTranscription(transcriptId: string): Promise<void> 
       }
 
       await mkdir(workDir, { recursive: true });
+
+      if (isCloudStorageUrl(file_url)) {
+        try {
+          const browserPath = await convertToBrowserPlayable(sourcePath, workDir);
+          if (browserPath) {
+            const originalKey = getKeyFromStorageUrl(file_url);
+            const mp3Key = originalKey.replace(/\.[^.]+$/, '.mp3');
+            console.log(`[Transcription] Uploading browser-playable MP3 to S3: ${mp3Key}`);
+            const newFileUrl = await uploadFileToS3(browserPath, mp3Key, 'audio/mpeg');
+            await pool.query(
+              `UPDATE transcripts SET file_url = $1, updated_at = NOW() WHERE id = $2`,
+              [newFileUrl, transcriptId]
+            );
+            console.log(`[Transcription] Updated file_url to browser-playable MP3`);
+          }
+        } catch (err: any) {
+          console.error(`[Transcription] Browser-playable conversion failed (non-fatal):`, err.message);
+        }
+      }
 
       console.log(`[Transcription] Starting for "${filename}" (${transcriptId})${expectedSpeakers ? ` — expecting ${expectedSpeakers} speakers` : ''}`);
 

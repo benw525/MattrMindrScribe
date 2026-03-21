@@ -8,6 +8,7 @@ export interface AccessResult {
   ownerUserId?: string;
   ownerName?: string;
   sharedVia?: 'direct' | 'folder';
+  transcriptId?: string;
 }
 
 function higherPermission(a: Permission, b: Permission): Permission {
@@ -149,5 +150,7 @@ export async function checkTranscriptAccessByFileUrl(
   if (result.rows.length === 0) {
     return { permission: 'none', isOwner: false };
   }
-  return checkAccess(userId, 'transcript', result.rows[0].id);
+  const transcriptId = result.rows[0].id;
+  const accessResult = await checkAccess(userId, 'transcript', transcriptId);
+  return { ...accessResult, transcriptId };
 }

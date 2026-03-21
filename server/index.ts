@@ -24,7 +24,8 @@ import os from 'os';
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import { fileURLToPath } from 'url';
-import { isCloudStorageUrl, getKeyFromStorageUrl, getS3PublicUrl, getPresignedDownloadUrl } from './s3.js';
+import { isCloudStorageUrl, getKeyFromStorageUrl, getS3PublicUrl, getPresignedDownloadUrl, downloadFromS3, uploadFileToS3 } from './s3.js';
+import { spawn } from 'child_process';
 import authRoutes from './routes/auth.js';
 import transcriptRoutes from './routes/transcripts.js';
 import folderRoutes from './routes/folders.js';
@@ -69,6 +70,8 @@ app.use('/uploads', authenticateToken as any, express.static(path.join(__dirname
 
 const mediaTokens = new Map<string, { userId: string; filename: string; expires: number; isCloudStorage: boolean }>();
 
+const BROWSER_PLAYABLE_EXTS = new Set(['.mp3', '.wav', '.ogg', '.m4a', '.aac', '.flac', '.webm', '.mp4', '.oga']);
+
 app.post('/api/media/token', authenticateToken as any, async (req: any, res) => {
   const { filename } = req.body;
   if (!filename) return res.status(400).json({ error: 'Filename required' });
@@ -82,6 +85,54 @@ app.post('/api/media/token', authenticateToken as any, async (req: any, res) => 
   if (isCloudStorageUrl(filename)) {
     try {
       const storageKey = getKeyFromStorageUrl(filename);
+      const ext = path.extname(storageKey).toLowerCase();
+
+      if (!BROWSER_PLAYABLE_EXTS.has(ext)) {
+        console.log(`[Media] File ${ext} not browser-playable, converting on-the-fly to MP3...`);
+        const workDir = path.join(os.tmpdir(), `media_convert_${crypto.randomUUID()}`);
+        await fs.promises.mkdir(workDir, { recursive: true });
+        try {
+          const sourcePath = await downloadFromS3(storageKey);
+          const convertedPath = path.join(workDir, 'converted.mp3');
+          await new Promise<void>((resolve, reject) => {
+            const proc = spawn('ffmpeg', [
+              '-y', '-i', sourcePath,
+              '-vn', '-ar', '44100', '-ac', '2',
+              '-b:a', '128k', '-f', 'mp3',
+              convertedPath,
+            ]);
+            proc.stderr.on('data', () => {});
+            proc.on('close', (code) => {
+              if (code !== 0) return reject(new Error(`ffmpeg conversion failed with code ${code}`));
+              resolve();
+            });
+            proc.on('error', reject);
+          });
+
+          const mp3Key = storageKey.replace(/\.[^.]+$/, '.mp3');
+          const newFileUrl = await uploadFileToS3(convertedPath, mp3Key, 'audio/mpeg');
+          console.log(`[Media] Converted and uploaded MP3: ${mp3Key}`);
+
+          if (access.permission === 'edit' || access.isOwner) {
+            await pool.query(
+              `UPDATE transcripts SET file_url = $1, updated_at = NOW() WHERE id = $2`,
+              [newFileUrl, access.transcriptId]
+            );
+            console.log(`[Media] Updated transcript ${access.transcriptId} file_url to MP3`);
+          }
+
+          try { fs.unlinkSync(sourcePath); } catch {}
+          try { fs.unlinkSync(convertedPath); } catch {}
+          try { fs.rmdirSync(workDir); } catch {}
+
+          const presignedUrl = await getPresignedDownloadUrl(mp3Key);
+          return res.json({ mediaUrl: presignedUrl });
+        } catch (convErr: any) {
+          console.error('[Media] On-the-fly conversion failed:', convErr.message);
+          try { fs.rmSync(workDir, { recursive: true, force: true }); } catch {}
+        }
+      }
+
       const presignedUrl = await getPresignedDownloadUrl(storageKey);
       return res.json({ mediaUrl: presignedUrl });
     } catch (err: any) {

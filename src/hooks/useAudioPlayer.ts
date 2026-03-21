@@ -92,7 +92,7 @@ export function useAudioPlayer(totalDuration: number, fileUrl?: string, mediaTyp
       setCurrentTime(audio.currentTime);
     });
 
-    audio.addEventListener('error', (e) => {
+    audio.addEventListener('error', () => {
       console.error('[Media] Audio element error:', audio.error?.code, audio.error?.message);
       hasRealAudio.current = false;
     });
