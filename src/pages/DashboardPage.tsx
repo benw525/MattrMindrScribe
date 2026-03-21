@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect, useCallback } from 'react';
+import React, { useMemo, useState, useEffect, useCallback, useContext } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { TrashIcon, FileIcon, FolderInputIcon } from 'lucide-react';
@@ -6,6 +6,7 @@ import { useTranscripts } from '../hooks/useTranscripts';
 import { TranscriptCard } from '../components/transcripts/TranscriptCard';
 import { SearchBar } from '../components/transcripts/SearchBar';
 import { toast } from 'sonner';
+import { SharedContext } from '../contexts/SharedContext';
 
 interface SelectionBarProps {
   selectedCount: number;
@@ -100,10 +101,42 @@ export function DashboardPage() {
   const { selectedFolderId } = useOutletContext<{
     selectedFolderId: string | null;
   }>();
+  const sharedCtx = useContext(SharedContext);
+  const sharedFolders = sharedCtx?.sharedFolders || [];
+  const folderTranscripts = sharedCtx?.folderTranscripts || {};
+  const loadFolderTranscripts = sharedCtx?.loadFolderTranscripts;
+
+  const activeSharedFolder = useMemo(() => {
+    if (!selectedFolderId) return null;
+    return sharedFolders.find(sf => sf.folder.id === selectedFolderId) || null;
+  }, [selectedFolderId, sharedFolders]);
+
+  useEffect(() => {
+    if (activeSharedFolder && !folderTranscripts[activeSharedFolder.folder.id] && loadFolderTranscripts) {
+      loadFolderTranscripts(activeSharedFolder.folder.id);
+    }
+  }, [activeSharedFolder, folderTranscripts, loadFolderTranscripts]);
+
+  useEffect(() => {
+    if (activeSharedFolder) {
+      setSelectedIds(new Set());
+      setShowMoveMenu(false);
+    }
+  }, [activeSharedFolder]);
+
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showMoveMenu, setShowMoveMenu] = useState(false);
   const filteredTranscripts = useMemo(() => {
+    if (activeSharedFolder) {
+      const sharedTs = (folderTranscripts[activeSharedFolder.folder.id] || []) as any[];
+      return sharedTs.filter((t: any) => {
+        const matchesSearch =
+          (t.filename || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+          (t.description || '').toLowerCase().includes(searchQuery.toLowerCase());
+        return matchesSearch;
+      });
+    }
     return transcripts.filter((t) => {
       const matchesFolder = selectedFolderId ?
       t.folderId === selectedFolderId :
@@ -113,7 +146,7 @@ export function DashboardPage() {
       t.description.toLowerCase().includes(searchQuery.toLowerCase());
       return matchesFolder && matchesSearch;
     });
-  }, [transcripts, selectedFolderId, searchQuery]);
+  }, [transcripts, selectedFolderId, searchQuery, activeSharedFolder, folderTranscripts]);
   const handleSelect = (id: string, selected: boolean) => {
     const newSelected = new Set(selectedIds);
     if (selected) {
@@ -145,10 +178,12 @@ export function DashboardPage() {
       <header className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-4 sm:px-8 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 sticky top-0 z-10">
         <div>
           <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white">
-            Transcripts
+            {activeSharedFolder ? activeSharedFolder.folder.name : 'Transcripts'}
           </h1>
           <p className="text-sm text-slate-500 dark:text-slate-400">
-            Manage and review your case recordings
+            {activeSharedFolder
+              ? `Shared by ${activeSharedFolder.ownerName}`
+              : 'Manage and review your case recordings'}
           </p>
         </div>
         <SearchBar value={searchQuery} onChange={setSearchQuery} />
@@ -161,9 +196,9 @@ export function DashboardPage() {
           <TranscriptCard
             key={transcript.id}
             transcript={transcript}
-            isSelected={selectedIds.has(transcript.id)}
-            onSelect={handleSelect}
-            selectionMode={selectionMode} />
+            isSelected={!activeSharedFolder && selectedIds.has(transcript.id)}
+            onSelect={activeSharedFolder ? () => {} : handleSelect}
+            selectionMode={!activeSharedFolder && selectionMode} />
 
           )}
           </div> :
@@ -185,7 +220,7 @@ export function DashboardPage() {
       </div>
 
       <AnimatePresence>
-        {selectionMode &&
+        {!activeSharedFolder && selectionMode &&
         <SelectionBar
           selectedCount={selectedIds.size}
           showMoveMenu={showMoveMenu}
