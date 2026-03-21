@@ -2,8 +2,12 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 
 async function getMediaUrl(fileUrl: string): Promise<string | null> {
   const token = localStorage.getItem('auth_token');
-  if (!token || !fileUrl) return null;
+  if (!token || !fileUrl) {
+    console.log('[Media] Skipped: no token or fileUrl', { hasToken: !!token, fileUrl });
+    return null;
+  }
 
+  console.log('[Media] Requesting media token for:', fileUrl);
   try {
     const res = await fetch('/api/media/token', {
       method: 'POST',
@@ -20,11 +24,14 @@ async function getMediaUrl(fileUrl: string): Promise<string | null> {
     const data = await res.json();
 
     if (data.mediaUrl) {
+      console.log('[Media] Got presigned URL (length:', data.mediaUrl.length, ')');
       return data.mediaUrl;
     }
 
     const mediaFilename = data.mediaFilename || fileUrl.split('/').pop();
-    return `/api/media/${mediaFilename}?token=${encodeURIComponent(data.token)}`;
+    const url = `/api/media/${mediaFilename}?token=${encodeURIComponent(data.token)}`;
+    console.log('[Media] Got local media URL:', url);
+    return url;
   } catch (err) {
     console.error('[Media] Token request error:', err);
     return null;
@@ -41,10 +48,18 @@ export function useAudioPlayer(totalDuration: number, fileUrl?: string, mediaTyp
   const isVideo = mediaType === 'video';
 
   useEffect(() => {
-    if (!fileUrl) return;
+    if (!fileUrl) {
+      console.log('[Media] useAudioPlayer: no fileUrl, skipping fetch');
+      return;
+    }
     let cancelled = false;
     getMediaUrl(fileUrl).then((url) => {
-      if (!cancelled && url) setMediaUrl(url);
+      if (!cancelled && url) {
+        console.log('[Media] useAudioPlayer: setting mediaUrl');
+        setMediaUrl(url);
+      } else if (!cancelled && !url) {
+        console.warn('[Media] useAudioPlayer: getMediaUrl returned null');
+      }
     });
     return () => { cancelled = true; };
   }, [fileUrl]);
@@ -52,6 +67,7 @@ export function useAudioPlayer(totalDuration: number, fileUrl?: string, mediaTyp
   useEffect(() => {
     if (!mediaUrl || isVideo) return;
 
+    console.log('[Media] Loading audio element');
     const audio = new Audio();
     audio.preload = 'auto';
     audio.src = mediaUrl;
@@ -76,7 +92,8 @@ export function useAudioPlayer(totalDuration: number, fileUrl?: string, mediaTyp
       setCurrentTime(audio.currentTime);
     });
 
-    audio.addEventListener('error', () => {
+    audio.addEventListener('error', (e) => {
+      console.error('[Media] Audio element error:', audio.error?.code, audio.error?.message);
       hasRealAudio.current = false;
     });
 
