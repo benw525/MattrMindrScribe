@@ -13,7 +13,10 @@ async function getMediaUrl(fileUrl: string): Promise<string | null> {
       },
       body: JSON.stringify({ filename: fileUrl }),
     });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      console.error('[Media] Token request failed:', res.status, await res.text().catch(() => ''));
+      return null;
+    }
     const data = await res.json();
 
     if (data.mediaUrl) {
@@ -22,7 +25,8 @@ async function getMediaUrl(fileUrl: string): Promise<string | null> {
 
     const mediaFilename = data.mediaFilename || fileUrl.split('/').pop();
     return `/api/media/${mediaFilename}?token=${encodeURIComponent(data.token)}`;
-  } catch {
+  } catch (err) {
+    console.error('[Media] Token request error:', err);
     return null;
   }
 }

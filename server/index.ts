@@ -75,6 +75,7 @@ app.post('/api/media/token', authenticateToken as any, async (req: any, res) => 
 
   const access = await checkTranscriptAccessByFileUrl(req.userId, filename);
   if (access.permission === 'none') {
+    console.warn('[Media] Access denied for user', req.userId, 'file_url:', filename);
     return res.status(403).json({ error: 'Access denied' });
   }
 
