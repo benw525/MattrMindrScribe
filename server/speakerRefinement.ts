@@ -62,6 +62,17 @@ After the opening formalities, depositions follow strict Q&A alternation: the ex
 - **Suspect/Subject**: The person being questioned, responds to Miranda warnings.
 - **Attorney**: If present, advises the suspect, may terminate the interrogation.`,
 
+  body_cam: `This is body camera footage from a law enforcement officer. Key roles:
+
+- **Primary Officer**: The officer wearing the body camera. Their voice is typically the loudest and most consistent throughout the recording. They identify themselves by name and badge number, call out their actions, communicate with dispatch, and interact with subjects on scene.
+- **Partner Officer / Backup Officers**: Additional officers who arrive or are already on scene. They may be identified by name when the primary officer addresses them or when they identify themselves to subjects.
+- **Subject / Suspect**: The person the officer is interacting with — could be a suspect, detainee, or person of interest. Often addressed by name during the encounter. May be argumentative, compliant, or unresponsive.
+- **Witness / Bystander**: Civilians present at the scene who may provide statements, ask questions, or interject. Often unnamed unless they provide identification.
+- **Victim / Complainant**: The person who called for assistance or was the victim of an incident. May give a statement describing what happened.
+- **Dispatch**: Voice over the radio providing information, confirming codes, or relaying instructions. Usually brief, clipped communications with radio static or tones.
+
+Body cam recordings are often chaotic with overlapping speech, background noise (sirens, wind, traffic), radio chatter, and movement sounds. Speakers may be difficult to distinguish. Use context clues: radio traffic is always Dispatch, the clearest/loudest voice is usually the Primary Officer, and people addressed directly are usually subjects or witnesses.`,
+
   other: `This is an informal or miscellaneous recording. Identify speakers by name or role based on context clues — self-introductions, how they address each other, professional titles, relationship references. Use descriptive labels like "Officer", "Witness", "Narrator", "Interviewer", etc. when names are not available.`,
 };
 
@@ -71,6 +82,7 @@ function getRecordingTypeLabel(recordingType: string | null): string {
     court_hearing: 'a court hearing',
     recorded_statement: 'a recorded statement',
     police_interrogation: 'a police interrogation',
+    body_cam: 'body camera footage',
     other: 'an informal/other recording',
   };
   return recordingType && labels[recordingType] ? labels[recordingType] : 'unknown';
