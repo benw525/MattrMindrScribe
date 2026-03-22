@@ -42,6 +42,8 @@ export function useAudioPlayer(totalDuration: number, fileUrl?: string, mediaTyp
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [playbackRate, setPlaybackRateState] = useState(1);
+  const [rewindSpeed, setRewindSpeed] = useState(0);
+  const rewindIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const hasRealAudio = useRef(false);
   const [mediaUrl, setMediaUrl] = useState<string | null>(null);
@@ -150,11 +152,83 @@ export function useAudioPlayer(totalDuration: number, fileUrl?: string, mediaTyp
     setPlaybackRateState(rate);
   }, []);
 
+  const stopRewind = useCallback(() => {
+    if (rewindIntervalRef.current) {
+      clearInterval(rewindIntervalRef.current);
+      rewindIntervalRef.current = null;
+    }
+    setRewindSpeed(0);
+  }, []);
+
+  const toggleRewind = useCallback(() => {
+    if (isPlaying) {
+      const audio = audioRef.current;
+      if (audio && hasRealAudio.current) {
+        audio.pause();
+      }
+      setIsPlaying(false);
+    }
+
+    setRewindSpeed((prev) => {
+      const next = prev >= 3 ? 0 : prev + 1;
+      if (rewindIntervalRef.current) {
+        clearInterval(rewindIntervalRef.current);
+        rewindIntervalRef.current = null;
+      }
+      if (next > 0) {
+        const intervalMs = 100;
+        const stepSec = (next * intervalMs) / 1000;
+        rewindIntervalRef.current = setInterval(() => {
+          const audio = audioRef.current;
+          setCurrentTime((prev) => {
+            const newTime = Math.max(0, prev - stepSec);
+            if (audio && hasRealAudio.current) {
+              audio.currentTime = newTime;
+            }
+            if (newTime <= 0) {
+              clearInterval(rewindIntervalRef.current!);
+              rewindIntervalRef.current = null;
+              setRewindSpeed(0);
+            }
+            return newTime;
+          });
+        }, intervalMs);
+      }
+      return next;
+    });
+  }, [isPlaying]);
+
+  useEffect(() => {
+    if (rewindIntervalRef.current) {
+      clearInterval(rewindIntervalRef.current);
+      rewindIntervalRef.current = null;
+    }
+    setRewindSpeed(0);
+  }, [fileUrl]);
+
+  useEffect(() => {
+    return () => {
+      if (rewindIntervalRef.current) {
+        clearInterval(rewindIntervalRef.current);
+      }
+    };
+  }, []);
+
+  const togglePlayPauseWithRewindStop = useCallback(() => {
+    if (rewindSpeed > 0) {
+      stopRewind();
+    }
+    togglePlayPause();
+  }, [rewindSpeed, stopRewind, togglePlayPause]);
+
   return {
     isPlaying,
     currentTime,
     playbackRate,
-    togglePlayPause,
+    rewindSpeed,
+    togglePlayPause: togglePlayPauseWithRewindStop,
+    toggleRewind,
+    stopRewind,
     skip,
     seek,
     setPlaybackRate,
