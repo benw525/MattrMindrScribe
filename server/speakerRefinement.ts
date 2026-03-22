@@ -18,16 +18,20 @@ const OVERLAP_CONTEXT = 20;
 
 function tryRepairTruncatedJson(json: string): string | null {
   let s = json.trim();
-  if (s.endsWith('}')) return null;
 
-  const lastCompleteObj = s.lastIndexOf('},');
-  if (lastCompleteObj === -1) {
-    const lastObj = s.lastIndexOf('}');
-    if (lastObj === -1) return null;
-    s = s.substring(0, lastObj + 1);
-  } else {
-    s = s.substring(0, lastCompleteObj + 1);
+  const segmentsStart = s.indexOf('"segments"');
+  if (segmentsStart === -1) return null;
+
+  const lastGoodPattern = /\}\s*,\s*\{/g;
+  let lastGoodPos = -1;
+  let match;
+  while ((match = lastGoodPattern.exec(s)) !== null) {
+    lastGoodPos = match.index;
   }
+
+  if (lastGoodPos === -1) return null;
+
+  s = s.substring(0, lastGoodPos + 1);
 
   let braces = 0;
   let brackets = 0;
@@ -41,6 +45,7 @@ function tryRepairTruncatedJson(json: string): string | null {
   while (brackets > 0) { s += ']'; brackets--; }
   while (braces > 0) { s += '}'; braces--; }
 
+  console.log(`[Speaker Refinement] Attempting JSON repair: truncated at ${json.length} chars, repaired to ${s.length} chars`);
   return s;
 }
 
@@ -535,7 +540,7 @@ async function refineBatch(
 
   const userPrompt = buildUserPrompt(segmentData, speakerHint, recordingType, batchContext, knownRoster);
 
-  const maxTokens = Math.min(32000, Math.max(8192, segments.length * 60 + 2000));
+  const maxTokens = Math.min(32000, Math.max(8192, segments.length * 80 + 2000));
   console.log(`[Speaker Refinement] Using max_tokens: ${maxTokens} for ${segments.length} segments`);
 
   let content = '';
