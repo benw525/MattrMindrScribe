@@ -309,12 +309,42 @@ function deduplicateSegments(segments: TranscriptSegment[]): TranscriptSegment[]
 function removeHallucinatedSegments(segments: TranscriptSegment[]): TranscriptSegment[] {
   if (segments.length < 3) return segments;
 
+  const textCounts = new Map<string, number>();
+  for (const seg of segments) {
+    const t = seg.text.trim().toLowerCase();
+    const wc = t.split(/\s+/).length;
+    if (wc <= 3) {
+      textCounts.set(t, (textCounts.get(t) || 0) + 1);
+    }
+  }
+
+  const dominantHallucinations = new Set<string>();
+  for (const [text, count] of textCounts) {
+    if (count >= segments.length * 0.5 && count >= 10) {
+      dominantHallucinations.add(text);
+      console.log(`[Hallucination] Detected dominant hallucination: "${text}" appears ${count}/${segments.length} times (${Math.round(count / segments.length * 100)}%)`);
+    }
+  }
+
+  let filtered = segments;
+  if (dominantHallucinations.size > 0) {
+    filtered = segments.filter(seg => {
+      const t = seg.text.trim().toLowerCase();
+      return !dominantHallucinations.has(t);
+    });
+    console.log(`[Hallucination] Removed ${segments.length - filtered.length} dominant hallucination segments, ${filtered.length} remaining`);
+    if (filtered.length === 0) {
+      console.log(`[Hallucination] All segments were hallucinations — returning empty transcript`);
+      return [];
+    }
+  }
+
   const result: TranscriptSegment[] = [];
   let i = 0;
   let totalRemoved = 0;
 
-  while (i < segments.length) {
-    const current = segments[i];
+  while (i < filtered.length) {
+    const current = filtered[i];
     const currentText = current.text.trim().toLowerCase();
     const currentWordCount = currentText.split(/\s+/).length;
 
@@ -325,8 +355,8 @@ function removeHallucinatedSegments(segments: TranscriptSegment[]): TranscriptSe
     }
 
     let runEnd = i + 1;
-    while (runEnd < segments.length) {
-      const next = segments[runEnd];
+    while (runEnd < filtered.length) {
+      const next = filtered[runEnd];
       const nextText = next.text.trim().toLowerCase();
       if (nextText !== currentText) break;
       runEnd++;
@@ -339,11 +369,11 @@ function removeHallucinatedSegments(segments: TranscriptSegment[]): TranscriptSe
       if (runLength >= 3) {
         const gaps: number[] = [];
         for (let j = i; j < runEnd - 1; j++) {
-          gaps.push(segments[j + 1].startTime - segments[j].startTime);
+          gaps.push(filtered[j + 1].startTime - filtered[j].startTime);
         }
         const avgGap = gaps.reduce((a, b) => a + b, 0) / gaps.length;
         const maxDeviation = Math.max(...gaps.map(g => Math.abs(g - avgGap)));
-        isUniformSpacing = avgGap > 0 && maxDeviation <= 0.5;
+        isUniformSpacing = avgGap > 0 && maxDeviation <= 1.5;
       }
 
       if (isUniformSpacing) {
@@ -355,7 +385,7 @@ function removeHallucinatedSegments(segments: TranscriptSegment[]): TranscriptSe
     }
 
     for (let j = i; j < runEnd; j++) {
-      result.push(segments[j]);
+      result.push(filtered[j]);
     }
     i = runEnd;
   }
