@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState, useRef, useMemo } from 'react'
 import {
   useParams,
   useNavigate,
+  useLocation,
   Link,
   useOutletContext } from
 'react-router-dom';
@@ -63,6 +64,7 @@ export function TranscriptViewerPage() {
     id: string;
   }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const { transcripts, updateTranscript, updateTranscriptLocal, refreshData, loading: transcriptsLoading } = useTranscripts();
   const { sidebarHidden, setSidebarHidden } = useOutletContext<{
     selectedFolderId: string | null;
@@ -190,6 +192,17 @@ export function TranscriptViewerPage() {
     audioRef,
     mediaUrl,
   } = useAudioPlayer(transcript?.duration || 0, transcript?.fileUrl, transcript?.type);
+
+  const resumeTimeApplied = useRef(false);
+  useEffect(() => {
+    const state = location.state as { resumeTime?: number } | null;
+    if (state?.resumeTime != null && !resumeTimeApplied.current && mediaUrl) {
+      resumeTimeApplied.current = true;
+      seek(state.resumeTime);
+      window.history.replaceState({}, '');
+    }
+  }, [location.state, mediaUrl, seek]);
+
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     isDraggingRef.current = true;

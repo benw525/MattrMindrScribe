@@ -51,7 +51,7 @@ export function VideoPresentModePage() {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        navigate(`/app/transcript/${id}`);
+        navigate(`/app/transcript/${id}`, { state: { resumeTime: currentTime } });
       } else if (e.key === ' ') {
         e.preventDefault();
         togglePlayPause();
@@ -205,7 +205,7 @@ export function VideoPresentModePage() {
               </h1>
             </div>
             <button
-              onClick={() => navigate(`/app/transcript/${id}`)}
+              onClick={() => navigate(`/app/transcript/${id}`, { state: { resumeTime: currentTime } })}
               className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white transition-colors text-sm"
             >
               <XIcon className="h-4 w-4" />
