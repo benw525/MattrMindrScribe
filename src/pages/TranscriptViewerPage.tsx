@@ -199,9 +199,9 @@ export function TranscriptViewerPage() {
     if (state?.resumeTime != null && !resumeTimeApplied.current && mediaUrl) {
       resumeTimeApplied.current = true;
       seek(state.resumeTime);
-      window.history.replaceState({}, '');
+      navigate(location.pathname, { replace: true, state: {} });
     }
-  }, [location.state, mediaUrl, seek]);
+  }, [location.state, location.pathname, mediaUrl, seek, navigate]);
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
