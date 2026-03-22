@@ -1,0 +1,220 @@
+{\rtf1\ansi\ansicpg1252\cocoartf2639
+{\fonttbl\f0\fswiss\fcharset0 Helvetica-Bold;\f1\fswiss\fcharset0 Helvetica;\f2\fmodern\fcharset0 CourierNewPSMT;\f3\fswiss\fcharset0 Helvetica-Oblique;\f4\fswiss\fcharset0 Helvetica-BoldOblique;}
+{\colortbl;\red255\green255\blue255;\red0\green0\blue0;\red180\green0\blue0;\red0\green100\blue0;\red0\green0\blue180;\red128\green128\blue128;\red240\green248\blue255;\red245\green245\blue245;}
+\paperw12240\paperh15840\margl1440\margr1440\margt1440\margb1440
+
+\pard\tx560\tx1120\qc
+
+{\f0\fs40 Checkpoint Report:\line "Add Body Cam Recording Type for Enhanced AI Analysis"}
+\par\pard\tx560\tx1120\qc
+{\f1\fs22\cf6 Commit: cc10fd3\line Date: March 21, 2026 at 12:19 PM UTC\line Author: Agent (Replit)\line Session: c818b53e-3ce2-488f-8ff1-11112796ade4}
+\par\pard\tx560\tx1120
+\par
+{\f0\fs18 ________________________________________________________________________________}
+\par\par
+
+{\f0\fs32 1. SUMMARY}
+\par\par
+{\f1\fs22 This checkpoint introduced "Body Cam" as a new recording type in the MattrMindrScribe transcription pipeline. Prior to this change, the application supported four recording types: Deposition, Court Hearing, Recorded Statement, and Police Interrogation (plus a generic "Other" fallback). Body camera recordings were not distinguished from general recordings, meaning they were processed using the generic "Other" prompt during Claude Opus 4 speaker refinement, which had no awareness of the unique characteristics of body cam audio. This change added body-cam-specific AI prompting and a frontend selection option.}
+\par\par
+{\f1\fs22 Two files were modified (plus one auto-generated prompt file):}
+\par\par
+{\f2\fs18 server/speakerRefinement.ts          (+12 lines)\line src/components/upload/RecordingMetadata.tsx  (+2 lines, -1 line)}
+\par\par
+
+{\f0\fs18 ________________________________________________________________________________}
+\par\par
+
+{\f0\fs32 2. WHAT WAS THE PROBLEM}
+\par\par
+{\f1\fs22 When a user uploaded body camera footage before this checkpoint, they had to select "Other" or "Police Interrogation" as the recording type, neither of which accurately described the recording. This mattered because the recording type directly controls which contextual prompt is sent to Claude Opus 4 during speaker refinement (Stage 4 of the transcription pipeline).}
+\par\par
+{\f1\fs22 Without a body cam prompt, Claude received either:}
+\par\par
+{\f1\fs22 \u8226  The "Other" prompt \u8212 a single generic sentence telling Claude to identify speakers by context clues. No awareness of officers, dispatch, subjects, or radio communications.}
+\par\par
+{\f1\fs22 \u8226  The "Police Interrogation" prompt \u8212 designed for controlled interview rooms with a lead detective, suspect, and attorney. Completely wrong for chaotic outdoor body cam scenarios with multiple officers, civilians, radio traffic, wind noise, and overlapping speech.}
+\par\par
+{\f1\fs22 Either way, Claude lacked the domain knowledge to correctly identify speakers in body cam footage, leading to poor speaker attribution and no radio transmission awareness.}
+\par\par
+
+{\f0\fs18 ________________________________________________________________________________}
+\par\par
+
+{\f0\fs32 3. WHAT WAS CHANGED}
+\par\par
+
+{\f0\fs28 3.1 Backend: }{\f2\fs22 server/speakerRefinement.ts}
+\par\par
+
+{\f0\fs24 3.1.1 New Body Cam Prompt Added to }{\f2\fs20 RECORDING_TYPE_SECTIONS}
+\par\par
+{\f1\fs22 A new entry }{\f2\fs20 body_cam}{\f1\fs22  was added to the }{\f2\fs20 RECORDING_TYPE_SECTIONS}{\f1\fs22  constant object. This object maps recording type keys to specialized prompt text that is injected into the Claude Opus 4 system prompt during speaker refinement. The body cam prompt defines six speaker roles specific to law enforcement body camera recordings:}
+\par\par
+{\f0\fs22 Role 1: Primary Officer}
+\par
+{\f1\fs22 The officer wearing the body camera. The prompt tells Claude that this voice is typically the loudest and most consistent throughout the recording. It instructs Claude to expect the primary officer to identify themselves by name and badge number, call out their actions, communicate with dispatch, and interact with subjects. This anchors Claude's speaker identification around the dominant voice.}
+\par\par
+{\f0\fs22 Role 2: Partner Officer / Backup Officers}
+\par
+{\f1\fs22 Additional officers on scene. The prompt notes they may be identified by name when the primary officer addresses them or when they self-identify to subjects. This tells Claude to watch for name references in conversation to identify secondary officers.}
+\par\par
+{\f0\fs22 Role 3: Subject / Suspect}
+\par
+{\f1\fs22 The person the officer is interacting with. Could be a suspect, detainee, or person of interest. The prompt notes they are often addressed by name and may be argumentative, compliant, or unresponsive. This helps Claude distinguish between a cooperative witness and a confrontational suspect based on speech patterns.}
+\par\par
+{\f0\fs22 Role 4: Witness / Bystander}
+\par
+{\f1\fs22 Civilians present at the scene who may provide statements, ask questions, or interject. The prompt notes they are often unnamed unless they provide identification, guiding Claude to use generic labels like "Witness" or "Bystander" when names are not available rather than leaving them as "Speaker 3".}
+\par\par
+{\f0\fs22 Role 5: Victim / Complainant}
+\par
+{\f1\fs22 The person who called for assistance or was the victim. May give a statement describing what happened. This role is distinct from Subject/Suspect and helps Claude differentiate the reporting party from the person being investigated.}
+\par\par
+{\f0\fs22 Role 6: Dispatch}
+\par
+{\f1\fs22 Voice over the radio providing information, confirming codes, or relaying instructions. The prompt describes these as "usually brief, clipped communications with radio static or tones." This is critical for Claude to distinguish radio traffic from on-scene speech.}
+\par\par
+{\f0\fs22 Environmental Context Paragraph}
+\par
+{\f1\fs22 The prompt concludes with a paragraph specific to body cam audio challenges: "Body cam recordings are often chaotic with overlapping speech, background noise (sirens, wind, traffic), radio chatter, and movement sounds. Speakers may be difficult to distinguish." It provides three practical identification rules:}
+\par\par
+{\f1\fs22 1. Radio traffic is always Dispatch.\line 2. The clearest/loudest voice is usually the Primary Officer.\line 3. People addressed directly are usually subjects or witnesses.}
+\par\par
+{\f1\fs22 The full added prompt text:}
+\par\par
+{\f2\fs16 body_cam: `This is body camera footage from a law enforcement officer. Key roles:\line\line - **Primary Officer**: The officer wearing the body camera. Their voice is\line   typically the loudest and most consistent throughout the recording. They\line   identify themselves by name and badge number, call out their actions,\line   communicate with dispatch, and interact with subjects on scene.\line - **Partner Officer / Backup Officers**: Additional officers who arrive or\line   are already on scene. They may be identified by name when the primary\line   officer addresses them or when they identify themselves to subjects.\line - **Subject / Suspect**: The person the officer is interacting with \u8212 could\line   be a suspect, detainee, or person of interest. Often addressed by name\line   during the encounter. May be argumentative, compliant, or unresponsive.\line - **Witness / Bystander**: Civilians present at the scene who may provide\line   statements, ask questions, or interject. Often unnamed unless they provide\line   identification.\line - **Victim / Complainant**: The person who called for assistance or was the\line   victim of an incident. May give a statement describing what happened.\line - **Dispatch**: Voice over the radio providing information, confirming codes,\line   or relaying instructions. Usually brief, clipped communications with\line   radio static or tones.\line\line Body cam recordings are often chaotic with overlapping speech, background\line noise (sirens, wind, traffic), radio chatter, and movement sounds. Speakers\line may be difficult to distinguish. Use context clues: radio traffic is always\line Dispatch, the clearest/loudest voice is usually the Primary Officer, and\line people addressed directly are usually subjects or witnesses.`}
+\par\par
+
+{\f0\fs24 3.1.2 Label Added to }{\f2\fs20 getRecordingTypeLabel()}
+\par\par
+{\f1\fs22 The }{\f2\fs20 getRecordingTypeLabel()}{\f1\fs22  function maps recording type keys to human-readable descriptions used in the Claude user prompt (e.g., "Analyze the opening of this }{\f3\fs22 body camera footage}{\f1\fs22 "). A new entry was added:}
+\par\par
+{\f2\fs18 body_cam: 'body camera footage'}
+\par\par
+{\f1\fs22 Before this change, if }{\f2\fs20 recording_type}{\f1\fs22  was set to }{\f2\fs20 'body_cam'}{\f1\fs22 , the }{\f2\fs20 getRecordingTypeLabel()}{\f1\fs22  function would return }{\f2\fs20 'unknown'}{\f1\fs22  because }{\f2\fs20 'body_cam'}{\f1\fs22  was not in the labels map.}
+\par\par
+
+{\f0\fs28 3.2 Frontend: }{\f2\fs22 src/components/upload/RecordingMetadata.tsx}
+\par\par
+
+{\f0\fs24 3.2.1 New Recording Type Option}
+\par\par
+{\f1\fs22 A new entry was added to the }{\f2\fs20 RECORDING_TYPES}{\f1\fs22  array, which populates the recording type dropdown in the upload form:}
+\par\par
+{\f2\fs18 // Before:\line const RECORDING_TYPES = [\line   \{ value: 'deposition', label: 'Deposition', icon: FileTextIcon \},\line   \{ value: 'court_hearing', label: 'Court Hearing', icon: GavelIcon \},\line   \{ value: 'recorded_statement', label: 'Recorded Statement', icon: MicIcon \},\line   \{ value: 'police_interrogation', label: 'Police Interrogation', icon: ShieldIcon \},\line   \{ value: 'other', label: 'Other', icon: FileAudioIcon \},\line ];\line\line // After:\line const RECORDING_TYPES = [\line   \{ value: 'deposition', label: 'Deposition', icon: FileTextIcon \},\line   \{ value: 'court_hearing', label: 'Court Hearing', icon: GavelIcon \},\line   \{ value: 'recorded_statement', label: 'Recorded Statement', icon: MicIcon \},\line   \{ value: 'police_interrogation', label: 'Police Interrogation', icon: ShieldIcon \},\line   \{ value: 'body_cam', label: 'Body Cam', icon: CameraIcon \},\line   \{ value: 'other', label: 'Other', icon: FileAudioIcon \},\line ];}
+\par\par
+{\f1\fs22 The }{\f2\fs20 CameraIcon}{\f1\fs22  was imported from the }{\f2\fs20 lucide-react}{\f1\fs22  icon library (added to the existing import statement). The new option appears between "Police Interrogation" and "Other" in the dropdown.}
+\par\par
+
+{\f0\fs18 ________________________________________________________________________________}
+\par\par
+
+{\f0\fs32 4. HOW IT INTEGRATES INTO THE PIPELINE}
+\par\par
+{\f1\fs22 Understanding where this change takes effect requires tracing the recording type value through the full pipeline:}
+\par\par
+
+{\f0\fs24 4.1 User Uploads a File}
+\par\par
+{\f1\fs22 When the user uploads a file via the upload form, they select "Body Cam" from the recording type dropdown. This stores the value }{\f2\fs20 'body_cam'}{\f1\fs22  in the }{\f2\fs20 transcripts.recording_type}{\f1\fs22  column in PostgreSQL.}
+\par\par
+
+{\f0\fs24 4.2 Pipeline Reads the Recording Type}
+\par\par
+{\f1\fs22 In }{\f2\fs20 server/transcription.ts}{\f1\fs22 , the }{\f2\fs20 processTranscription()}{\f1\fs22  function queries the transcript record and extracts }{\f2\fs20 recording_type}{\f1\fs22 :}
+\par\par
+{\f2\fs18 const \{ file_url, filename, expected_speakers, recording_type, ... \} = rows[0];\line const recordingType: string | null = recording_type || null;}
+\par\par
+{\f1\fs22 This value is passed through the pipeline to Stage 4 (Claude refinement).}
+\par\par
+
+{\f0\fs24 4.3 Recording Type Controls Claude's Prompt}
+\par\par
+{\f1\fs22 In }{\f2\fs20 server/speakerRefinement.ts}{\f1\fs22 , the }{\f2\fs20 buildUserPrompt()}{\f1\fs22  function uses the recording type to select which prompt section to include:}
+\par\par
+{\f2\fs18 const typeKey = recordingType && RECORDING_TYPE_SECTIONS[recordingType]\line   ? recordingType : null;\line const section = typeKey\line   ? RECORDING_TYPE_SECTIONS[typeKey]         // <-- specific prompt for this type\line   : Object.values(RECORDING_TYPE_SECTIONS).join('\\n\\n'); // all sections if unknown}
+\par\par
+{\f1\fs22 Before this checkpoint, if }{\f2\fs20 recordingType === 'body_cam'}{\f1\fs22 , the lookup }{\f2\fs20 RECORDING_TYPE_SECTIONS['body_cam']}{\f1\fs22  would return }{\f2\fs20 undefined}{\f1\fs22 , causing }{\f2\fs20 typeKey}{\f1\fs22  to be }{\f2\fs20 null}{\f1\fs22 . This triggered the fallback: ALL recording type sections were concatenated and sent to Claude. Claude would receive the deposition prompt, court hearing prompt, recorded statement prompt, police interrogation prompt, AND the "other" prompt all at once \u8212 a confused, noisy instruction set that diluted the relevance of any single section.}
+\par\par
+{\f1\fs22 After this checkpoint, }{\f2\fs20 RECORDING_TYPE_SECTIONS['body_cam']}{\f1\fs22  returns the new body cam prompt. Claude receives ONLY the body cam section, which is precisely tailored to the roles and challenges of body camera footage.}
+\par\par
+
+{\f0\fs24 4.4 Impact on Enriched vs. Standard Path}
+\par\par
+{\f1\fs22 The recording type is also passed to the enriched refinement path (when AssemblyAI enriched data is available). In the enriched user message, it appears as:}
+\par\par
+{\f2\fs18 case_context: \{\line   recording_type: recordingType || 'other',  // 'body_cam'\line \}}
+\par\par
+{\f1\fs22 The enriched system prompt (}{\f2\fs20 buildEnrichedSystemPrompt()}{\f1\fs22 ) already contained extensive body cam instructions including radio transmission detection, dispatch vocabulary, confidence-based speaker separation, and sentiment analysis for radio vs. on-scene speech. These instructions were present before this checkpoint. The recording type in the case context tells the enriched Claude path that the recording IS body cam footage, enabling it to apply those instructions appropriately.}
+\par\par
+
+{\f0\fs24 4.5 Impact on Speaker Roster Pass 1}
+\par\par
+{\f1\fs22 The }{\f2\fs20 identifySpeakersFromOpening()}{\f1\fs22  function (Pass 1 of the standard refinement path) only runs for depositions (}{\f2\fs20 recordingType === 'deposition' && segments.length > 30}{\f1\fs22 ). This checkpoint did NOT add a Pass 1 for body cam recordings. Body cam recordings go directly to the full refinement pass without a speaker roster pre-scan.}
+\par\par
+
+{\f0\fs18 ________________________________________________________________________________}
+\par\par
+
+{\f0\fs32 5. WHAT DID NOT CHANGE}
+\par\par
+{\f1\fs22 The following aspects of the pipeline were NOT modified by this checkpoint:}
+\par\par
+{\f1\fs22 \u8226  }{\f0\fs22 Auphonic:}{\f1\fs22  No body-cam-specific Auphonic preset existed yet. (The body cam Auphonic preset with }{\f2\fs20 dynamic_denoise}{\f1\fs22  at 75% was added in a later checkpoint.)}
+\par\par
+{\f1\fs22 \u8226  }{\f0\fs22 Whisper:}{\f1\fs22  No recording-type-specific behavior. Whisper processes all recordings identically regardless of type.}
+\par\par
+{\f1\fs22 \u8226  }{\f0\fs22 AssemblyAI:}{\f1\fs22  Diarization configuration is not affected by recording type.}
+\par\par
+{\f1\fs22 \u8226  }{\f0\fs22 Hallucination detection:}{\f1\fs22  Not modified. The dominant hallucination detector was added in a later checkpoint.}
+\par\par
+{\f1\fs22 \u8226  }{\f0\fs22 Database schema:}{\f1\fs22  No migration. The }{\f2\fs20 recording_type}{\f1\fs22  column already accepted arbitrary string values.}
+\par\par
+{\f1\fs22 \u8226  }{\f0\fs22 Deposition Q&A post-processing:}{\f1\fs22  Only applies when }{\f2\fs20 recordingType === 'deposition'}{\f1\fs22 . Body cam recordings do not trigger this step.}
+\par\par
+{\f1\fs22 \u8226  }{\f0\fs22 Enriched system prompt:}{\f1\fs22  The extensive body cam instructions in }{\f2\fs20 buildEnrichedSystemPrompt()}{\f1\fs22  (radio transmission detection, dispatch vocabulary, confidence-based filtering, etc.) already existed. This checkpoint did not modify them.}
+\par\par
+{\f1\fs22 \u8226  }{\f0\fs22 Backend API routes:}{\f1\fs22  No new routes. The upload endpoint already accepted a }{\f2\fs20 recording_type}{\f1\fs22  field in the request body.}
+\par\par
+
+{\f0\fs18 ________________________________________________________________________________}
+\par\par
+
+{\f0\fs32 6. EFFECT ON TRANSCRIPTION QUALITY}
+\par\par
+
+{\f0\fs24 6.1 Before This Checkpoint}
+\par\par
+{\f1\fs22 A body cam recording uploaded as "Other" would reach Claude refinement with this context:}
+\par\par
+{\f2\fs16 "This is an informal or miscellaneous recording. Identify speakers by name or\line role based on context clues \u8212 self-introductions, how they address each other,\line professional titles, relationship references. Use descriptive labels like\line \u8220Officer\u8221, \u8220Witness\u8221, \u8220Narrator\u8221, \u8220Interviewer\u8221, etc. when names are\line not available."}
+\par\par
+{\f1\fs22 This single sentence provided no guidance on:}
+{\f2\fs18 \line - Distinguishing radio dispatch from on-scene speech\line - Identifying the primary officer by voice dominance\line - Handling overlapping speech from multiple people at a scene\line - Recognizing 10-codes, unit numbers, or dispatch vocabulary\line - The chaotic acoustic environment of body cam recordings}
+\par\par
+
+{\f0\fs24 6.2 After This Checkpoint}
+\par\par
+{\f1\fs22 A body cam recording uploaded as "Body Cam" reaches Claude with 200+ words of specialized context covering six specific roles, environmental challenges, and three concrete identification rules. Claude can now:}
+\par\par
+{\f1\fs22 1. Identify the primary officer as the loudest, most consistent voice.\line 2. Label dispatch/radio traffic separately from on-scene speech.\line 3. Distinguish between subjects, witnesses, victims, and additional officers.\line 4. Handle the chaotic multi-speaker environment typical of body cam footage.\line 5. Use name references ("Ken", "Mr. Richard") to assign identified speaker labels.}
+\par\par
+{\f1\fs22 For the DUI stop body cam recording (Axon Body 3, 2022-01-01), this is the difference between Claude labeling everyone as "Speaker 1" through "Speaker 4" with random attribution, versus correctly identifying "Officer Ken", "Second Officer", "Mr. Richard", and "Dispatch" with contextually accurate attribution.}
+\par\par
+
+{\f0\fs18 ________________________________________________________________________________}
+\par\par
+
+{\f0\fs32 7. RELATIONSHIP TO OTHER CHECKPOINTS}
+\par\par
+{\f1\fs22 This checkpoint was part of a sequence of body cam improvements:}
+\par\par
+{\f2\fs18 1. "Expand speaker identification for various legal recording types"\line    Added deposition, court hearing, recorded statement, police interrogation prompts.\line\line 2. "Enhance AI summaries with detailed recording types for legal areas"\line    Added recording-type-aware summary generation.\line\line 3. >> "Add Body Cam recording type for enhanced AI analysis" << (this checkpoint)\line    Added body_cam to the prompt map and upload form.\line\line 4. "Add Body Cam recording type to the upload form"\line    Minor follow-up adjustments to the upload UI.\line\line 5. "Integrate Auphonic for initial audio cleanup before transcription"\line    Added Auphonic as Stage 0 with body-cam-specific preset.\line\line 6. "Enhance audio processing pipeline with improved AI analysis"\line    Added the enriched Claude pipeline with radio transmission detection.\line\line 7. "Fix speaker refinement for large transcripts (400+ segments)"\line    Batching and recovery fixes for transcripts exceeding 350 segments.\line\line 8. "Make hallucination detection more aggressive and accurate"\line    Dominant hallucination detector for Whisper garbage output.}
+\par\par
+
+{\f0\fs18 ________________________________________________________________________________}
+\par\par
+{\f1\fs20\cf6 End of checkpoint report.}
+\par
+}

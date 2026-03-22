@@ -18,3 +18,9 @@ id = "CQN2W8nb7Cwc5nVX2J0jT"
 uri = "file://MattrMindrScribe_Pipeline_Diagnostic.rtf"
 type = "unspecified"
 title = "MattrMindrScribe Transcription Pipeline - Full Technical Diagnostic"
+
+[[outputs]]
+id = "DY3qjCZ-xtTjqfokbb1Cv"
+uri = "file://Checkpoint_BodyCam_RecordingType.rtf"
+type = "unspecified"
+title = "Checkpoint Report: Add Body Cam Recording Type for Enhanced AI Analysis"
