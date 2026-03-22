@@ -280,7 +280,18 @@ export function TranscriptToolbar({
       )}
 
       <button
-        onClick={() => navigate(`/app/transcript/${transcriptId}/${mediaType === 'video' ? 'video-present' : 'present'}`)}
+        onClick={() => {
+          const url = `/app/presenter/${transcriptId}`;
+          const w = Math.round(screen.width * 0.6);
+          const h = Math.round(screen.height * 0.8);
+          const left = Math.round((screen.width - w) / 2);
+          const top = Math.round((screen.height - h) / 2);
+          window.open(
+            url,
+            'mms-presenter',
+            `width=${w},height=${h},left=${left},top=${top},resizable=yes,scrollbars=yes`
+          );
+        }}
         className="inline-flex items-center gap-1.5 p-2 sm:px-3 sm:py-2 text-sm font-medium text-white bg-slate-900 dark:bg-slate-700 hover:bg-slate-800 dark:hover:bg-slate-600 active:bg-slate-700 dark:active:bg-slate-500 rounded-md transition-colors shadow-sm">
         <MaximizeIcon className="h-4 w-4" />
         <span className="hidden lg:inline">Present</span>

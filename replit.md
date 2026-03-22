@@ -16,7 +16,7 @@ A full-stack application for managing legal case recordings/transcripts. Feature
 - Synced audio player for recordings
 - Version history for transcripts (persisted to DB, loaded on page open)
 - Per-segment speaker reassignment (click speaker name to change via dropdown)
-- Present mode for hearings
+- Present mode for hearings: pop-out window via toolbar button (synced via BroadcastChannel), plus fullscreen modes for audio and video transcripts; light/dark theme support
 - Coworking & sharing: invite other users by email to view or edit transcripts and folders; folder-level sharing inherits to all transcripts within; most-permissive-wins when multiple shares exist; "Shared with Me" sidebar section groups items by sharer; permission-gated viewer (view-only hides edit controls, shows banner); optimistic locking with 409 conflict detection; movement warnings when moving transcripts affects shared access; soft-delete shares (revoked_at)
 - Admin user with unlimited access
 
@@ -39,8 +39,10 @@ A full-stack application for managing legal case recordings/transcripts. Feature
 - `src/pages/AuthPage.tsx` - Login/register page
 - `src/pages/DashboardPage.tsx` - Main app dashboard
 - `src/pages/TranscriptViewerPage.tsx` - Transcript editor
-- `src/pages/PresentModePage.tsx` - Text-only presentation mode (audio transcripts)
-- `src/pages/VideoPresentModePage.tsx` - Video presentation mode (video pinned at top, auto-scrolling transcript below)
+- `src/pages/PresentModePage.tsx` - Fullscreen text presentation mode (audio transcripts, light/dark theme, click-to-seek, keyboard shortcuts, progress bar)
+- `src/pages/VideoPresentModePage.tsx` - Fullscreen video presentation mode (video pinned at top, auto-scrolling transcript below, light/dark theme)
+- `src/pages/PresenterPopout.tsx` - Unified pop-out presenter window for audio/video (synced via BroadcastChannel, light/dark theme, resizable video, hide-text toggle)
+- `src/hooks/usePresentSync.ts` - BroadcastChannel-based cross-window sync (broadcaster in main app, receiver in pop-out; syncs playback state and accepts commands)
 - `src/components/` - Reusable UI components
 - `src/contexts/AuthContext.tsx` - Auth state management
 - `src/contexts/TranscriptContext.tsx` - Transcript/folder state management
@@ -76,7 +78,9 @@ A full-stack application for managing legal case recordings/transcripts. Feature
 - `/login` - Auth page (public)
 - `/app` - Dashboard (protected)
 - `/app/transcript/:id` - Transcript viewer (protected)
-- `/app/transcript/:id/present` - Present mode (protected)
+- `/app/transcript/:id/present` - Fullscreen audio present mode (protected)
+- `/app/transcript/:id/video-present` - Fullscreen video present mode (protected)
+- `/app/presenter/:id` - Pop-out presenter window (BroadcastChannel synced, protected)
 
 ### API Routes
 - `POST /api/auth/register` - Register new user

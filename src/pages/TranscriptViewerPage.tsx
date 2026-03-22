@@ -25,6 +25,7 @@ import { SendToMattrMindrModal } from '../components/viewer/SendToMattrMindrModa
 import { Transcript, TranscriptSegment, TranscriptVersion, TranscriptAnnotation } from '../types/transcript';
 import { ShareModal } from '../components/sharing/ShareModal';
 import { api } from '../utils/api';
+import { usePresentBroadcaster, PresentCommand } from '../hooks/usePresentSync';
 interface UndoEntry {
   segments: TranscriptSegment[];
   description: string;
@@ -193,15 +194,64 @@ export function TranscriptViewerPage() {
     mediaUrl,
   } = useAudioPlayer(transcript?.duration || 0, transcript?.fileUrl, transcript?.type);
 
-  const resumeTimeApplied = useRef(false);
+  const resumeTimeApplied = useRef<string | null>(null);
   useEffect(() => {
     const state = location.state as { resumeTime?: number } | null;
-    if (state?.resumeTime != null && !resumeTimeApplied.current && mediaUrl) {
-      resumeTimeApplied.current = true;
+    if (state?.resumeTime != null && resumeTimeApplied.current !== id && mediaUrl) {
+      resumeTimeApplied.current = id || null;
       seek(state.resumeTime);
       navigate(location.pathname, { replace: true, state: {} });
     }
-  }, [location.state, location.pathname, mediaUrl, seek, navigate]);
+  }, [location.state, location.pathname, mediaUrl, seek, navigate, id]);
+
+  const { broadcast, onCommand } = usePresentBroadcaster(id);
+
+  useEffect(() => {
+    if (!transcript) return;
+    broadcast({
+      transcriptId: transcript.id,
+      currentTime,
+      isPlaying,
+      playbackRate,
+      duration: transcript.duration,
+      filename: transcript.filename,
+      mediaType: transcript.type || 'audio',
+      mediaUrl: mediaUrl,
+      segments: transcript.segments.map(s => ({
+        id: s.id,
+        startTime: s.startTime,
+        endTime: s.endTime,
+        speaker: s.speaker,
+        text: s.text,
+      })),
+    });
+  }, [transcript?.id, currentTime, isPlaying, playbackRate, mediaUrl, transcript?.segments, broadcast]);
+
+  useEffect(() => {
+    return onCommand((cmd: PresentCommand) => {
+      if (cmd.transcriptId !== id) return;
+      switch (cmd.action) {
+        case 'toggle':
+          togglePlayPause();
+          break;
+        case 'play':
+          if (!isPlaying) togglePlayPause();
+          break;
+        case 'pause':
+          if (isPlaying) togglePlayPause();
+          break;
+        case 'seek':
+          if (cmd.value != null) seek(cmd.value);
+          break;
+        case 'skip':
+          if (cmd.value != null) skip(cmd.value);
+          break;
+        case 'rate':
+          if (cmd.value != null) setPlaybackRate(cmd.value);
+          break;
+      }
+    });
+  }, [onCommand, togglePlayPause, isPlaying, seek, skip, setPlaybackRate, id]);
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault();

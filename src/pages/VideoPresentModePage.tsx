@@ -184,7 +184,7 @@ export function VideoPresentModePage() {
 
   return (
     <div
-      className="fixed inset-0 bg-slate-950 text-slate-200 z-50 flex flex-col h-dvh overflow-hidden font-sans"
+      className="fixed inset-0 bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-200 z-50 flex flex-col h-dvh overflow-hidden font-sans"
       onMouseMove={resetControlsTimer}
     >
       <div className="flex flex-col h-full">
@@ -411,7 +411,7 @@ export function VideoPresentModePage() {
                   <div className="flex items-baseline gap-3 mb-1">
                     <span
                       className={`text-sm font-bold tracking-wider uppercase ${
-                        isActive ? 'text-indigo-400' : 'text-slate-500'
+                        isActive ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400 dark:text-slate-500'
                       }`}
                     >
                       {segment.speaker}
@@ -422,7 +422,7 @@ export function VideoPresentModePage() {
                   </div>
                   <p
                     className={`text-xl md:text-2xl leading-relaxed font-medium ${
-                      isActive ? 'text-white' : 'text-slate-400'
+                      isActive ? 'text-slate-900 dark:text-white' : 'text-slate-500 dark:text-slate-400'
                     }`}
                   >
                     {segment.text}
@@ -435,7 +435,7 @@ export function VideoPresentModePage() {
         </div>
       </div>
 
-      <div className="absolute bottom-0 left-0 right-0 h-24 bg-gradient-to-t from-slate-950 to-transparent pointer-events-none" />
+      <div className="absolute bottom-0 left-0 right-0 h-24 bg-gradient-to-t from-white dark:from-slate-950 to-transparent pointer-events-none" />
     </div>
   );
 }

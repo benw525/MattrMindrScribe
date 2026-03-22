@@ -11,6 +11,7 @@ import { DashboardPage } from './pages/DashboardPage';
 import { TranscriptViewerPage } from './pages/TranscriptViewerPage';
 import { PresentModePage } from './pages/PresentModePage';
 import { VideoPresentModePage } from './pages/VideoPresentModePage';
+import { PresenterPopout } from './pages/PresenterPopout';
 import { AuthPage } from './pages/AuthPage';
 import { LandingPage } from './pages/LandingPage';
 
@@ -143,6 +144,13 @@ export function App() {
                     element={
                       <ProtectedRoute>
                         <VideoPresentModePage />
+                      </ProtectedRoute>
+                    } />
+                  <Route
+                    path="/app/presenter/:id"
+                    element={
+                      <ProtectedRoute>
+                        <PresenterPopout />
                       </ProtectedRoute>
                     } />
                   <Route path="*" element={<Navigate to="/" replace />} />
