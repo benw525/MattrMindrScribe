@@ -11,6 +11,8 @@ import {
 import { useTranscripts } from '../hooks/useTranscripts';
 import { useAudioPlayer } from '../hooks/useAudioPlayer';
 import { formatDuration } from '../utils/formatters';
+import { Transcript } from '../types/transcript';
+import { api } from '../utils/api';
 
 const SPEED_OPTIONS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
 
@@ -24,8 +26,19 @@ export function VideoPresentModePage() {
   const [showControls, setShowControls] = useState(true);
   const [showSpeedMenu, setShowSpeedMenu] = useState(false);
   const controlsTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [directTranscript, setDirectTranscript] = useState<Transcript | null>(null);
+  const [directFetchedId, setDirectFetchedId] = useState<string | null>(null);
 
-  const transcript = transcripts.find((t) => t.id === id);
+  const contextTranscript = transcripts.find((t) => t.id === id);
+  const transcript = contextTranscript || (directTranscript && directTranscript.id === id ? directTranscript : null);
+
+  useEffect(() => {
+    if (!id || contextTranscript || directFetchedId === id) return;
+    setDirectFetchedId(id);
+    api.transcripts.get(id)
+      .then((t: Transcript) => setDirectTranscript(t))
+      .catch(() => {});
+  }, [id, contextTranscript, directFetchedId]);
 
   useEffect(() => {
     if (transcript && transcript.type !== 'video') {
