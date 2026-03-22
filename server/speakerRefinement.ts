@@ -13,7 +13,7 @@ const anthropic = new Anthropic({
 });
 
 const SINGLE_CALL_LIMIT = 350;
-const BATCH_SIZE = 300;
+const BATCH_SIZE = 200;
 const OVERLAP_CONTEXT = 20;
 
 function tryRepairTruncatedJson(json: string): string | null {
@@ -394,6 +394,7 @@ ${JSON.stringify(segmentData)}`;
 }
 
 interface ParsedSegment {
+  i?: number;
   label: string;
   text: string;
 }
@@ -449,7 +450,7 @@ function parseResponse(content: string, expectedCount: number): { segments: Pars
       const indexedSegs: ParsedSegment[] = [];
       const byIndex = new Map<number, ParsedSegment>();
       for (const seg of segs) {
-        const idx = (seg as any).i;
+        const idx = seg.i;
         if (typeof idx === 'number' && idx >= 0 && idx < expectedCount && !byIndex.has(idx)) {
           byIndex.set(idx, seg);
         }
