@@ -48,10 +48,13 @@ export function VideoPresentModePage() {
     mediaUrl,
   } = useAudioPlayer(transcript?.duration || 0, transcript?.fileUrl, transcript?.type);
 
+  const currentTimeRef = useRef(currentTime);
+  currentTimeRef.current = currentTime;
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        navigate(`/app/transcript/${id}`, { state: { resumeTime: currentTime } });
+        navigate(`/app/transcript/${id}`, { state: { resumeTime: currentTimeRef.current } });
       } else if (e.key === ' ') {
         e.preventDefault();
         togglePlayPause();
