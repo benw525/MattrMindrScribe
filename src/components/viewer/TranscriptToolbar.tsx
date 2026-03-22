@@ -38,6 +38,7 @@ interface TranscriptToolbarProps {
   onSendToMattrMindr?: () => void;
   readOnly?: boolean;
   onShare?: () => void;
+  mediaType?: string;
 }
 
 const EXPORT_FORMATS = [
@@ -61,7 +62,8 @@ export function TranscriptToolbar({
   summaryCount,
   onSendToMattrMindr,
   readOnly,
-  onShare
+  onShare,
+  mediaType
 }: TranscriptToolbarProps) {
   const navigate = useNavigate();
   const [showExportMenu, setShowExportMenu] = useState(false);
@@ -278,7 +280,7 @@ export function TranscriptToolbar({
       )}
 
       <button
-        onClick={() => navigate(`/app/transcript/${transcriptId}/present`)}
+        onClick={() => navigate(`/app/transcript/${transcriptId}/${mediaType === 'video' ? 'video-present' : 'present'}`)}
         className="inline-flex items-center gap-1.5 p-2 sm:px-3 sm:py-2 text-sm font-medium text-white bg-slate-900 dark:bg-slate-700 hover:bg-slate-800 dark:hover:bg-slate-600 active:bg-slate-700 dark:active:bg-slate-500 rounded-md transition-colors shadow-sm">
         <MaximizeIcon className="h-4 w-4" />
         <span className="hidden lg:inline">Present</span>

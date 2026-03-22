@@ -39,7 +39,8 @@ A full-stack application for managing legal case recordings/transcripts. Feature
 - `src/pages/AuthPage.tsx` - Login/register page
 - `src/pages/DashboardPage.tsx` - Main app dashboard
 - `src/pages/TranscriptViewerPage.tsx` - Transcript editor
-- `src/pages/PresentModePage.tsx` - Presentation mode
+- `src/pages/PresentModePage.tsx` - Text-only presentation mode (audio transcripts)
+- `src/pages/VideoPresentModePage.tsx` - Video presentation mode (video pinned at top, auto-scrolling transcript below)
 - `src/components/` - Reusable UI components
 - `src/contexts/AuthContext.tsx` - Auth state management
 - `src/contexts/TranscriptContext.tsx` - Transcript/folder state management

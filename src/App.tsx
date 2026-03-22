@@ -10,6 +10,7 @@ import { AppLayout } from './components/layout/AppLayout';
 import { DashboardPage } from './pages/DashboardPage';
 import { TranscriptViewerPage } from './pages/TranscriptViewerPage';
 import { PresentModePage } from './pages/PresentModePage';
+import { VideoPresentModePage } from './pages/VideoPresentModePage';
 import { AuthPage } from './pages/AuthPage';
 import { LandingPage } from './pages/LandingPage';
 
@@ -135,6 +136,13 @@ export function App() {
                     element={
                       <ProtectedRoute>
                         <PresentModePage />
+                      </ProtectedRoute>
+                    } />
+                  <Route
+                    path="/app/transcript/:id/video-present"
+                    element={
+                      <ProtectedRoute>
+                        <VideoPresentModePage />
                       </ProtectedRoute>
                     } />
                   <Route path="*" element={<Navigate to="/" replace />} />

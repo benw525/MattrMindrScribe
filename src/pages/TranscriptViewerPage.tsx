@@ -726,7 +726,8 @@ export function TranscriptViewerPage() {
             summaryCount={summaries.length}
             onSendToMattrMindr={mattrmindrConnected && transcript.status === 'completed' ? () => setShowSendToMattrMindr(true) : undefined}
             readOnly={isReadOnly}
-            onShare={!isSharedView ? () => setShowShareModal(true) : undefined} />
+            onShare={!isSharedView ? () => setShowShareModal(true) : undefined}
+            mediaType={transcript.type} />
         </div>
       </header>
 
