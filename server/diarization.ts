@@ -65,6 +65,7 @@ export async function diarizeWithAssemblyAI(
 
   const config: any = {
     audio_url: uploadUrl,
+    speech_model: 'universal-3-pro',
     speaker_labels: true,
     sentiment_analysis: true,
     entity_detection: true,

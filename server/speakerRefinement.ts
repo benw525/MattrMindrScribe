@@ -16,6 +16,34 @@ const SINGLE_CALL_LIMIT = 800;
 const BATCH_SIZE = 700;
 const OVERLAP_CONTEXT = 20;
 
+function tryRepairTruncatedJson(json: string): string | null {
+  let s = json.trim();
+  if (s.endsWith('}')) return null;
+
+  const lastCompleteObj = s.lastIndexOf('},');
+  if (lastCompleteObj === -1) {
+    const lastObj = s.lastIndexOf('}');
+    if (lastObj === -1) return null;
+    s = s.substring(0, lastObj + 1);
+  } else {
+    s = s.substring(0, lastCompleteObj + 1);
+  }
+
+  let braces = 0;
+  let brackets = 0;
+  for (const ch of s) {
+    if (ch === '{') braces++;
+    if (ch === '}') braces--;
+    if (ch === '[') brackets++;
+    if (ch === ']') brackets--;
+  }
+
+  while (brackets > 0) { s += ']'; brackets--; }
+  while (braces > 0) { s += '}'; braces--; }
+
+  return s;
+}
+
 function buildSystemPrompt(): string {
   return `You are an expert legal transcript analyst. You will receive a transcript with preliminary speaker labels that are often wrong. Your job is to:
 
@@ -376,7 +404,18 @@ function parseResponse(content: string, expectedCount: number): { segments: Pars
   } catch (e: any) {
     console.log(`[Speaker Refinement] Failed to parse JSON from response: ${e.message}`);
     console.log(`[Speaker Refinement] JSON string length: ${jsonMatch[0].length}, first 200 chars: ${jsonMatch[0].substring(0, 200)}`);
-    return null;
+
+    const repaired = tryRepairTruncatedJson(jsonMatch[0]);
+    if (repaired) {
+      try {
+        parsed = JSON.parse(repaired);
+        console.log(`[Speaker Refinement] Recovered truncated JSON via repair`);
+      } catch {
+        return null;
+      }
+    } else {
+      return null;
+    }
   }
 
   const identifications: Record<string, string> = {};
@@ -496,7 +535,7 @@ async function refineBatch(
 
   const userPrompt = buildUserPrompt(segmentData, speakerHint, recordingType, batchContext, knownRoster);
 
-  const maxTokens = Math.min(32000, Math.max(8192, segments.length * 40 + 2000));
+  const maxTokens = Math.min(32000, Math.max(8192, segments.length * 60 + 2000));
   console.log(`[Speaker Refinement] Using max_tokens: ${maxTokens} for ${segments.length} segments`);
 
   let content = '';
