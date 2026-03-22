@@ -180,8 +180,10 @@ export function TranscriptViewerPage() {
     currentTime,
     playbackRate,
     rewindSpeed,
+    fastForwardSpeed,
     togglePlayPause,
     toggleRewind,
+    toggleFastForward,
     skip,
     seek,
     setPlaybackRate,
@@ -1265,8 +1267,10 @@ export function TranscriptViewerPage() {
         duration={transcript.duration}
         playbackRate={playbackRate}
         rewindSpeed={rewindSpeed}
+        fastForwardSpeed={fastForwardSpeed}
         onTogglePlay={togglePlayPause}
         onToggleRewind={toggleRewind}
+        onToggleFastForward={toggleFastForward}
         onSkip={skip}
         onSeek={seek}
         onRateChange={setPlaybackRate} />

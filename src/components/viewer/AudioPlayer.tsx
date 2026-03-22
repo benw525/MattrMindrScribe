@@ -1,5 +1,5 @@
 import React, { useRef, useCallback, useState } from 'react';
-import { PlayIcon, PauseIcon, ChevronUpIcon, RewindIcon } from 'lucide-react';
+import { PlayIcon, PauseIcon, ChevronUpIcon, RewindIcon, FastForwardIcon } from 'lucide-react';
 import { formatDuration } from '../../utils/formatters';
 
 interface AudioPlayerProps {
@@ -8,14 +8,16 @@ interface AudioPlayerProps {
   duration: number;
   playbackRate: number;
   rewindSpeed: number;
+  fastForwardSpeed: number;
   onTogglePlay: () => void;
   onToggleRewind: () => void;
+  onToggleFastForward: () => void;
   onSkip: (seconds: number) => void;
   onSeek: (time: number) => void;
   onRateChange: (rate: number) => void;
 }
 
-const SPEED_OPTIONS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 3];
+const SPEED_OPTIONS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
 
 export function AudioPlayer({
   isPlaying,
@@ -23,8 +25,10 @@ export function AudioPlayer({
   duration,
   playbackRate,
   rewindSpeed,
+  fastForwardSpeed,
   onTogglePlay,
   onToggleRewind,
+  onToggleFastForward,
   onSkip,
   onSeek,
   onRateChange
@@ -208,6 +212,23 @@ export function AudioPlayer({
               <PauseIcon className="h-5 w-5 sm:h-6 sm:w-6" /> :
               <PlayIcon className="h-5 w-5 sm:h-6 sm:w-6 ml-0.5" />
             }
+          </button>
+
+          <button
+            onClick={onToggleFastForward}
+            className={`relative p-1.5 sm:p-2 rounded-full transition-colors ${
+              fastForwardSpeed > 0
+                ? 'text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/30'
+                : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white active:text-indigo-600 active:bg-indigo-50 dark:active:bg-indigo-950/30'
+            }`}
+            aria-label={fastForwardSpeed > 0 ? `Fast forwarding at ${fastForwardSpeed}x` : 'Fast forward'}
+          >
+            <FastForwardIcon className="h-4 w-4 sm:h-5 sm:w-5" />
+            {fastForwardSpeed > 0 && (
+              <span className="absolute -top-1 -right-1 text-[9px] font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 rounded-full px-1">
+                {fastForwardSpeed}x
+              </span>
+            )}
           </button>
 
           <button

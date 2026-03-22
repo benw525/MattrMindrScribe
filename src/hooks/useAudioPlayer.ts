@@ -43,7 +43,9 @@ export function useAudioPlayer(totalDuration: number, fileUrl?: string, mediaTyp
   const [currentTime, setCurrentTime] = useState(0);
   const [playbackRate, setPlaybackRateState] = useState(1);
   const [rewindSpeed, setRewindSpeed] = useState(0);
+  const [fastForwardSpeed, setFastForwardSpeed] = useState(0);
   const rewindIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const ffIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const hasRealAudio = useRef(false);
   const [mediaUrl, setMediaUrl] = useState<string | null>(null);
@@ -160,7 +162,19 @@ export function useAudioPlayer(totalDuration: number, fileUrl?: string, mediaTyp
     setRewindSpeed(0);
   }, []);
 
+  const stopFastForward = useCallback(() => {
+    if (ffIntervalRef.current) {
+      clearInterval(ffIntervalRef.current);
+      ffIntervalRef.current = null;
+    }
+    setFastForwardSpeed(0);
+  }, []);
+
   const toggleRewind = useCallback(() => {
+    if (fastForwardSpeed > 0) {
+      if (ffIntervalRef.current) { clearInterval(ffIntervalRef.current); ffIntervalRef.current = null; }
+      setFastForwardSpeed(0);
+    }
     if (isPlaying) {
       const audio = audioRef.current;
       if (audio && hasRealAudio.current) {
@@ -196,39 +210,85 @@ export function useAudioPlayer(totalDuration: number, fileUrl?: string, mediaTyp
       }
       return next;
     });
-  }, [isPlaying]);
+  }, [isPlaying, fastForwardSpeed]);
+
+  const toggleFastForward = useCallback(() => {
+    if (rewindSpeed > 0) {
+      if (rewindIntervalRef.current) { clearInterval(rewindIntervalRef.current); rewindIntervalRef.current = null; }
+      setRewindSpeed(0);
+    }
+    if (isPlaying) {
+      const audio = audioRef.current;
+      if (audio && hasRealAudio.current) {
+        audio.pause();
+      }
+      setIsPlaying(false);
+    }
+
+    setFastForwardSpeed((prev) => {
+      const next = prev >= 3 ? 0 : prev + 1;
+      if (ffIntervalRef.current) {
+        clearInterval(ffIntervalRef.current);
+        ffIntervalRef.current = null;
+      }
+      if (next > 0) {
+        const intervalMs = 100;
+        const stepSec = (next * intervalMs) / 1000;
+        ffIntervalRef.current = setInterval(() => {
+          const audio = audioRef.current;
+          setCurrentTime((prev) => {
+            const newTime = Math.min(totalDuration, prev + stepSec);
+            if (audio && hasRealAudio.current) {
+              audio.currentTime = newTime;
+            }
+            if (newTime >= totalDuration) {
+              clearInterval(ffIntervalRef.current!);
+              ffIntervalRef.current = null;
+              setFastForwardSpeed(0);
+            }
+            return newTime;
+          });
+        }, intervalMs);
+      }
+      return next;
+    });
+  }, [isPlaying, rewindSpeed, totalDuration]);
 
   useEffect(() => {
     if (rewindIntervalRef.current) {
       clearInterval(rewindIntervalRef.current);
       rewindIntervalRef.current = null;
     }
+    if (ffIntervalRef.current) {
+      clearInterval(ffIntervalRef.current);
+      ffIntervalRef.current = null;
+    }
     setRewindSpeed(0);
+    setFastForwardSpeed(0);
   }, [fileUrl]);
 
   useEffect(() => {
     return () => {
-      if (rewindIntervalRef.current) {
-        clearInterval(rewindIntervalRef.current);
-      }
+      if (rewindIntervalRef.current) clearInterval(rewindIntervalRef.current);
+      if (ffIntervalRef.current) clearInterval(ffIntervalRef.current);
     };
   }, []);
 
-  const togglePlayPauseWithRewindStop = useCallback(() => {
-    if (rewindSpeed > 0) {
-      stopRewind();
-    }
+  const togglePlayPauseWithTransportStop = useCallback(() => {
+    if (rewindSpeed > 0) stopRewind();
+    if (fastForwardSpeed > 0) stopFastForward();
     togglePlayPause();
-  }, [rewindSpeed, stopRewind, togglePlayPause]);
+  }, [rewindSpeed, fastForwardSpeed, stopRewind, stopFastForward, togglePlayPause]);
 
   return {
     isPlaying,
     currentTime,
     playbackRate,
     rewindSpeed,
-    togglePlayPause: togglePlayPauseWithRewindStop,
+    fastForwardSpeed,
+    togglePlayPause: togglePlayPauseWithTransportStop,
     toggleRewind,
-    stopRewind,
+    toggleFastForward,
     skip,
     seek,
     setPlaybackRate,
