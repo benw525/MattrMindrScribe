@@ -1,0 +1,438 @@
+{\rtf1\ansi\ansicpg1252\cocoartf2639
+{\fonttbl\f0\fswiss\fcharset0 Helvetica-Bold;\f1\fswiss\fcharset0 Helvetica;\f2\fmodern\fcharset0 CourierNewPSMT;\f3\fswiss\fcharset0 Helvetica-Oblique;\f4\fswiss\fcharset0 Helvetica-BoldOblique;}
+{\colortbl;\red255\green255\blue255;\red0\green0\blue0;\red180\green0\blue0;\red0\green100\blue0;\red0\green0\blue180;\red128\green128\blue128;\red255\green240\blue240;\red240\green255\blue240;\red240\green240\blue255;\red80\green80\blue80;}
+\paperw12240\paperh15840\margl1440\margr1440\margt1440\margb1440
+
+\pard\tx560\tx1120\qc
+
+{\f0\fs44 MattrMindrScribe Transcription Pipeline\line Full Technical Diagnostic}
+\par\pard\tx560\tx1120\qc
+{\f1\fs22\cf10 Report Date: March 22, 2026\line Environment: AWS EC2 (us-east-1) + Amazon S3 (us-east-2)\line Domain: scribe.mattrmindr.com\line Stack: React/TypeScript/Express/PostgreSQL}
+\par\pard\tx560\tx1120
+\par
+{\f0\fs18 ________________________________________________________________________________}
+\par\par
+
+{\f0\fs32 TABLE OF CONTENTS}
+\par\par
+{\f1\fs22 1.  Pipeline Architecture Overview\line 2.  Stage 0: Auphonic Audio Cleanup\line 3.  Stage 1: OpenAI Whisper Speech-to-Text\line 4.  Stage 2: AssemblyAI Diarization\line 5.  Stage 3: Segment Merging & Post-Processing\line 6.  Stage 4: Claude Opus 4 Speaker Refinement\line 7.  Database Persistence & Checkpointing\line 8.  Error Handling & Recovery Architecture\line 9.  Known Issues & Risk Assessment\line 10. Recent Fixes (Pending Deployment)}
+\par\par
+{\f0\fs18 ________________________________________________________________________________}
+\par\par
+
+{\f0\fs32 1. PIPELINE ARCHITECTURE OVERVIEW}
+\par\par
+
+{\f0\fs24 1.1 Entry Point}
+\par\par
+{\f1\fs22 The pipeline is initiated by calling }{\f2\fs20 processTranscription(transcriptId)}{\f1\fs22  in }{\f2\fs20 server/transcription.ts}{\f1\fs22 . This function receives a transcript ID referencing a row in the }{\f2\fs20 transcripts}{\f1\fs22  table containing the file URL, filename, recording type, expected speaker count, and user preferences.}
+\par\par
+
+{\f0\fs24 1.2 Pipeline Stages (Sequential Flow)}
+\par\par
+{\f2\fs18 processTranscription(transcriptId)\line   \u9474  \line   \u9500\u9472\u9472 Stage 0: Auphonic audio cleanup (optional, user-enabled)\line   \u9474      Input:  Raw audio/video file from S3\line   \u9474      Output: Cleaned WAV file (or fallback to original on failure)\line   \u9474\line   \u9500\u9472\u9472 Stage 1: OpenAI Whisper (speech-to-text)     \u2510\line   \u9474      Input:  Audio file (cleaned or raw)      \u9474 Run in\line   \u9474      Output: Array of TranscriptSegment[]     \u9474 parallel\line   \u9474                                                \u9474 via\line   \u9500\u9472\u9472 Stage 2: AssemblyAI Diarization             \u9474 Promise.all()\line   \u9474      Input:  Same audio file                  \u2518\line   \u9474      Output: Speaker labels + enriched data\line   \u9474\line   \u9500\u9472\u9472 Stage 3: Segment Merging\line   \u9474      Input:  Whisper segments + diarization labels\line   \u9474      Output: Segments with speaker assignments\line   \u9474      NOTE:   Checkpoint saved to DB here\line   \u9474\line   \u9500\u9472\u9472 Stage 4: Claude Opus 4 Refinement\line   \u9474      Input:  Merged segments (+ enriched data if available)\line   \u9474      Output: Final segments with named speakers + cleaned text\line   \u9474\line   \u9492\u9472\u9472 Final: Persist to PostgreSQL}
+\par\par
+
+{\f0\fs24 1.3 Core Data Structure}
+\par\par
+{\f2\fs18 interface TranscriptSegment \{\line   speaker: string;     // "Speaker 1", or after refinement: "Officer Ken"\line   text: string;        // Transcribed speech content\line   startTime: number;   // Seconds from start (float, 2 decimal precision)\line   endTime: number;     // Seconds from start (float, 2 decimal precision)\line \}}
+\par\par
+
+{\f0\fs24 1.4 Parallel Execution Model}
+\par\par
+{\f1\fs22 Stages 1 (Whisper) and 2 (AssemblyAI) execute concurrently via }{\f2\fs20 Promise.all()}{\f1\fs22 . Both receive the same source audio file. This halves total processing time since both are I/O-bound API calls. If either fails, the pipeline can continue: Whisper failure is fatal (no transcript), but diarization failure is non-fatal (falls back to heuristic speaker assignment).}
+\par\par
+
+{\f0\fs24 1.5 Pipeline Log}
+\par\par
+{\f1\fs22 A JSON object (}{\f2\fs20 pipeline_log}{\f1\fs22 ) is maintained throughout execution and persisted to the }{\f2\fs20 transcripts.pipeline_log}{\f1\fs22  JSONB column. Each stage writes its status (}{\f2\fs20 pending}{\f1\fs22 , }{\f2\fs20 processing}{\f1\fs22 , }{\f2\fs20 success}{\f1\fs22 , }{\f2\fs20 error}{\f1\fs22 , }{\f2\fs20 skipped}{\f1\fs22 ) along with stage-specific metadata (segment counts, speaker counts, error messages). The frontend reads this to render the pipeline status UI.}
+\par\par
+
+{\f0\fs18 ________________________________________________________________________________}
+\par\par
+
+{\f0\fs32 2. STAGE 0: AUPHONIC AUDIO CLEANUP}
+\par\par
+
+{\f0\fs24 2.1 Purpose}
+\par\par
+{\f1\fs22 Auphonic is a cloud-based audio post-production service. It performs noise reduction, speech isolation, loudness normalization, and equalization. The goal is to produce cleaner audio that yields better transcription accuracy from Whisper, particularly for noisy recordings like body camera footage.}
+\par\par
+
+{\f0\fs24 2.2 Implementation (}{\f2\fs20 server/auphonic.ts}{\f0\fs24 )}
+\par\par
+{\f1\fs22 The Auphonic integration uses two preset configurations:}
+\par\par
+{\f0\fs22 Standard Preset }{\f1\fs22 (depositions, court hearings, recorded statements):}
+{\f2\fs18 \line - denoise_method: speech_isolation (maximum noise removal)\line - denoiseamount: 100 (full strength)\line - remove_noise: 100\line - remove_reverb: 80\line - remove_breaths: 50\line - leveler: moderate\line - loudnesstarget: -16 LUFS\line - Output: WAV format}
+\par\par
+{\f0\fs22 Body Cam Preset }{\f1\fs22 (body camera, dash camera):}
+{\f2\fs18 \line - denoise_method: dynamic_denoise (less aggressive, preserves environmental audio)\line - denoiseamount: 75\line - remove_noise: 75\line - remove_reverb: 60\line - remove_breaths: 0 (preserve all breathing/environmental sounds)\line - leveler: moderate\line - loudnesstarget: -16 LUFS\line - Output: WAV format}
+\par\par
+
+{\f0\fs24 2.3 Workflow}
+\par\par
+{\f1\fs22 1. Check if Auphonic is enabled (per-user setting }{\f2\fs20 users.auphonic_enabled}{\f1\fs22 ) AND configured (}{\f2\fs20 AUPHONIC_API_KEY}{\f1\fs22  env var exists).\line 2. Create or reuse a preset on Auphonic's API (}{\f2\fs20 POST /api/presets.json}{\f1\fs22 ). Presets are cached in-memory.\line 3. Upload the source file via Simple API (}{\f2\fs20 POST /api/simple/productions.json}{\f1\fs22 ) with }{\f2\fs20 action: 'start'}{\f1\fs22 .\line 4. Poll }{\f2\fs20 GET /api/production/\{uuid\}.json}{\f1\fs22  every 15 seconds until status = 3 (Done) or status = 4 (Error). Maximum wait: 30 minutes.\line 5. On success: download the cleaned WAV file from }{\f2\fs20 output_files[0].download_url}{\f1\fs22 . Update }{\f2\fs20 sourcePath}{\f1\fs22  so all downstream stages use the cleaned audio.\line 6. On failure: log the error, keep }{\f2\fs20 sourcePath}{\f1\fs22  as the original file, and continue the pipeline.}
+\par\par
+
+{\f0\fs24 2.4 What SHOULD Happen}
+\par\par
+{\f1\fs22 For a body cam recording: Auphonic receives the raw MP4, extracts the audio track, applies dynamic denoising at 75% strength, normalizes loudness to -16 LUFS, and returns a clean WAV. This WAV should have significantly reduced wind noise, radio static, and engine hum while preserving speech intelligibility. Whisper should then produce accurate transcription from this cleaned audio.}
+\par\par
+
+{\f0\fs24 2.5 Issues}
+\par\par
+{\f3\fs22\cf3 Issue 0-A: No retry on failure.}{\f1\fs22\cf2  If Auphonic returns Error (4), the pipeline silently falls back to raw audio with only a console log. For body cam footage, raw audio is often so noisy that Whisper hallucinates hundreds of garbage segments. A single Auphonic failure can cascade into a completely unusable transcript.}
+\par\par
+{\f3\fs22\cf3 Issue 0-B: Preset creation on every cold start.}{\f1\fs22\cf2  The preset cache (}{\f2\fs20 presetCache}{\f1\fs22 ) is in-memory. Every server restart requires a new preset to be created via API. If the Auphonic account accumulates hundreds of presets, it could cause issues. Should use a persistent preset UUID or implement cleanup.}
+\par\par
+{\f3\fs22\cf3 Issue 0-C: No file size validation.}{\f1\fs22\cf2  Auphonic has file size limits depending on the plan. Large body cam videos (500MB+) may exceed the plan limit and fail. No pre-check is performed.}
+\par\par
+
+{\f0\fs18 ________________________________________________________________________________}
+\par\par
+
+{\f0\fs32 3. STAGE 1: OPENAI WHISPER SPEECH-TO-TEXT}
+\par\par
+
+{\f0\fs24 3.1 Purpose}
+\par\par
+{\f1\fs22 OpenAI Whisper converts audio to text with segment-level timestamps. It produces an array of segments, each with start/end times and transcribed text. All segments are initially labeled "Speaker 1" since Whisper does not perform speaker identification.}
+\par\par
+
+{\f0\fs24 3.2 Implementation (}{\f2\fs20 server/transcription.ts}{\f0\fs24 )}
+\par\par
+
+{\f0\fs22 3.2.1 Format Compatibility Check}
+\par
+{\f1\fs22 Before Whisper processing, }{\f2\fs20 ensureWhisperCompatible()}{\f1\fs22  checks if the source file extension is in the supported set: }{\f2\fs20 .flac, .m4a, .mp3, .mp4, .mpeg, .mpga, .oga, .ogg, .wav, .webm}{\f1\fs22 . If not, ffmpeg converts it to MP3 at 16kHz mono 64kbps. If the format IS supported, the file passes through unchanged.}
+\par\par
+
+{\f0\fs22 3.2.2 Chunking}
+\par
+{\f1\fs22 The }{\f2\fs20 splitAudioIntoChunks()}{\f1\fs22  function handles the Whisper API's 25MB file size limit:}
+\par\par
+{\f2\fs18 MAX_CHUNK_SIZE = 24 MB (safety margin below 25MB API limit)\line TARGET_CHUNK_BYTES = 20 MB per output chunk\line MP3_BITRATE = 64,000 bps\line\line Chunk duration = floor(20MB / (64000/8 bytes/sec)) = 2,621 seconds (~43 minutes)\line\line If file <= 24MB: send as-is (no conversion)\line If file > 24MB: split via ffmpeg into MP3 chunks at 16kHz mono 64kbps\line   - 1-second overlap between chunks for continuity\line   - Each chunk: ffmpeg -y -ss <start> -i <source> -t <duration> -vn -ar 16000 -ac 1 -b:a 64k -f mp3}
+\par\par
+
+{\f0\fs22 3.2.3 Whisper API Call}
+\par
+{\f2\fs18 whisperClient.audio.transcriptions.create(\{\line   file: <buffer as File>,\line   model: 'whisper-1',\line   response_format: 'verbose_json',\line   timestamp_granularities: ['segment'],\line \})}
+\par\par
+{\f1\fs22 Each chunk is sent individually. Up to 3 chunks are processed concurrently (}{\f2\fs20 WHISPER_CONCURRENCY = 3}{\f1\fs22 ). Each chunk has 4 retry attempts with exponential backoff (jittered: 2^attempt * 2 * [0.8..1.2] seconds). Retryable errors: connection, ECONNRESET, ETIMEDOUT, socket, network, timeout, 503, 502, 429.}
+\par\par
+{\f1\fs22 After all chunks complete, segments are sorted by chunk index, flattened, and the offsets are applied to timestamps so they are relative to the start of the full file.}
+\par\par
+
+{\f0\fs22 3.2.4 Post-Whisper Processing}
+\par
+{\f1\fs22 Two filters run on the raw Whisper output before any diarization is applied:}
+\par\par
+{\f0\fs22 A. Deduplication }{\f2\fs20 deduplicateSegments()}
+\par
+{\f1\fs22 Whisper sometimes produces duplicate segments from chunk overlaps or API behavior:}
+{\f2\fs18 \line - Exact duplicates (same start, end, text): removed\line - Near-duplicates (start within 1.5s + text similarity > 0.7): removed\line - Overlap duplicates (start < prev.end - 0.5s + text similarity > 0.7): removed\line - Short-phrase near-duplicates (<=3 words, start within 5s, similarity > 0.9): removed\line - Recent lookback (10 segments, start within 2s, end within 2s, similarity > 0.85): removed\line - Timestamp correction: if segment starts before previous ends, start is adjusted to prev.end}
+\par\par
+{\f0\fs22 B. Hallucination Removal }{\f2\fs20 removeHallucinatedSegments()}
+\par
+{\f1\fs22 Whisper is known to hallucinate short repetitive phrases (e.g., "Mm-hmm.", "Thank you.", "Ah.") at regular intervals when processing silence or background noise. Two detection methods:}
+\par\par
+{\f0\fs20 Method 1: Dominant Hallucination Detection (NEW)}
+\par
+{\f2\fs18 - Count occurrences of each short phrase (<=3 words) across ALL segments\line - If any phrase appears in >= 50% of total segments AND >= 10 times:\line   -> Flag it as a dominant hallucination\line   -> Remove ALL instances (not just runs)\line - If all segments are removed, return empty array\line\line Example: 407 segments, 403 are "Mm-hmm." (99%) -> all 403 removed, 4 remain}
+\par\par
+{\f0\fs20 Method 2: Run-Based Detection (Original)}
+\par
+{\f2\fs18 - Find consecutive runs of identical short text (<=3 words, exact match)\line - If run length >= 3:\line   - Calculate time gaps between consecutive segments in the run\line   - Compute average gap and maximum deviation from average\line   - If max deviation <= 1.5 seconds: uniform spacing detected\line   - Remove all but the first segment in the run\line - If run length < 3: keep all segments}
+\par\par
+
+{\f0\fs24 3.3 What SHOULD Happen}
+\par\par
+{\f1\fs22 For a 35-minute body cam recording (~200MB MP4):\line 1. File size exceeds 24MB, so it is split into chunks. At 64kbps MP3, the entire 35 minutes (~2100s) fits in a single chunk (2621s max per chunk). So effectively 1 chunk is created.\line 2. ffmpeg converts the MP4 to 16kHz mono 64kbps MP3, stripping the video track.\line 3. The single MP3 chunk is sent to Whisper API.\line 4. Whisper returns segments with timestamps and text.\line 5. Deduplication removes any overlap artifacts.\line 6. Hallucination detection removes repetitive garbage.\line 7. Result: Clean array of TranscriptSegment[] with "Speaker 1" labels and accurate timestamps.}
+\par\par
+
+{\f0\fs24 3.4 Issues}
+\par\par
+{\f3\fs22\cf3 Issue 1-A: Non-deterministic Whisper output.}{\f1\fs22\cf2  The same file sent to the Whisper API on different days can produce dramatically different results. A body cam file transcribed on March 15 produced 364 accurate segments; the same file on March 22 produced 407 hallucinated "Mm-hmm." segments. The API parameters, chunking logic, and file are identical. This appears to be inherent non-determinism in the Whisper model or a model update by OpenAI between the two dates.}
+\par\par
+{\f3\fs22\cf3 Issue 1-B: Aggressive downsampling for small files.}{\f1\fs22\cf2  When a file exceeds 24MB, chunking converts it to 16kHz mono 64kbps MP3. This is aggressive compression. The original body cam audio may have higher-quality audio (e.g., AAC 128kbps stereo). While Whisper internally operates at 16kHz, the 64kbps MP3 encoding introduces lossy artifacts that may push borderline-noisy audio into the hallucination zone. Note: files under 24MB are sent as-is without any conversion, meaning quality varies depending on file size.}
+\par\par
+{\f3\fs22\cf3 Issue 1-C: No Whisper language or prompt hints.}{\f1\fs22\cf2  The Whisper API call does not set }{\f2\fs20 language: 'en'}{\f1\fs22  or provide a }{\f2\fs20 prompt}{\f1\fs22  parameter. OpenAI recommends setting language for better accuracy. A prompt like "Police body camera recording with radio communications, multiple officers, and civilian interaction" could reduce hallucinations by anchoring Whisper's decoder.}
+\par\par
+{\f3\fs22\cf3 Issue 1-D: Single-chunk edge case.}{\f1\fs22\cf2  For files between 24MB and ~160MB (which produce a single chunk after MP3 conversion), the chunking still runs ffmpeg to convert to MP3 rather than sending the original file. This unnecessary conversion adds processing time and potential quality loss.}
+\par\par
+{\f3\fs22\cf3 Issue 1-E: ffmpeg stderr is silenced.}{\f1\fs22\cf2  All ffmpeg spawns have }{\f2\fs20 proc.stderr.on('data', () => \{\})}{\f1\fs22  which silently discards stderr output. ffmpeg writes progress and diagnostic information to stderr. If a conversion produces warnings (e.g., corrupt audio frames, unsupported codec fallback), these are invisible.}
+\par\par
+
+{\f0\fs18 ________________________________________________________________________________}
+\par\par
+
+{\f0\fs32 4. STAGE 2: ASSEMBLYAI DIARIZATION}
+\par\par
+
+{\f0\fs24 4.1 Purpose}
+\par\par
+{\f1\fs22 AssemblyAI provides speaker diarization (identifying who spoke when) along with enriched data: word-level confidence scores, sentiment analysis, and entity detection. This data is used both for speaker labeling and for the enriched Claude refinement path.}
+\par\par
+
+{\f0\fs24 4.2 Implementation (}{\f2\fs20 server/diarization.ts}{\f0\fs24 )}
+\par\par
+
+{\f0\fs22 4.2.1 API Configuration}
+\par
+{\f2\fs18 const config = \{\line   audio_url: uploadUrl,          // Uploaded file URL on AssemblyAI\line   speech_model: 'universal-3-pro', // Latest model (recently fixed)\line   speaker_labels: true,          // Enable diarization\line   sentiment_analysis: true,      // Per-utterance sentiment\line   entity_detection: true,        // Named entity recognition\line   language_code: 'en_us',\line   punctuate: true,\line   format_text: true,\line   speakers_expected: N,          // Optional, set if user specified\line \};}
+\par\par
+
+{\f0\fs22 4.2.2 Workflow}
+\par
+{\f1\fs22 1. Upload audio file to AssemblyAI via }{\f2\fs20 client.files.upload(readStream)}{\f1\fs22 .\line 2. Submit transcription job with config above.\line 3. AssemblyAI SDK handles polling internally.\line 4. On completion, extract utterances (speaker-labeled speech segments), sentiment results, and entities.\line 5. Convert utterances to }{\f2\fs20 DiarizationLabel[]}{\f1\fs22  format: }{\f2\fs20 \{speaker, startTime, endTime, text\}}{\f1\fs22  with times converted from milliseconds to seconds.\line 6. Also build }{\f2\fs20 EnrichedDiarizationResult}{\f1\fs22  containing full utterance data with word-level confidence, for the enriched refinement path.}
+\par\par
+
+{\f0\fs24 4.3 What SHOULD Happen}
+\par\par
+{\f1\fs22 AssemblyAI processes the audio independently of Whisper. It returns utterances with speaker labels (A, B, C, etc.), word-level timestamps and confidence scores, sentiment analysis per utterance, and detected entities (names, locations, dates). For the March 15 successful run, it returned 67 utterances and identified 4 speakers. This enriched data enables the Claude Opus enriched refinement path which produces superior speaker identification with radio transmission detection for body cam footage.}
+\par\par
+
+{\f0\fs24 4.4 Issues}
+\par\par
+{\f3\fs22\cf3 Issue 2-A: }{\f2\fs20\cf3 speech_model}{\f3\fs22\cf3  parameter bug (FIXED, pending deploy).}{\f1\fs22\cf2  Prior to the fix, the config used }{\f2\fs20 speech_model: 'best'}{\f1\fs22  which triggered an AssemblyAI API validation error: }{\f3\fs20 "speech_models" must be a non-empty list}{\f1\fs22 . Changed to }{\f2\fs20 'universal-3-pro'}{\f1\fs22 . This fix is in the Replit codebase but not yet deployed to EC2.}
+\par\par
+{\f3\fs22\cf3 Issue 2-B: Large file upload timeout risk.}{\f1\fs22\cf2  The file is uploaded to AssemblyAI via }{\f2\fs20 createReadStream}{\f1\fs22 . For large body cam files (500MB+), this upload could timeout or fail on slow connections. No retry logic exists for the upload step. The AssemblyAI SDK handles its own polling, but the initial upload is unprotected.}
+\par\par
+{\f3\fs22\cf3 Issue 2-C: Diarization receives same audio as Whisper.}{\f1\fs22\cf2  Both stages receive the same }{\f2\fs20 sourcePath}{\f1\fs22 , which may be the Auphonic-cleaned audio or the raw file. If Auphonic's speech isolation is too aggressive, it could affect AssemblyAI's ability to separate speakers. Conversely, if Auphonic fails and the audio is very noisy, both stages suffer equally.}
+\par\par
+
+{\f0\fs18 ________________________________________________________________________________}
+\par\par
+
+{\f0\fs32 5. STAGE 3: SEGMENT MERGING & POST-PROCESSING}
+\par\par
+
+{\f0\fs24 5.1 Purpose}
+\par\par
+{\f1\fs22 Whisper produces segments with text and timestamps but no speaker identification. AssemblyAI produces speaker-labeled utterances. This stage maps AssemblyAI's speaker labels onto Whisper's segments to produce segments with both accurate text (from Whisper) and speaker labels (from AssemblyAI).}
+\par\par
+
+{\f0\fs24 5.2 Implementation}
+\par\par
+
+{\f0\fs22 5.2.1 }{\f2\fs20 mapDiarizationToSegments()}{\f0\fs22  (}{\f2\fs20 server/diarization.ts}{\f0\fs22 )}
+\par
+{\f1\fs22 For each Whisper segment:}
+{\f2\fs18 \line 1. Calculate the temporal overlap between the segment and every diarization label\line    overlap = max(0, min(seg.end, label.end) - max(seg.start, label.start))\line 2. Assign the speaker from the label with the greatest overlap\line 3. If no overlap found (gap in diarization), find the nearest label by midpoint distance\line 4. Map AssemblyAI speaker IDs (A, B, C) to sequential "Speaker 1", "Speaker 2", etc.\line    using a speakerMap with stable ordering (first-seen order)}
+\par\par
+
+{\f0\fs22 5.2.2 Fallback: }{\f2\fs20 assignSpeakers()}{\f0\fs22  (}{\f2\fs20 server/transcription.ts}{\f0\fs22 )}
+\par
+{\f1\fs22 If diarization fails or returns no utterances, a simple heuristic assigns speakers:}
+{\f2\fs18 \line - Start with Speaker 1\line - If gap between segments > 2.0 seconds: toggle between Speaker 1 and Speaker 2\line - Maximum 10 speakers tracked\line\line This is a very crude heuristic and produces poor results for real recordings with\line multiple speakers. It exists only as a last resort.}
+\par\par
+
+{\f0\fs24 5.3 What SHOULD Happen}
+\par\par
+{\f1\fs22 Whisper's segments (with accurate word-level text and timestamps) are combined with AssemblyAI's speaker labels (with accurate speaker identification). The result should have Whisper's text quality with AssemblyAI's speaker attribution. For the successful March 15 run: 364 Whisper segments were mapped against 67 AssemblyAI utterances, producing 364 segments with 4 distinct speaker labels.}
+\par\par
+
+{\f0\fs24 5.4 Issues}
+\par\par
+{\f3\fs22\cf3 Issue 3-A: Granularity mismatch.}{\f1\fs22\cf2  Whisper produces many short segments; AssemblyAI produces fewer, longer utterances. A single AssemblyAI utterance may span multiple Whisper segments. The overlap-based matching generally handles this well, but edge cases at utterance boundaries can misattribute the speaker for segments that straddle two diarization labels.}
+\par\par
+{\f3\fs22\cf3 Issue 3-B: Heuristic fallback is too simplistic.}{\f1\fs22\cf2  The }{\f2\fs20 assignSpeakers()}{\f1\fs22  fallback (2-second gap = speaker change) has no awareness of conversational patterns. In body cam recordings where an officer talks continuously for extended periods, a natural 2-second pause would incorrectly trigger a speaker change.}
+\par\par
+{\f3\fs22\cf3 Issue 3-C: No timestamp reconciliation.}{\f1\fs22\cf2  Whisper and AssemblyAI may produce slightly different timestamps for the same speech. The overlap-based matching mitigates this, but there is no explicit alignment or drift correction between the two systems.}
+\par\par
+
+{\f0\fs18 ________________________________________________________________________________}
+\par\par
+
+{\f0\fs32 6. STAGE 4: CLAUDE OPUS 4 SPEAKER REFINEMENT}
+\par\par
+
+{\f0\fs24 6.1 Purpose}
+\par\par
+{\f1\fs22 The final stage uses Anthropic Claude Opus 4 to replace generic speaker labels ("Speaker 1", "Speaker 2") with identified names and roles ("Officer Ken", "Mr. Richard"), correct speaker misattributions, and clean up text formatting. This is the most complex and expensive stage of the pipeline.}
+\par\par
+
+{\f0\fs24 6.2 Implementation (}{\f2\fs20 server/speakerRefinement.ts}{\f0\fs24 )}
+\par\par
+
+{\f0\fs22 6.2.1 Two Refinement Paths}
+\par\par
+{\f1\fs22 The function }{\f2\fs20 refineSpeakersWithGPT()}{\f1\fs22  selects between two paths:}
+\par\par
+{\f0\fs20 Path A: Enriched Pipeline }{\f1\fs22 (when AssemblyAI enriched data is available)}
+\par
+{\f2\fs18 - Receives: EnrichedDiarizationResult (utterances with word-level confidence,\line   sentiment analysis, entity detection)\line - Computes per-speaker confidence statistics\line - Sends full enriched data to Claude with specialized system prompt\line - System prompt includes radio transmission detection instructions,\line   speaker identification strategies, and transcript refinement rules\line - Output: Complete refined transcript with named speakers, radio segment\line   classification, corrections, and metadata\line - max_tokens: 16,000 (fixed)}
+\par\par
+{\f0\fs20 Path B: Standard Pipeline }{\f1\fs22 (fallback when no enriched data)}
+\par
+{\f2\fs18 - Receives: Raw segments with generic speaker labels\line - Two-pass approach:\line   Pass 1: identifySpeakersFromOpening() analyzes first 80 segments\line           to build a speaker roster (depositions only, segments > 30)\line   Pass 2: Full refinement with roster context\line - Recording-type-specific prompts (deposition, body_cam, court_hearing, etc.)\line - max_tokens: dynamic = min(32000, max(8192, segments * 80 + 2000))}
+\par\par
+
+{\f0\fs22 6.2.2 Recording Type Prompts}
+\par
+{\f1\fs22 Six recording types have specialized context:}
+{\f2\fs18 \line - deposition: Videographer, Court Reporter, Attorneys, Deponent roles; Q&A alternation logic\line - court_hearing: Judge, Clerk/Bailiff, Attorneys, Witness, Defendant roles\line - recorded_statement: Adjuster/Investigator, Claimant, Attorney, Interpreter roles\line - police_interrogation: Lead Detective, Second Detective, Suspect, Attorney roles\line - body_cam: Primary Officer, Partner Officers, Subject, Witness, Victim, Dispatch roles;\line   radio transmission awareness; environmental noise context\line - other: Generic role inference from context}
+\par\par
+
+{\f0\fs22 6.2.3 Batching for Large Transcripts}
+\par
+{\f2\fs18 SINGLE_CALL_LIMIT = 350 segments  (below this: single Claude call)\line BATCH_SIZE = 200 segments           (above limit: process in batches of 200)\line OVERLAP_CONTEXT = 20 segments       (previous batch context for continuity)}
+\par\par
+{\f1\fs22 For transcripts exceeding 350 segments:}
+{\f2\fs18 \line 1. Split into batches of 200 segments\line 2. Each batch includes 20 overlap context segments from the previous batch\line    (labeled with already-refined speakers, NOT included in output)\line 3. Cumulative identifications map carries forward (e.g., "Speaker 1" -> "Officer Ken")\line    so subsequent batches maintain consistent naming\line 4. Each batch sends segment index "i" field for position anchoring\line 5. If a batch fails to parse, fall back to applying cumulative identifications map\line 6. Post-batch normalization resolves any remaining generic labels using\line    the cross-batch identifications map}
+\par\par
+
+{\f0\fs22 6.2.4 JSON Response Parsing & Recovery}
+\par
+{\f1\fs22 The }{\f2\fs20 parseResponse()}{\f1\fs22  function handles Claude's output with multiple fallback strategies:}
+{\f2\fs18 \line Primary: Parse JSON, extract "segments" array with "i" (index), "label", "text"\line\line Mismatch recovery:\line - Exact count or within 10%: accept directly\line - Oversized (> expected): attempt index-based reconciliation using "i" field\line   - If >= 80% of indices match: reconstruct by index\line   - Otherwise: use identifications map as fallback\line - Undersized (< expected, >= 50%): pad with empty labels\line - Undersized (< 50%): use identifications map only\line\line Truncation recovery:\line - tryRepairTruncatedJson(): finds last complete segment object (\},\{),\line   truncates there, and closes all open brackets/braces\line\line Alternative formats:\line - "labels" array (string[])\line - "speakers" array\line - First array-valued key in the response object\line - Pure identifications map (no per-segment data)}
+\par\par
+
+{\f0\fs22 6.2.5 Deposition Q&A Post-Processing}
+\par
+{\f1\fs22 For deposition recordings, }{\f2\fs20 applyDepositionQAPostProcessing()}{\f1\fs22  applies pattern-based corrections after Claude refinement:}
+{\f2\fs18 \line - Identifies the examiner (most questions) and deponent (most answers)\line - Short affirmatives ("Yes", "Sure", "Mm-hmm", etc.) attributed to the examiner\line   between two examiner segments are re-assigned to the deponent\line - Short transitions ("Okay", "All right", "Let me") attributed to the deponent\line   after a non-question are re-assigned to the examiner\line - Only affects segments <= 5 words that match specific regex patterns}
+\par\par
+
+{\f0\fs24 6.3 What SHOULD Happen}
+\par\par
+{\f1\fs22 Claude Opus 4 receives the merged segments with generic labels and produces a refined transcript where:\line - Every speaker is identified by name or role (never "Speaker 1")\line - Speaker attributions are corrected using conversational logic\line - Text is cleaned up (punctuation, formatting) while preserving all spoken content\line - For body cam recordings with enriched data: radio transmissions are identified and classified\line - For depositions: Q&A alternation is enforced and procedural roles are distinguished}
+\par\par
+
+{\f0\fs24 6.4 Issues}
+\par\par
+{\f3\fs22\cf3 Issue 4-A: Enriched path max_tokens may be insufficient.}{\f1\fs22\cf2  The enriched path uses a fixed }{\f2\fs20 max_tokens: 16000}{\f1\fs22 . For transcripts with 100+ utterances, the full enriched output (including metadata, speaker map, and transcript array with corrections and radio classifications) can exceed 16,000 tokens. Claude will truncate its response, losing the end of the transcript. The standard path dynamically calculates max_tokens but the enriched path does not.}
+\par\par
+{\f3\fs22\cf3 Issue 4-B: Enriched path sends ALL utterances in a single call.}{\f1\fs22\cf2  Unlike the standard path which batches at 200 segments, the enriched path sends the entire }{\f2\fs20 EnrichedDiarizationResult}{\f1\fs22  (all utterances, all sentiment data, all entities) in one message. For long recordings (100+ utterances), this can exceed Claude's effective input context or produce truncated output. No batching is implemented for the enriched path.}
+\par\par
+{\f3\fs22\cf3 Issue 4-C: Enriched output replaces Whisper segments entirely.}{\f1\fs22\cf2  When the enriched path succeeds, }{\f2\fs20 convertEnrichedToSegments()}{\f1\fs22  creates segments from AssemblyAI utterance timestamps, not Whisper timestamps. This discards Whisper's more granular segmentation in favor of AssemblyAI's coarser utterance boundaries. The result may have fewer, longer segments than the Whisper output.}
+\par\par
+{\f3\fs22\cf3 Issue 4-D: Body cam enriched prompt is extremely long.}{\f1\fs22\cf2  The }{\f2\fs20 buildEnrichedSystemPrompt()}{\f1\fs22  function produces a ~4,000+ word system prompt covering radio detection, speaker identification, transcript refinement rules, output format schema, and classification values. Combined with a large enriched payload, this pushes the total input token count high, leaving less room for Claude's response.}
+\par\par
+{\f3\fs22\cf3 Issue 4-E: No validation that enriched output covers full transcript.}{\f1\fs22\cf2  After the enriched path produces segments, there is no check that the output covers the same time range as the input. If Claude drops the last 30% of a long transcript due to token limits, the pipeline silently saves a truncated result.}
+\par\par
+{\f3\fs22\cf3 Issue 4-F: Hallucinated segments reach refinement.}{\f1\fs22\cf2  If the hallucination detector fails to catch garbage Whisper output (e.g., 407 "Mm-hmm." segments), Claude Opus 4 still processes all of them. This wastes API cost and time, and Claude cannot meaningfully refine gibberish. The dominant hallucination detector (newly added) should mitigate this, but the enriched path receives data independently from AssemblyAI and could still process hallucinated content if AssemblyAI also hallucinates.}
+\par\par
+
+{\f0\fs18 ________________________________________________________________________________}
+\par\par
+
+{\f0\fs32 7. DATABASE PERSISTENCE & CHECKPOINTING}
+\par\par
+
+{\f0\fs24 7.1 Checkpoint (Pre-Refinement)}
+\par\par
+{\f1\fs22 After Stage 3 (segment merging), a checkpoint is saved:}
+{\f2\fs18 \line 1. BEGIN transaction\line 2. DELETE all existing segments for this transcript_id\line 3. INSERT merged segments in batches of 200 (parameterized INSERT VALUES)\line 4. UPDATE transcripts.pipeline_log with current status\line 5. COMMIT}
+\par\par
+{\f1\fs22 This checkpoint enables pipeline resumption. If the server crashes during Claude refinement, the next run detects }{\f2\fs20 whisper.status === 'success'}{\f1\fs22  in the pipeline log and existing segments in the database, and skips directly to Stage 4.}
+\par\par
+
+{\f0\fs24 7.2 Final Persistence (Post-Refinement)}
+\par\par
+{\f1\fs22 After Stage 4, the final segments are persisted:}
+{\f2\fs18 \line 1. BEGIN transaction\line 2. DELETE all existing segments (including checkpoint data)\line 3. INSERT refined segments in batches of 200\line 4. If duration is null, estimate from max(segment.endTime)\line 5. UPDATE transcript status to 'completed', set duration, clear error_message,\line    save final pipeline_log\line 6. COMMIT}
+\par\par
+
+{\f0\fs24 7.3 Segment Storage Schema}
+\par\par
+{\f2\fs18 transcript_segments:\line   transcript_id  (FK -> transcripts.id)\line   start_time     (numeric)\line   end_time       (numeric)\line   speaker        (text)\line   text           (text)\line   segment_order  (integer, 0-indexed)}
+\par\par
+
+{\f0\fs24 7.4 Issues}
+\par\par
+{\f3\fs22\cf3 Issue 7-A: Delete-and-reinsert on every save.}{\f1\fs22\cf2  Both checkpoint and final save delete ALL segments and re-insert them with new UUIDs. This means segment IDs are not stable across pipeline runs. Any external references to segment IDs (bookmarks, annotations) would break on re-transcription.}
+\par\par
+{\f3\fs22\cf3 Issue 7-B: No segment-level diffing.}{\f1\fs22\cf2  There is no way to see what changed between the checkpoint save and the final save (i.e., what Claude refined). The pre-refinement data is overwritten.}
+\par\par
+
+{\f0\fs18 ________________________________________________________________________________}
+\par\par
+
+{\f0\fs32 8. ERROR HANDLING & RECOVERY ARCHITECTURE}
+\par\par
+
+{\f0\fs24 8.1 Cancellation}
+\par\par
+{\f1\fs22 The }{\f2\fs20 checkCancelled()}{\f1\fs22  function queries the database to check if the transcript has been deleted. It is called at multiple checkpoints throughout the pipeline. If the transcript is deleted, a }{\f2\fs20 TranscriptionCancelledError}{\f1\fs22  is thrown, halting the pipeline gracefully.}
+\par\par
+
+{\f0\fs24 8.2 Non-Fatal vs Fatal Errors}
+\par\par
+{\f2\fs18 Fatal errors (halt pipeline):\line - Transcript not found in database\line - Source file not found on disk/S3\line - Whisper transcription failure (all chunks failed)\line - Disk full (ENOSPC)\line\line Non-fatal errors (pipeline continues with degradation):\line - Auphonic failure: falls back to raw audio\line - AssemblyAI diarization failure: falls back to heuristic speaker assignment\line - Claude refinement failure: keeps pre-refinement speaker labels\line - Browser-playable conversion failure: original file URL retained\line - Pipeline log save failure: silently caught}
+\par\par
+
+{\f0\fs24 8.3 Cleanup}
+\par\par
+{\f1\fs22 The }{\f2\fs20 finally}{\f1\fs22  block cleans up three directories:}
+{\f2\fs18 \line 1. workDir: temporary directory for chunks and converted files\line 2. cloudTempPath: downloaded S3 file\line 3. auphonicCleanedPath: downloaded Auphonic output}
+\par\par
+
+{\f0\fs24 8.4 Pipeline Resume}
+\par\par
+{\f1\fs22 On re-transcription of the same transcript:}
+{\f2\fs18 \line - If pipeline_log shows whisper.status === 'success' AND segments exist in DB:\line   -> Skip Auphonic, Whisper, and Diarization\line   -> Load existing segments from DB\line   -> Jump directly to Claude refinement\line - Otherwise: full pipeline restart}
+\par\par
+
+{\f0\fs24 8.5 Issues}
+\par\par
+{\f3\fs22\cf3 Issue 8-A: Resume skips to refinement but enriched data is lost.}{\f1\fs22\cf2  When resuming, the pipeline loads segments from the database but }{\f2\fs20 enrichedDiarization}{\f1\fs22  is null (it was never persisted). This means the enriched Claude path is unavailable on resume, forcing the standard (less capable) refinement path. The enriched data (word-level confidence, sentiment, entities) should be persisted to enable enriched refinement on resume.}
+\par\par
+{\f3\fs22\cf3 Issue 8-B: No idempotency on re-transcription.}{\f1\fs22\cf2  If the user triggers re-transcription and Auphonic/Whisper succeed but the server crashes before the checkpoint save, the next attempt will re-run everything from scratch. The file is re-downloaded from S3, re-uploaded to Auphonic and AssemblyAI, and re-sent to Whisper. No intermediate results are cached.}
+\par\par
+
+{\f0\fs18 ________________________________________________________________________________}
+\par\par
+
+{\f0\fs32 9. KNOWN ISSUES & RISK ASSESSMENT}
+\par\par
+
+{\f0\fs24 9.1 Critical (Production Impact)}
+\par\par
+{\f2\fs18\cf3 [CRIT-1] AssemblyAI speech_model bug (FIXED, pending deploy)\line   The 'best' speech_model value triggers a validation error, causing\line   diarization to fail for every transcription. Fix: 'universal-3-pro'.\line   Impact: No diarization, no enriched data, degraded refinement.\line\line [CRIT-2] Whisper hallucination on noisy audio (MITIGATED, pending deploy)\line   Whisper can produce hundreds of identical garbage segments ("Mm-hmm.")\line   when processing silence or noise. New dominant hallucination detector\line   catches this pattern. However, non-dominant hallucination patterns\line   (varied short phrases, non-uniform spacing) may still pass through.\line   Impact: Entire transcript is garbage; wasted Claude API cost.\line\line [CRIT-3] Enriched path sends unbounded data in single call\line   No batching or token budgeting for the enriched refinement path.\line   Long recordings (100+ utterances) risk truncated Claude output,\line   producing a transcript that silently drops the last N segments.\line   Impact: Incomplete transcript without error indication.}
+\par\par
+
+{\f0\fs24 9.2 High (Reliability Concerns)}
+\par\par
+{\f2\fs18\cf3 [HIGH-1] Auphonic failure cascades silently\line   No retry, no user notification that audio was not cleaned.\line   Combined with Whisper's sensitivity to noise, this is a\line   frequent cause of poor transcription quality.\line\line [HIGH-2] Pipeline resume loses enriched data\line   EnrichedDiarizationResult is not persisted to DB, so\line   resume always uses the inferior standard refinement path.\line\line [HIGH-3] Non-deterministic Whisper results\line   Same file produces different output on different days.\line   No verification or quality scoring of Whisper output.\line   No mechanism to detect that Whisper "had a bad day".}
+\par\par
+
+{\f0\fs24 9.3 Medium (Quality Concerns)}
+\par\par
+{\f2\fs18\cf3 [MED-1] No Whisper language/prompt hints\line   Setting language='en' and providing a contextual prompt\line   would improve accuracy and reduce hallucination risk.\line\line [MED-2] Enriched path replaces Whisper segments with AssemblyAI segments\line   Loses Whisper's finer granularity. Result may have fewer,\line   longer segments than expected.\line\line [MED-3] 64kbps MP3 downsampling for large files\line   Aggressive compression may degrade borderline audio quality.\line   Files under 24MB are sent as-is; inconsistent treatment.\line\line [MED-4] ffmpeg stderr silenced\line   Conversion warnings and errors are invisible.\line   Corrupt audio frames or codec issues go undetected.\line\line [MED-5] Heuristic speaker assignment too simplistic\line   2-second gap = speaker change is wrong for most recordings.\line   Only used as last resort but produces confusing output.}
+\par\par
+
+{\f0\fs24 9.4 Low (Code Quality)}
+\par\par
+{\f2\fs18\cf3 [LOW-1] Preset cache is in-memory\line   Auphonic presets are recreated on every server restart.\line\line [LOW-2] Delete-and-reinsert segment persistence\line   Segment IDs are not stable across saves.\line\line [LOW-3] diarizationLabels typed as 'any'\line   TypeScript type safety is bypassed for diarization labels\line   at line 718 of transcription.ts.}
+\par\par
+
+{\f0\fs18 ________________________________________________________________________________}
+\par\par
+
+{\f0\fs32 10. RECENT FIXES (PENDING DEPLOYMENT)}
+\par\par
+{\f1\fs22 The following fixes are in the Replit codebase but have not been deployed to the EC2 production server:}
+\par\par
+
+{\f0\fs22 Fix 1: AssemblyAI speech_model (}{\f2\fs20 server/diarization.ts}{\f0\fs22 )}
+\par
+{\f2\fs18 - Changed: speech_model: 'best' -> 'universal-3-pro'\line - Resolves: "speech_models must be a non-empty list" API error\line - Impact: Diarization will work again; enriched data available for refinement}
+\par\par
+
+{\f0\fs22 Fix 2: Dominant Hallucination Detection (}{\f2\fs20 server/transcription.ts}{\f0\fs22 )}
+\par
+{\f2\fs18 - Added: Pre-scan counts each short phrase (<= 3 words) across all segments\line - Rule: If any phrase appears in >= 50% of segments AND >= 10 times,\line   ALL instances are removed (not just consecutive runs)\line - Also: Increased run-based uniform spacing tolerance from 0.5s to 1.5s\line - Also: Returns empty array if all segments are hallucinated\line - Resolves: 407-segment "Mm-hmm." hallucination on body cam recording}
+\par\par
+
+{\f0\fs22 Fix 3: Speaker Refinement Batching (}{\f2\fs20 server/speakerRefinement.ts}{\f0\fs22 )}
+\par
+{\f2\fs18 - Changed: SINGLE_CALL_LIMIT 800 -> 350, BATCH_SIZE 700 -> 200\line - Added: Segment index "i" field in prompt for position anchoring\line - Added: Index-based reconciliation in parseResponse() for oversized responses\line - Added: Partial prefix handling for undersized responses\line - Added: Typed i?: number in ParsedSegment interface\line - Resolves: Claude output truncation and segment count mismatches on\line   transcripts with 400+ segments}
+\par\par
+
+{\f0\fs18 ________________________________________________________________________________}
+\par\par
+{\f1\fs20\cf10 End of diagnostic report. Deploy command for EC2:\line\line cd /home/ubuntu/mattrmindrscribe && git pull && npm install --include=dev && npm run build && pm2 delete mattrmindrscribe && pm2 start npm --name "mattrmindrscribe" -- run start}
+\par
+}
