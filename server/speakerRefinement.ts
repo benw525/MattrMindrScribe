@@ -12,8 +12,8 @@ const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
 });
 
-const SINGLE_CALL_LIMIT = 800;
-const BATCH_SIZE = 700;
+const SINGLE_CALL_LIMIT = 350;
+const BATCH_SIZE = 300;
 const OVERLAP_CONTEXT = 20;
 
 function tryRepairTruncatedJson(json: string): string | null {
@@ -56,10 +56,10 @@ function buildSystemPrompt(): string {
 
 2. **Correct speaker misattributions.** The preliminary labels from automated diarization are frequently wrong. Use conversational logic — questions come from one speaker, answers from another. The same person does not ask and answer their own question.
 
-3. **Clean up text formatting.** Add proper punctuation (periods, question marks, commas). Format times with colons (e.g. "1.33 p.m." becomes "1:33 p.m."). Fix capitalization. But PRESERVE all filler words (uh, um, mm-hmm) and all spoken content exactly as said — do not add, remove, or rephrase words. Do not combine or split segments.
+3. **Clean up text formatting.** Add proper punctuation (periods, question marks, commas). Format times with colons (e.g. "1.33 p.m." becomes "1:33 p.m."). Fix capitalization. But PRESERVE all filler words (uh, um, mm-hmm) and all spoken content exactly as said — do not add, remove, or rephrase words. NEVER split a segment into multiple segments and NEVER combine segments. Each input segment produces exactly ONE output segment.
 
 Your response must be ONLY valid JSON with no other text. The JSON has two fields:
-- "segments": array of objects with "label" and "text", one per input segment, in order. Length MUST match input. IMPORTANT: Each segment's "label" must be the speaker's actual name or role (e.g. "Alexander Kirkland", "Barry Porter", "Videographer", "Court Reporter") — NOT a generic label like "Speaker 1" or "Speaker 2". Apply your identifications directly into every segment's label.
+- "segments": array of objects with "i" (the segment index from input, integer), "label" and "text", one per input segment, in order. The array length MUST EXACTLY equal the number of input segments — no more, no fewer. Each output entry corresponds 1:1 to the input entry with the same index "i". IMPORTANT: Each segment's "label" must be the speaker's actual name or role (e.g. "Alexander Kirkland", "Barry Porter", "Videographer", "Court Reporter") — NOT a generic label like "Speaker 1" or "Speaker 2". Apply your identifications directly into every segment's label.
 - "identifications": object mapping the original generic input labels to the identified names/roles (e.g. {"Speaker 1": "Videographer", "Speaker 3": "Alexander Kirkland"}).`;
 }
 
@@ -387,6 +387,8 @@ ${section}
 
 The preliminary speaker labels below are from automated diarization and are often WRONG. Re-assign speakers based on who is actually speaking, using conversational context and the structural knowledge above. Identify each speaker by their real name or role — never use generic labels like "Speaker 1".
 
+CRITICAL: There are exactly ${segmentData.length} input segments. Your output "segments" array MUST contain exactly ${segmentData.length} entries — one per input, in order, matching each "i" index. Do NOT split or merge segments.
+
 Transcript segments:
 ${JSON.stringify(segmentData)}`;
 }
@@ -441,8 +443,54 @@ function parseResponse(content: string, expectedCount: number): { segments: Pars
         return { segments: segs.slice(0, expectedCount), labels: labels.slice(0, expectedCount), identifications };
       }
       return { segments: segs, labels, identifications };
+    } else if (segs.length > expectedCount) {
+      console.log(`[Speaker Refinement] Segment count oversized (${segs.length} vs ${expectedCount}) — attempting index-based reconciliation`);
+
+      const indexedSegs: ParsedSegment[] = [];
+      const byIndex = new Map<number, ParsedSegment>();
+      for (const seg of segs) {
+        const idx = (seg as any).i;
+        if (typeof idx === 'number' && idx >= 0 && idx < expectedCount && !byIndex.has(idx)) {
+          byIndex.set(idx, seg);
+        }
+      }
+
+      if (byIndex.size >= expectedCount * 0.8) {
+        console.log(`[Speaker Refinement] Index-based reconciliation: matched ${byIndex.size}/${expectedCount} segments by index`);
+        for (let j = 0; j < expectedCount; j++) {
+          indexedSegs.push(byIndex.get(j) || { label: '', text: '' });
+        }
+        return { segments: indexedSegs, labels: indexedSegs.map(s => s.label || ''), identifications };
+      }
+
+      const mergedIdentifications = { ...identifications };
+      const inputLabels = new Set<string>();
+      for (const seg of segs) {
+        if (seg.label && seg.label.trim()) inputLabels.add(seg.label.trim());
+      }
+
+      if (Object.keys(mergedIdentifications).length > 0) {
+        console.log(`[Speaker Refinement] Using identifications map from oversized response (${Object.keys(mergedIdentifications).length} entries)`);
+        return { segments: [], labels: [], identifications: mergedIdentifications };
+      }
+
+      const nonGenericLabels = [...inputLabels].filter(l => !/^(Speaker|Unknown Speaker|Unidentified Speaker)\s*\d*$/i.test(l));
+      if (nonGenericLabels.length > 0) {
+        console.log(`[Speaker Refinement] Found ${nonGenericLabels.length} non-generic labels in oversized response, but no identifications map — cannot apply`);
+      }
+      console.log(`[Speaker Refinement] No usable data in oversized response — falling back`);
     } else {
-      console.log(`[Speaker Refinement] Segment count mismatch too large (${segs.length} vs ${expectedCount}) — falling back to labels/identifications`);
+      console.log(`[Speaker Refinement] Segment count undersized (${segs.length} vs ${expectedCount}) — using available prefix`);
+      if (segs.length >= expectedCount * 0.5) {
+        const paddedSegs = [...segs];
+        while (paddedSegs.length < expectedCount) {
+          paddedSegs.push({ label: '', text: '' });
+        }
+        return { segments: paddedSegs, labels: paddedSegs.map(s => s.label || ''), identifications };
+      }
+      if (Object.keys(identifications).length > 0) {
+        return { segments: [], labels: [], identifications };
+      }
     }
   }
 
