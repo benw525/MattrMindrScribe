@@ -12,21 +12,3 @@ id = "j4CZgICPy1K6HEWh_mmIK"
 uri = "file://MattrMindrScribe_Pipeline_Overview.docx"
 type = "word_document"
 title = "MattrMindrScribe Pipeline Overview"
-
-[[outputs]]
-id = "CQN2W8nb7Cwc5nVX2J0jT"
-uri = "file://MattrMindrScribe_Pipeline_Diagnostic.rtf"
-type = "unspecified"
-title = "MattrMindrScribe Transcription Pipeline - Full Technical Diagnostic"
-
-[[outputs]]
-id = "DY3qjCZ-xtTjqfokbb1Cv"
-uri = "file://Checkpoint_BodyCam_RecordingType.rtf"
-type = "unspecified"
-title = "Checkpoint Report: Add Body Cam Recording Type for Enhanced AI Analysis"
-
-[[outputs]]
-id = "X0VmVzAF-k-b8XqsHk18E"
-uri = "file://Changes_After_BodyCam_Upload_Checkpoint.rtf"
-type = "unspecified"
-title = "All Changes After \"Add Body Cam Recording Type to Upload Form\" Checkpoint"

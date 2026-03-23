@@ -6,8 +6,8 @@ import { randomUUID } from 'crypto';
 import { tmpdir } from 'os';
 import OpenAI, { toFile } from 'openai';
 import pool from './db.js';
-import { isCloudStorageUrl, getKeyFromStorageUrl, downloadFromS3, uploadFileToS3 } from './s3.js';
-import { diarizeWithAssemblyAI, mapDiarizationToSegments, type EnrichedDiarizationResult } from './diarization.js';
+import { isCloudStorageUrl, getKeyFromStorageUrl, downloadFromS3 } from './s3.js';
+import { diarizeWithAssemblyAI, mapDiarizationToSegments } from './diarization.js';
 import { refineSpeakersWithGPT } from './speakerRefinement.js';
 import { cleanAudioWithAuphonic, auphonicConfigured } from './auphonic.js';
 
@@ -75,36 +75,6 @@ async function getAudioDuration(filePath: string): Promise<number | null> {
 }
 
 const WHISPER_SUPPORTED_FORMATS = new Set(['.flac', '.m4a', '.mp3', '.mp4', '.mpeg', '.mpga', '.oga', '.ogg', '.wav', '.webm']);
-
-const BROWSER_PLAYABLE_FORMATS = new Set(['.mp3', '.wav', '.ogg', '.m4a', '.aac', '.flac', '.webm', '.mp4', '.oga']);
-
-async function convertToBrowserPlayable(
-  sourcePath: string,
-  workDir: string,
-): Promise<string | null> {
-  const ext = path.extname(sourcePath).toLowerCase();
-  if (BROWSER_PLAYABLE_FORMATS.has(ext)) {
-    return null;
-  }
-
-  const convertedPath = path.join(workDir, `browser_playable.mp3`);
-  console.log(`[Transcription] Converting ${ext} to mp3 for browser playback`);
-  await new Promise<void>((resolve, reject) => {
-    const proc = spawn('ffmpeg', [
-      '-y', '-i', sourcePath,
-      '-vn', '-ar', '44100', '-ac', '2',
-      '-b:a', '128k', '-f', 'mp3',
-      convertedPath,
-    ]);
-    proc.stderr.on('data', () => {});
-    proc.on('close', (code) => {
-      if (code !== 0) return reject(new Error(`ffmpeg browser-playable conversion from ${ext} failed with code ${code}`));
-      resolve();
-    });
-    proc.on('error', reject);
-  });
-  return convertedPath;
-}
 
 async function ensureWhisperCompatible(
   sourcePath: string,
@@ -309,42 +279,12 @@ function deduplicateSegments(segments: TranscriptSegment[]): TranscriptSegment[]
 function removeHallucinatedSegments(segments: TranscriptSegment[]): TranscriptSegment[] {
   if (segments.length < 3) return segments;
 
-  const textCounts = new Map<string, number>();
-  for (const seg of segments) {
-    const t = seg.text.trim().toLowerCase();
-    const wc = t.split(/\s+/).length;
-    if (wc <= 3) {
-      textCounts.set(t, (textCounts.get(t) || 0) + 1);
-    }
-  }
-
-  const dominantHallucinations = new Set<string>();
-  for (const [text, count] of textCounts) {
-    if (count >= segments.length * 0.5 && count >= 10) {
-      dominantHallucinations.add(text);
-      console.log(`[Hallucination] Detected dominant hallucination: "${text}" appears ${count}/${segments.length} times (${Math.round(count / segments.length * 100)}%)`);
-    }
-  }
-
-  let filtered = segments;
-  if (dominantHallucinations.size > 0) {
-    filtered = segments.filter(seg => {
-      const t = seg.text.trim().toLowerCase();
-      return !dominantHallucinations.has(t);
-    });
-    console.log(`[Hallucination] Removed ${segments.length - filtered.length} dominant hallucination segments, ${filtered.length} remaining`);
-    if (filtered.length === 0) {
-      console.log(`[Hallucination] All segments were hallucinations — returning empty transcript`);
-      return [];
-    }
-  }
-
   const result: TranscriptSegment[] = [];
   let i = 0;
   let totalRemoved = 0;
 
-  while (i < filtered.length) {
-    const current = filtered[i];
+  while (i < segments.length) {
+    const current = segments[i];
     const currentText = current.text.trim().toLowerCase();
     const currentWordCount = currentText.split(/\s+/).length;
 
@@ -355,8 +295,8 @@ function removeHallucinatedSegments(segments: TranscriptSegment[]): TranscriptSe
     }
 
     let runEnd = i + 1;
-    while (runEnd < filtered.length) {
-      const next = filtered[runEnd];
+    while (runEnd < segments.length) {
+      const next = segments[runEnd];
       const nextText = next.text.trim().toLowerCase();
       if (nextText !== currentText) break;
       runEnd++;
@@ -369,11 +309,11 @@ function removeHallucinatedSegments(segments: TranscriptSegment[]): TranscriptSe
       if (runLength >= 3) {
         const gaps: number[] = [];
         for (let j = i; j < runEnd - 1; j++) {
-          gaps.push(filtered[j + 1].startTime - filtered[j].startTime);
+          gaps.push(segments[j + 1].startTime - segments[j].startTime);
         }
         const avgGap = gaps.reduce((a, b) => a + b, 0) / gaps.length;
         const maxDeviation = Math.max(...gaps.map(g => Math.abs(g - avgGap)));
-        isUniformSpacing = avgGap > 0 && maxDeviation <= 1.5;
+        isUniformSpacing = avgGap > 0 && maxDeviation <= 0.5;
       }
 
       if (isUniformSpacing) {
@@ -385,7 +325,7 @@ function removeHallucinatedSegments(segments: TranscriptSegment[]): TranscriptSe
     }
 
     for (let j = i; j < runEnd; j++) {
-      result.push(filtered[j]);
+      result.push(segments[j]);
     }
     i = runEnd;
   }
@@ -568,7 +508,6 @@ export async function processTranscription(transcriptId: string): Promise<void> 
     let duration: number | null = null;
     let diarizationError: string | null = null;
     let refinementError: string | null = null;
-    let enrichedDiarization: EnrichedDiarizationResult | null = null;
 
     if (hasCheckpoint) {
       console.log(`[Transcription] Resuming for "${filename}" (${transcriptId}) — ${existingSegments.length} segments from previous run, skipping to refinement`);
@@ -601,25 +540,6 @@ export async function processTranscription(transcriptId: string): Promise<void> 
 
       await mkdir(workDir, { recursive: true });
 
-      if (isCloudStorageUrl(file_url)) {
-        try {
-          const browserPath = await convertToBrowserPlayable(sourcePath, workDir);
-          if (browserPath) {
-            const originalKey = getKeyFromStorageUrl(file_url);
-            const mp3Key = originalKey.replace(/\.[^.]+$/, '.mp3');
-            console.log(`[Transcription] Uploading browser-playable MP3 to S3: ${mp3Key}`);
-            const newFileUrl = await uploadFileToS3(browserPath, mp3Key, 'audio/mpeg');
-            await pool.query(
-              `UPDATE transcripts SET file_url = $1, updated_at = NOW() WHERE id = $2`,
-              [newFileUrl, transcriptId]
-            );
-            console.log(`[Transcription] Updated file_url to browser-playable MP3`);
-          }
-        } catch (err: any) {
-          console.error(`[Transcription] Browser-playable conversion failed (non-fatal):`, err.message);
-        }
-      }
-
       console.log(`[Transcription] Starting for "${filename}" (${transcriptId})${expectedSpeakers ? ` — expecting ${expectedSpeakers} speakers` : ''}`);
 
       if (auphonic_enabled && auphonicConfigured()) {
@@ -628,7 +548,7 @@ export async function processTranscription(transcriptId: string): Promise<void> 
           pipelineLog.auphonic = { status: 'processing', startedAt: new Date().toISOString() };
           await savePipelineLog();
 
-          const auphonicResult = await cleanAudioWithAuphonic(sourcePath, filename || `transcript_${transcriptId}`, checkCancelled, recordingType);
+          const auphonicResult = await cleanAudioWithAuphonic(sourcePath, filename || `transcript_${transcriptId}`, checkCancelled);
           auphonicCleanedPath = auphonicResult.cleanedFilePath;
           sourcePath = auphonicResult.cleanedFilePath;
           pipelineLog.auphonic = {
@@ -670,9 +590,7 @@ export async function processTranscription(transcriptId: string): Promise<void> 
             pipelineLog.diarization = { status: 'skipped', reason: 'API key not configured' };
             return null;
           }
-          const result = await diarizeWithAssemblyAI(sourcePath, expectedSpeakers);
-          enrichedDiarization = result;
-          return result.labels;
+          return await diarizeWithAssemblyAI(sourcePath, expectedSpeakers);
         } catch (err: any) {
           console.error(`[Transcription] AssemblyAI diarization failed (non-fatal):`, err.message);
           diarizationError = err.message;
@@ -798,8 +716,8 @@ export async function processTranscription(transcriptId: string): Promise<void> 
     await checkCancelled();
 
     try {
-      console.log(`[Transcription] Step 3: Claude Opus 4 speaker refinement...`);
-      allSegments = await refineSpeakersWithGPT(allSegments, expectedSpeakers, recordingType, enrichedDiarization);
+      console.log(`[Transcription] Step 3: Claude Opus 4.6 speaker refinement...`);
+      allSegments = await refineSpeakersWithGPT(allSegments, expectedSpeakers, recordingType);
       const uniqueSpeakers = [...new Set(allSegments.map(s => s.speaker))];
       const hasGenericLabels = uniqueSpeakers.some(s => /^Speaker\s*\d+$/i.test(s));
       console.log(`[Transcription] Refinement complete: ${uniqueSpeakers.length} speakers: ${uniqueSpeakers.join(', ')}${hasGenericLabels ? ' [WARNING: generic labels remain]' : ''}`);

@@ -17,8 +17,7 @@ import {
   ChevronDownIcon,
   SendIcon,
   ToggleLeftIcon,
-  ToggleRightIcon,
-  Share2Icon } from
+  ToggleRightIcon } from
 'lucide-react';
 import { toast } from 'sonner';
 
@@ -36,9 +35,6 @@ interface TranscriptToolbarProps {
   onShowSummaries?: () => void;
   summaryCount?: number;
   onSendToMattrMindr?: () => void;
-  readOnly?: boolean;
-  onShare?: () => void;
-  mediaType?: string;
 }
 
 const EXPORT_FORMATS = [
@@ -60,10 +56,7 @@ export function TranscriptToolbar({
   hasPipelineIssue,
   onShowSummaries,
   summaryCount,
-  onSendToMattrMindr,
-  readOnly,
-  onShare,
-  mediaType
+  onSendToMattrMindr
 }: TranscriptToolbarProps) {
   const navigate = useNavigate();
   const [showExportMenu, setShowExportMenu] = useState(false);
@@ -146,25 +139,21 @@ export function TranscriptToolbar({
         }
       </button>
 
-      {!readOnly && (
-        <button
-          onClick={onUndo}
-          disabled={!canUndo}
-          className="inline-flex items-center gap-1.5 p-2 sm:px-2.5 text-sm font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 active:bg-slate-200 dark:active:bg-slate-700 rounded-md transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-          title="Undo last action">
-          <Undo2Icon className="h-4 w-4" />
-          <span className="hidden sm:inline">Undo</span>
-        </button>
-      )}
+      <button
+        onClick={onUndo}
+        disabled={!canUndo}
+        className="inline-flex items-center gap-1.5 p-2 sm:px-2.5 text-sm font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 active:bg-slate-200 dark:active:bg-slate-700 rounded-md transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+        title="Undo last action">
+        <Undo2Icon className="h-4 w-4" />
+        <span className="hidden sm:inline">Undo</span>
+      </button>
 
-      {!readOnly && (
-        <button
-          onClick={onSave}
-          className="inline-flex items-center gap-1.5 p-2 sm:px-3 sm:py-2 text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 rounded-md transition-colors shadow-sm">
-          <SaveIcon className="h-4 w-4" />
-          <span className="hidden sm:inline">Save</span>
-        </button>
-      )}
+      <button
+        onClick={onSave}
+        className="inline-flex items-center gap-1.5 p-2 sm:px-3 sm:py-2 text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 rounded-md transition-colors shadow-sm">
+        <SaveIcon className="h-4 w-4" />
+        <span className="hidden sm:inline">Save</span>
+      </button>
 
       <div className="hidden sm:block h-5 w-px bg-slate-200 dark:bg-slate-700 mx-0.5" />
 
@@ -269,29 +258,8 @@ export function TranscriptToolbar({
         <span className="hidden lg:inline">History</span>
       </button>
 
-      {onShare && (
-        <button
-          onClick={onShare}
-          className="inline-flex items-center gap-1.5 p-2 sm:px-3 sm:py-2 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 active:bg-slate-200 dark:active:bg-slate-700 rounded-md transition-colors"
-          title="Share transcript">
-          <Share2Icon className="h-4 w-4" />
-          <span className="hidden lg:inline">Share</span>
-        </button>
-      )}
-
       <button
-        onClick={() => {
-          const url = `/app/presenter/${transcriptId}`;
-          const w = Math.round(screen.width * 0.6);
-          const h = Math.round(screen.height * 0.8);
-          const left = Math.round((screen.width - w) / 2);
-          const top = Math.round((screen.height - h) / 2);
-          window.open(
-            url,
-            'mms-presenter',
-            `width=${w},height=${h},left=${left},top=${top},resizable=yes,scrollbars=yes`
-          );
-        }}
+        onClick={() => navigate(`/app/transcript/${transcriptId}/present`)}
         className="inline-flex items-center gap-1.5 p-2 sm:px-3 sm:py-2 text-sm font-medium text-white bg-slate-900 dark:bg-slate-700 hover:bg-slate-800 dark:hover:bg-slate-600 active:bg-slate-700 dark:active:bg-slate-500 rounded-md transition-colors shadow-sm">
         <MaximizeIcon className="h-4 w-4" />
         <span className="hidden lg:inline">Present</span>

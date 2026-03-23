@@ -9,15 +9,14 @@ A full-stack application for managing legal case recordings/transcripts. Feature
 - User authentication (register, login, JWT-based)
 - Transcript listing with status indicators (Completed, Processing, Pending, Error)
 - Case and folder organization
-- Audio/video file upload with background upload (non-blocking progress indicator) and 4-step AI transcription pipeline: (0) Auphonic audio cleanup via axios (Standard or Body Cam preset, WAV output, 15s polling, 30min timeout — optional, non-fatal), (1) OpenAI Whisper for text+timestamps, (2) AssemblyAI for speaker diarization + sentiment analysis + entity detection, (3) Claude Opus 4 enriched refinement (radio transmission detection for body cam, speaker ID, transcript cleanup with structured JSON output) with fallback to standard refinement; optional expected speaker count at upload; recording type selector (Deposition, Court Hearing, Recorded Statement, Police Interrogation, Body Cam, Other) + area of law dropdown (10 practice areas); startup env guard checks DATABASE_URL, OPENAI_API_KEY, ANTHROPIC_API_KEY, ASSEMBLYAI_API_KEY, AUPHONIC_API_KEY; supports extensive audio/video formats (mp3, wav, m4a, ogg, flac, aac, wma, amr, opus, aiff, mp4, mov, avi, mkv, wmv, flv, 3gp, mpg, etc.)
+- Audio/video file upload with background upload (non-blocking progress indicator) and 4-step AI transcription pipeline: (0) Auphonic audio cleanup (noise/hum reduction, loudness normalization — optional, non-fatal), (1) OpenAI Whisper for text+timestamps, (2) AssemblyAI for speaker diarization, (3) Claude Opus 4.6 for speaker refinement; optional expected speaker count at upload; recording type selector (Deposition, Court Hearing, Recorded Statement, Police Interrogation, Other) + area of law dropdown (10 practice areas); supports extensive audio/video formats (mp3, wav, m4a, ogg, flac, aac, wma, amr, opus, aiff, mp4, mov, avi, mkv, wmv, flv, 3gp, mpg, etc.)
 - In-browser audio recording via MediaRecorder API (WebM/opus); AudioRecorder component with start/stop/pause, live timer, real-time audio level visualization (Web Audio API AnalyserNode); recorded file feeds into same upload → transcription pipeline; RecordingMetadata modal collects recording type, practice area, and speaker count before upload
 - AI Summarize: two-step practice-area-specific transcript analysis via 10 legal agent bots (Personal Injury, Family Law, Criminal Defense, Workers' Comp, Insurance Defense, Employment Law, Medical Malpractice, Real Estate, Immigration, General Litigation); each area has 7-9 recording sub-types (e.g., Plaintiff's Deposition, Body Camera Footage, Custody Evaluation) that modify the AI prompt for targeted analysis; streams response in real-time via SSE; sub-type stored in `transcript_summaries.sub_type` column
 - Send individual transcript to MattrMindr from the transcript viewer: toolbar button opens case search modal, associates transcript with a case-linked folder, and sends transcript data (segments, versions, summaries, pipeline log) to the MattrMindr case
 - Synced audio player for recordings
 - Version history for transcripts (persisted to DB, loaded on page open)
 - Per-segment speaker reassignment (click speaker name to change via dropdown)
-- Present mode for hearings: pop-out window via toolbar button (synced via BroadcastChannel), plus fullscreen modes for audio and video transcripts; light/dark theme support
-- Coworking & sharing: invite other users by email to view or edit transcripts and folders; folder-level sharing inherits to all transcripts within; most-permissive-wins when multiple shares exist; "Shared with Me" sidebar section groups items by sharer; permission-gated viewer (view-only hides edit controls, shows banner); optimistic locking with 409 conflict detection; movement warnings when moving transcripts affects shared access; soft-delete shares (revoked_at)
+- Present mode for hearings
 - Admin user with unlimited access
 
 ## Tech Stack
@@ -39,14 +38,10 @@ A full-stack application for managing legal case recordings/transcripts. Feature
 - `src/pages/AuthPage.tsx` - Login/register page
 - `src/pages/DashboardPage.tsx` - Main app dashboard
 - `src/pages/TranscriptViewerPage.tsx` - Transcript editor
-- `src/pages/PresentModePage.tsx` - Fullscreen text presentation mode (audio transcripts, light/dark theme, click-to-seek, keyboard shortcuts, progress bar)
-- `src/pages/VideoPresentModePage.tsx` - Fullscreen video presentation mode (video pinned at top, auto-scrolling transcript below, light/dark theme)
-- `src/pages/PresenterPopout.tsx` - Unified pop-out presenter window for audio/video (synced via BroadcastChannel, light/dark theme, resizable video, hide-text toggle)
-- `src/hooks/usePresentSync.ts` - BroadcastChannel-based cross-window sync (broadcaster in main app, receiver in pop-out; syncs playback state and accepts commands)
+- `src/pages/PresentModePage.tsx` - Presentation mode
 - `src/components/` - Reusable UI components
 - `src/contexts/AuthContext.tsx` - Auth state management
 - `src/contexts/TranscriptContext.tsx` - Transcript/folder state management
-- `src/contexts/SharedContext.tsx` - Shared items state management (shared-with-me data)
 - `src/contexts/ThemeContext.tsx` - Dark/light theme
 - `src/utils/api.ts` - API client utility
 - `src/hooks/useAudioPlayer.ts` - Real HTML5 audio/video playback hook with secure media token
@@ -60,14 +55,12 @@ A full-stack application for managing legal case recordings/transcripts. Feature
 - `server/routes/auth.ts` - Auth endpoints (register, login, me, change-password)
 - `server/routes/transcripts.ts` - Transcript CRUD + file upload (S3 or local) + status/retranscribe endpoints
 - `server/transcription.ts` - AI transcription pipeline (ffmpeg conversion, chunking, Whisper API, 3-step diarization, S3 download support); robust audio duration detection with 3 ffprobe fallback strategies (format metadata → stream metadata → full file scan) plus segment-based estimation; duration is non-blocking — pipeline continues even if all probing fails; WAV chunking uses file-size-based duration calculation (no ffprobe dependency); includes deduplication with short-segment proximity check, lookback window (10 recent segments, time+text similarity), and hallucination detection (removes consecutive identical short-phrase runs with uniform spacing); segment save wrapped in DB transaction (DELETE+INSERT+UPDATE atomically); ON CONFLICT upsert on (transcript_id, segment_order) unique index prevents duplicate rows; **resumable pipeline**: after Whisper+diarization complete, segments are checkpointed to DB before speaker refinement begins — if the server restarts mid-refinement, retry skips straight to refinement instead of re-downloading/re-transcribing (checks `pipeline_log.whisper.status === 'success'` + existing segments in `transcript_segments` table); **no WAV conversion**: chunks are split directly from source audio into MP3 (64kbps mono) using ffmpeg time-based seeking — eliminates the 50-minute WAV conversion bottleneck; chunk size calculated from output MP3 bitrate (~43 min per chunk) so a 66-min recording = 2 chunks instead of 6
-- `server/auphonic.ts` - Auphonic audio cleanup pre-processing using **axios** (preserves auth headers on redirects); two presets: Standard (speech_isolation, 100% denoise) and Body Cam (dynamic_denoise, 75% denoise, no breath removal); uses Simple API (`/api/simple/productions.json`) for single-request upload+start; polling at 15s intervals with 30min timeout; downloads cleaned **WAV** via streaming; non-fatal — falls back to original audio on failure; skipped when AUPHONIC_API_KEY not set or user has not enabled Auphonic in settings
-- `server/diarization.ts` - AssemblyAI speaker diarization with enrichment: uploads audio, requests `speaker_labels`, `sentiment_analysis`, `entity_detection`, `punctuate`, `format_text`; returns `EnrichedDiarizationResult` with utterances (including per-word confidence), sentiment results, and detected entities; legacy `DiarizationLabel[]` included for Whisper segment mapping
-- `server/speakerRefinement.ts` - Claude Opus 4 speaker refinement via Anthropic streaming API; **enriched pipeline**: when AssemblyAI enrichment data is available, uses dedicated system prompt with radio transmission detection (dispatch vocabulary, confidence analysis, sentiment/entity signals), structured JSON output with `metadata`, `speakers`, `transcript[]` including `type` and `radio_classification` fields, `max_tokens: 16000`; pre-computes per-speaker word confidence stats; graceful fallback to standard refinement if enriched path fails; **standard pipeline**: simplified, concise prompts that leverage Claude's natural understanding of legal proceedings; two-pass deposition refinement: Pass 1 identifies speaker roster from first 80 segments, Pass 2 uses roster for full transcript refinement; Claude returns `{segments: [{label, text}], identifications}` — both corrected speaker labels AND cleaned text (punctuation, time formatting, capitalization) while preserving filler words verbatim; SINGLE_CALL_LIMIT=800, BATCH_SIZE=700 (respects Claude Opus 4's 32K max output token limit); Q&A post-processing corrects short misattributed utterances using examiner/deponent alternation logic; conditionally sends only the matching recording-type section to Claude; post-batch normalization eliminates generic "Speaker N" leakage; auto-defaults 5 expected speakers for depositions
+- `server/auphonic.ts` - Auphonic audio cleanup pre-processing (create production with noise/hum reduction + loudness normalization, upload file, poll for completion, download cleaned WAV); non-fatal — falls back to original audio on failure; skipped when AUPHONIC_API_KEY not set or user has not enabled Auphonic in settings
+- `server/diarization.ts` - AssemblyAI speaker diarization (upload audio, get speaker labels, map onto Whisper segments)
+- `server/speakerRefinement.ts` - Claude Opus 4 speaker refinement via Anthropic streaming API; simplified, concise prompts that leverage Claude's natural understanding of legal proceedings; two-pass deposition refinement: Pass 1 identifies speaker roster from first 80 segments, Pass 2 uses roster for full transcript refinement; Claude returns `{segments: [{label, text}], identifications}` — both corrected speaker labels AND cleaned text (punctuation, time formatting, capitalization) while preserving filler words verbatim; SINGLE_CALL_LIMIT=800, BATCH_SIZE=700 (respects Claude Opus 4's 32K max output token limit); Q&A post-processing corrects short misattributed utterances using examiner/deponent alternation logic; conditionally sends only the matching recording-type section to Claude; post-batch normalization eliminates generic "Speaker N" leakage; auto-defaults 5 expected speakers for depositions
 - `server/routes/folders.ts` - Folder CRUD + move transcripts + MattrMindr case linking
 - `server/routes/mattrmindr.ts` - MattrMindr integration API (connect, disconnect, status, case search proxy, send files)
 - `server/routes/annotations.ts` - CRUD for transcript annotations (notes between segments, bookmarks on segments)
-- `server/routes/shares.ts` - Sharing API (create, list, update permission, revoke, shared-with-me, folder transcripts, move-check)
-- `server/checkAccess.ts` - Permission checking helper (folder inheritance, most-permissive-wins, direct+folder share resolution)
 - `server/routes/external.ts` - External API for inbound integrations (auth, receive files for transcription, transcription status)
 - `server/replit_integrations/` - OpenAI AI Integrations (audio, chat, image, batch utilities)
 
@@ -78,9 +71,7 @@ A full-stack application for managing legal case recordings/transcripts. Feature
 - `/login` - Auth page (public)
 - `/app` - Dashboard (protected)
 - `/app/transcript/:id` - Transcript viewer (protected)
-- `/app/transcript/:id/present` - Fullscreen audio present mode (protected)
-- `/app/transcript/:id/video-present` - Fullscreen video present mode (protected)
-- `/app/presenter/:id` - Pop-out presenter window (BroadcastChannel synced, protected)
+- `/app/transcript/:id/present` - Present mode (protected)
 
 ### API Routes
 - `POST /api/auth/register` - Register new user
@@ -92,13 +83,6 @@ A full-stack application for managing legal case recordings/transcripts. Feature
 - `POST /api/transcripts/:id/annotations` - Create annotation (type: note or bookmark, segmentId required)
 - `PATCH /api/transcripts/:id/annotations/:annotationId` - Update annotation text
 - `DELETE /api/transcripts/:id/annotations/:annotationId` - Delete annotation
-- `POST /api/shares` - Create share (email, resourceType, resourceId, permission)
-- `GET /api/shares/resource/:type/:id` - List shares for a resource
-- `PATCH /api/shares/:shareId` - Update share permission
-- `DELETE /api/shares/:shareId` - Revoke share (soft delete)
-- `GET /api/shares/shared-with-me` - List items shared with current user
-- `GET /api/shares/folder/:folderId/transcripts` - List transcripts in a shared folder
-- `GET /api/shares/move-check` - Check if moving transcripts affects shared access
 - `GET /api/transcripts` - List user transcripts
 - `GET /api/transcripts/:id/detail` - Get single transcript with segments (fallback for page reload)
 - `POST /api/transcripts/presigned-upload` - Get presigned S3 URL for direct browser upload
@@ -145,7 +129,6 @@ A full-stack application for managing legal case recordings/transcripts. Feature
 - `transcript_summaries` - AI-generated legal summaries (per-agent, per-transcript)
 - `transcripts.pipeline_log` - JSONB column storing per-step results (whisper, diarization, refinement) with status, stats, and errors
 - `mattrmindr_connections` - MattrMindr integration connections (one per user, stores base_url, email, auth_token)
-- `shares` - Sharing records (resource_type, resource_id, owner_user_id, shared_with_id, permission, revoked_at for soft-delete)
 - `folders.mattrmindr_case_id` / `folders.mattrmindr_case_name` - Links a folder to a MattrMindr case
 
 ## Amazon S3 Storage

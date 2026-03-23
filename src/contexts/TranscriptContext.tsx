@@ -13,7 +13,6 @@ interface TranscriptContextType {
   startBackgroundUpload: (file: File, description?: string, folderId?: string, expectedSpeakers?: number | null, recordingType?: string, practiceArea?: string) => void;
   dismissUpload: (id: string) => void;
   updateTranscript: (id: string, updates: Partial<Transcript>) => void;
-  updateTranscriptLocal: (id: string, updates: Partial<Transcript>) => void;
   deleteTranscripts: (ids: string[]) => void;
   addFolder: (name: string, caseNumber: string, parentId?: string | null, mattrmindrCaseId?: string | null, mattrmindrCaseName?: string | null) => Promise<void>;
   deleteFolder: (id: string) => void;
@@ -101,10 +100,6 @@ export function TranscriptProvider({ children }: { children: ReactNode }) {
     setActiveUploads((prev) => prev.filter((u) => u.id !== id));
   }, []);
 
-  const updateTranscriptLocal = useCallback((id: string, updates: Partial<Transcript>) => {
-    setTranscripts((prev) => prev.map((t) => t.id === id ? { ...t, ...updates } : t));
-  }, []);
-
   const pendingUpdatesRef = useRef<Map<string, { mergedUpdates: Partial<Transcript>; rollback: Transcript; timer: ReturnType<typeof setTimeout> }>>(new Map());
 
   const updateTranscript = useCallback((id: string, updates: Partial<Transcript>) => {
@@ -136,34 +131,10 @@ export function TranscriptProvider({ children }: { children: ReactNode }) {
       const toSend = entry ? entry.mergedUpdates : mergedUpdates;
       pendingUpdatesRef.current.delete(id);
       try {
-        const payload: Record<string, unknown> = { ...toSend };
-        if ('segments' in toSend && rollback?.updatedAt) {
-          payload.expectedUpdatedAt = rollback.updatedAt;
-        }
-        const response = await api.transcripts.update(id, payload);
-        if (response) {
-          setTranscripts((prev) => prev.map((t) => {
-            if (t.id === id) {
-              const patch: Partial<Transcript> = {};
-              if (response.segments && 'segments' in toSend) patch.segments = response.segments;
-              if (response.updatedAt) patch.updatedAt = response.updatedAt;
-              return Object.keys(patch).length > 0 ? { ...t, ...patch } : t;
-            }
-            return t;
-          }));
-        }
-      } catch (err: unknown) {
-        const httpErr = err as { status?: number };
+        await api.transcripts.update(id, toSend);
+      } catch (err) {
         console.error('Failed to update transcript:', err);
-        if (httpErr?.status === 409) {
-          toast.error('This transcript was modified by another user. Please reload to see the latest version.', {
-            duration: 8000,
-            action: {
-              label: 'Reload',
-              onClick: () => refreshData(),
-            },
-          });
-        } else if (rollback) {
+        if (rollback) {
           setTranscripts((prev) => prev.map((t) => (t.id === id ? rollback : t)));
           toast.error('Failed to save changes');
         }
@@ -210,21 +181,6 @@ export function TranscriptProvider({ children }: { children: ReactNode }) {
 
   const moveTranscripts = useCallback(async (ids: string[], folderId: string | null) => {
     try {
-      const fromFolderId = transcripts.find(t => ids.includes(t.id))?.folderId;
-      if (fromFolderId || folderId) {
-        try {
-          const check = await api.shares.moveCheck(ids, fromFolderId, folderId);
-          if (check.affectedUsers && check.affectedUsers.length > 0) {
-            const names = check.affectedUsers.map((u: any) => u.name || u.email).join(', ');
-            const ok = window.confirm(
-              `Moving these transcripts will affect shared access for: ${names}.\n\nDo you want to continue?`
-            );
-            if (!ok) return;
-          }
-        } catch {
-        }
-      }
-
       await api.folders.moveTranscripts(ids, folderId);
       setTranscripts((prev) =>
         prev.map((t) => (ids.includes(t.id) ? { ...t, folderId } : t))
@@ -232,7 +188,7 @@ export function TranscriptProvider({ children }: { children: ReactNode }) {
     } catch (err) {
       console.error('Failed to move transcripts:', err);
     }
-  }, [transcripts]);
+  }, []);
 
   const contextValue = useMemo(() => ({
     transcripts,
@@ -244,14 +200,13 @@ export function TranscriptProvider({ children }: { children: ReactNode }) {
     startBackgroundUpload,
     dismissUpload,
     updateTranscript,
-    updateTranscriptLocal,
     deleteTranscripts,
     addFolder,
     deleteFolder,
     renameFolder,
     moveTranscripts,
     refreshData,
-  }), [transcripts, folders, loading, activeUploads, addTranscript, uploadFile, startBackgroundUpload, dismissUpload, updateTranscript, updateTranscriptLocal, deleteTranscripts, addFolder, deleteFolder, renameFolder, moveTranscripts, refreshData]);
+  }), [transcripts, folders, loading, activeUploads, addTranscript, uploadFile, startBackgroundUpload, dismissUpload, updateTranscript, deleteTranscripts, addFolder, deleteFolder, renameFolder, moveTranscripts, refreshData]);
 
   return (
     <TranscriptContext.Provider value={contextValue}>

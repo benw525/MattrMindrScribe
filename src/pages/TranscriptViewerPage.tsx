@@ -2,11 +2,10 @@ import React, { useCallback, useEffect, useState, useRef, useMemo } from 'react'
 import {
   useParams,
   useNavigate,
-  useLocation,
   Link,
   useOutletContext } from
 'react-router-dom';
-import { ChevronLeftIcon, EditIcon, CheckIcon, XIcon, PlusIcon, Trash2Icon, PaletteIcon, UsersIcon, MergeIcon, BookmarkIcon, Share2Icon, EyeIcon, PencilIcon } from 'lucide-react';
+import { ChevronLeftIcon, EditIcon, CheckIcon, XIcon, PlusIcon, Trash2Icon, PaletteIcon, UsersIcon, MergeIcon, BookmarkIcon } from 'lucide-react';
 import { AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
 import { useTranscripts } from '../hooks/useTranscripts';
@@ -23,9 +22,7 @@ import { AISummaryPanel } from '../components/viewer/AISummaryPanel';
 import { PipelineSummary } from '../components/viewer/PipelineSummary';
 import { SendToMattrMindrModal } from '../components/viewer/SendToMattrMindrModal';
 import { Transcript, TranscriptSegment, TranscriptVersion, TranscriptAnnotation } from '../types/transcript';
-import { ShareModal } from '../components/sharing/ShareModal';
 import { api } from '../utils/api';
-import { usePresentBroadcaster, PresentCommand } from '../hooks/usePresentSync';
 interface UndoEntry {
   segments: TranscriptSegment[];
   description: string;
@@ -65,8 +62,7 @@ export function TranscriptViewerPage() {
     id: string;
   }>();
   const navigate = useNavigate();
-  const location = useLocation();
-  const { transcripts, updateTranscript, updateTranscriptLocal, refreshData, loading: transcriptsLoading } = useTranscripts();
+  const { transcripts, updateTranscript, refreshData, loading: transcriptsLoading } = useTranscripts();
   const { sidebarHidden, setSidebarHidden } = useOutletContext<{
     selectedFolderId: string | null;
     sidebarHidden: boolean;
@@ -93,7 +89,6 @@ export function TranscriptViewerPage() {
   const [showSummaryPanel, setShowSummaryPanel] = useState(false);
   const [showSendToMattrMindr, setShowSendToMattrMindr] = useState(false);
   const [mattrmindrConnected, setMattrmindrConnected] = useState(false);
-  const [showShareModal, setShowShareModal] = useState(false);
   const [annotations, setAnnotations] = useState<TranscriptAnnotation[]>([]);
   const [showBookmarksOnly, setShowBookmarksOnly] = useState(false);
   const [agents, setAgents] = useState<{ id: string; name: string; icon: string; description: string; subTypes: { id: string; name: string; description: string }[] }[]>([]);
@@ -125,13 +120,6 @@ export function TranscriptViewerPage() {
       .finally(() => setDirectLoading(false));
   }, [id, contextTranscript, transcriptsLoading, directLoading, directFetchedId]);
 
-  const segmentIdsKey = useMemo(() => {
-    if (!transcript) return '';
-    return transcript.segments.map(s => s.id).join(',');
-  }, [transcript?.segments]);
-
-  const prevSegmentIdsKeyRef = useRef(segmentIdsKey);
-
   useEffect(() => {
     if (!id) return;
     api.transcripts.getVersions(id).then((v: TranscriptVersion[]) => {
@@ -144,16 +132,6 @@ export function TranscriptViewerPage() {
       setAnnotations(a || []);
     }).catch(() => {});
   }, [id]);
-
-  useEffect(() => {
-    if (!id || !segmentIdsKey) return;
-    if (prevSegmentIdsKeyRef.current && prevSegmentIdsKeyRef.current !== segmentIdsKey) {
-      api.annotations.list(id).then((a: TranscriptAnnotation[]) => {
-        setAnnotations(a || []);
-      }).catch(() => {});
-    }
-    prevSegmentIdsKeyRef.current = segmentIdsKey;
-  }, [id, segmentIdsKey]);
 
   useEffect(() => {
     api.transcripts.getAgents().then((a: any[]) => {
@@ -182,77 +160,13 @@ export function TranscriptViewerPage() {
     isPlaying,
     currentTime,
     playbackRate,
-    rewindSpeed,
-    fastForwardSpeed,
     togglePlayPause,
-    toggleRewind,
-    toggleFastForward,
     skip,
     seek,
     setPlaybackRate,
     audioRef,
     mediaUrl,
   } = useAudioPlayer(transcript?.duration || 0, transcript?.fileUrl, transcript?.type);
-
-  const resumeTimeApplied = useRef<string | null>(null);
-  useEffect(() => {
-    const state = location.state as { resumeTime?: number } | null;
-    if (state?.resumeTime != null && resumeTimeApplied.current !== id && mediaUrl) {
-      resumeTimeApplied.current = id || null;
-      seek(state.resumeTime);
-      navigate(location.pathname, { replace: true, state: {} });
-    }
-  }, [location.state, location.pathname, mediaUrl, seek, navigate, id]);
-
-  const { broadcast, onCommand } = usePresentBroadcaster(id);
-
-  useEffect(() => {
-    if (!transcript) return;
-    broadcast({
-      transcriptId: transcript.id,
-      currentTime,
-      isPlaying,
-      playbackRate,
-      duration: transcript.duration,
-      filename: transcript.filename,
-      mediaType: transcript.type || 'audio',
-      mediaUrl: mediaUrl,
-      segments: transcript.segments.map(s => ({
-        id: s.id,
-        startTime: s.startTime,
-        endTime: s.endTime,
-        speaker: s.speaker,
-        text: s.text,
-      })),
-    });
-  }, [transcript?.id, currentTime, isPlaying, playbackRate, mediaUrl, transcript?.segments, broadcast]);
-
-  useEffect(() => {
-    return onCommand((cmd: PresentCommand) => {
-      if (cmd.transcriptId !== id) return;
-      switch (cmd.action) {
-        case 'toggle':
-          togglePlayPause();
-          break;
-        case 'play':
-          if (!isPlaying) togglePlayPause();
-          break;
-        case 'pause':
-          if (isPlaying) togglePlayPause();
-          break;
-        case 'seek':
-          if (cmd.value != null) seek(cmd.value);
-          break;
-        case 'skip':
-          if (cmd.value != null) skip(cmd.value);
-          break;
-        case 'rate':
-          if (cmd.value != null) setPlaybackRate(cmd.value);
-          break;
-      }
-    });
-  }, [onCommand, togglePlayPause, isPlaying, seek, skip, setPlaybackRate, id]);
-
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     isDraggingRef.current = true;
@@ -279,15 +193,30 @@ export function TranscriptViewerPage() {
       window.removeEventListener('mouseup', handleMouseUp);
     };
   }, []);
+  if (!transcript) {
+    if (transcriptsLoading || directLoading) {
+      return (
+        <div className="flex-1 flex items-center justify-center bg-slate-50 dark:bg-slate-950">
+          <div className="h-8 w-8 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+        </div>);
+    }
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center bg-slate-50 dark:bg-slate-950">
+        <h2 className="text-xl font-semibold text-slate-900 dark:text-white mb-2">
+          Transcript not found
+        </h2>
+        <button
+          onClick={() => navigate('/app')}
+          className="text-indigo-600 dark:text-indigo-400 hover:underline">
+          Return to Dashboard
+        </button>
+      </div>);
+  }
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingDescriptionRef = useRef<string | null>(null);
-  const transcriptRef = useRef(transcript);
-  transcriptRef.current = transcript;
-  const uniqueSpeakersRef = useRef<string[]>([]);
 
   const autoSave = useCallback((description: string) => {
-    const t = transcriptRef.current;
-    if (!t) return;
+    if (!transcript) return;
     pendingDescriptionRef.current = description;
     if (saveTimerRef.current) {
       clearTimeout(saveTimerRef.current);
@@ -295,7 +224,7 @@ export function TranscriptViewerPage() {
     saveTimerRef.current = setTimeout(async () => {
       try {
         const desc = pendingDescriptionRef.current || description;
-        const newVersion = await api.transcripts.createVersion(t.id, desc);
+        const newVersion = await api.transcripts.createVersion(transcript.id, desc);
         setVersions((prev) => [newVersion, ...prev]);
         pendingDescriptionRef.current = null;
       } catch (err) {
@@ -310,6 +239,9 @@ export function TranscriptViewerPage() {
     };
   }, []);
 
+  const transcriptRef = useRef(transcript);
+  transcriptRef.current = transcript;
+
   const pushUndo = useCallback((description: string) => {
     const t = transcriptRef.current;
     if (!t) return;
@@ -322,26 +254,23 @@ export function TranscriptViewerPage() {
     );
   }, []);
   const handleUndo = useCallback(() => {
-    const t = transcriptRef.current;
-    if (!t || undoStack.length === 0) return;
+    if (undoStack.length === 0) return;
     const last = undoStack[undoStack.length - 1];
-    updateTranscript(t.id, {
+    updateTranscript(transcript.id, {
       segments: last.segments
     });
     setUndoStack((prev) => prev.slice(0, -1));
     autoSave(`Undo: ${last.description}`);
     toast.success(`Undone: ${last.description}`);
-  }, [undoStack, transcript?.id, updateTranscript, autoSave]);
+  }, [undoStack, transcript.id, updateTranscript, autoSave]);
 
   const handleSave = useCallback(async () => {
-    const t = transcriptRef.current;
-    if (!t) return;
     if (saveTimerRef.current) {
       clearTimeout(saveTimerRef.current);
       saveTimerRef.current = null;
     }
     try {
-      const newVersion = await api.transcripts.createVersion(t.id, 'Manual save');
+      const newVersion = await api.transcripts.createVersion(transcript.id, 'Manual save');
       setVersions((prev) => [newVersion, ...prev]);
       setUndoStack([]);
       toast.success('Transcript saved');
@@ -349,7 +278,7 @@ export function TranscriptViewerPage() {
       console.error('Failed to save version:', err);
       toast.error('Failed to save version');
     }
-  }, [transcript?.id]);
+  }, [transcript.id]);
   const handleUpdateSegment = useCallback((segmentId: string, newText: string) => {
     const t = transcriptRef.current;
     if (!t) return;
@@ -459,17 +388,16 @@ export function TranscriptViewerPage() {
     };
     const newSegments = [...t.segments];
     newSegments.splice(idx + 1, 0, newSegment);
-
-    updateTranscriptLocal(t.id, { segments: newSegments });
-    toast.success('New segment added — type your text and press Enter to save');
-  }, [pushUndo, updateTranscriptLocal, transcript?.id]);
-  const segmentSpeakers = useMemo(() => {
-    if (!transcript) return [];
-    return Array.from(new Set(transcript.segments.map((s) => s.speaker)));
-  }, [transcript?.segments]);
+    updateTranscript(t.id, { segments: newSegments });
+    toast.success('New segment added — click the text area to type');
+  }, [pushUndo, updateTranscript]);
+  const segmentSpeakers = useMemo(() => Array.from(
+    new Set(transcript.segments.map((s) => s.speaker))
+  ), [transcript.segments]);
   const uniqueSpeakers = useMemo(() => Array.from(
     new Set([...segmentSpeakers, ...customSpeakers])
   ), [segmentSpeakers, customSpeakers]);
+  const uniqueSpeakersRef = useRef(uniqueSpeakers);
   uniqueSpeakersRef.current = uniqueSpeakers;
 
   const handleAddSpeaker = (name: string) => {
@@ -520,8 +448,7 @@ export function TranscriptViewerPage() {
   };
 
   const handleRenameSpeaker = (oldName: string, newName: string) => {
-    const t = transcriptRef.current;
-    if (!t || !newName.trim() || newName.trim() === oldName) {
+    if (!newName.trim() || newName.trim() === oldName) {
       setEditingSpeaker(null);
       return;
     }
@@ -531,10 +458,10 @@ export function TranscriptViewerPage() {
       return;
     }
     pushUndo(`Rename speaker "${oldName}"`);
-    const newSegments = t.segments.map((s) =>
+    const newSegments = transcript.segments.map((s) =>
       s.speaker === oldName ? { ...s, speaker: trimmed } : s
     );
-    updateTranscript(t.id, { segments: newSegments });
+    updateTranscript(transcript.id, { segments: newSegments });
     setCustomSpeakers(prev => prev.map(s => s === oldName ? trimmed : s));
     setSpeakerColors(prev => {
       if (prev[oldName]) {
@@ -628,55 +555,6 @@ export function TranscriptViewerPage() {
   const getSpeakerBorderColor = useCallback((speaker: string) => {
     return getSpeakerColorObj(speaker, speakerColors).border;
   }, [speakerColors]);
-
-  const agentNames = useMemo(() => {
-    const map: Record<string, string> = {};
-    agents.forEach(a => { map[a.id] = a.name; });
-    return map;
-  }, [agents]);
-
-  const handleRevertVersion = useCallback((versionId: string) => {
-    const t = transcriptRef.current;
-    if (!t) return;
-    const version = versions.find((v) => v.id === versionId);
-    if (version) {
-      pushUndo('Revert to version');
-      updateTranscript(t.id, {
-        segments: version.segments
-      });
-      autoSave('Revert to version');
-      toast.success('Reverted to previous version');
-      setShowHistory(false);
-    }
-  }, [versions, transcript?.id, pushUndo, updateTranscript, autoSave]);
-  const isProcessing = useMemo(() => {
-    if (!transcript) return false;
-    return transcript.status === 'processing' || transcript.status === 'pending' || transcript.status === 'resuming';
-  }, [transcript?.status]);
-
-  const isSharedView = !!transcript?.sharePermission;
-  const isReadOnly = transcript?.sharePermission === 'view';
-
-  if (!transcript) {
-    if (transcriptsLoading || directLoading) {
-      return (
-        <div className="flex-1 flex items-center justify-center bg-slate-50 dark:bg-slate-950">
-          <div className="h-8 w-8 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
-        </div>);
-    }
-    return (
-      <div className="flex-1 flex flex-col items-center justify-center bg-slate-50 dark:bg-slate-950">
-        <h2 className="text-xl font-semibold text-slate-900 dark:text-white mb-2">
-          Transcript not found
-        </h2>
-        <button
-          onClick={() => navigate('/app')}
-          className="text-indigo-600 dark:text-indigo-400 hover:underline">
-          Return to Dashboard
-        </button>
-      </div>);
-  }
-
   const handleSelectAgent = async (agentId: string, subTypeId: string, customDescription?: string) => {
     if (!transcript) return;
     setLoadingAgentId(agentId);
@@ -737,20 +615,29 @@ export function TranscriptViewerPage() {
     }
   };
 
+  const agentNames = useMemo(() => {
+    const map: Record<string, string> = {};
+    agents.forEach(a => { map[a.id] = a.name; });
+    return map;
+  }, [agents]);
+
+  const handleRevertVersion = useCallback((versionId: string) => {
+    const version = versions.find((v) => v.id === versionId);
+    if (version) {
+      pushUndo('Revert to version');
+      updateTranscript(transcript.id, {
+        segments: version.segments
+      });
+      autoSave('Revert to version');
+      toast.success('Reverted to previous version');
+      setShowHistory(false);
+    }
+  }, [versions, transcript.id, pushUndo, updateTranscript, autoSave]);
+  const isProcessing = useMemo(() =>
+    transcript.status === 'processing' || transcript.status === 'pending' || transcript.status === 'resuming',
+  [transcript.status]);
   return (
     <div className="flex-1 flex flex-col h-full bg-white dark:bg-slate-950 relative overflow-hidden">
-      {/* Shared transcript banner */}
-      {isSharedView && (
-        <div className={`flex-shrink-0 px-4 py-2 text-sm font-medium flex items-center gap-2 ${
-          isReadOnly
-            ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-200 border-b border-amber-200 dark:border-amber-800'
-            : 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-200 border-b border-emerald-200 dark:border-emerald-800'
-        }`}>
-          {isReadOnly ? <EyeIcon className="h-4 w-4 flex-shrink-0" /> : <PencilIcon className="h-4 w-4 flex-shrink-0" />}
-          Shared by {transcript.sharedBy || 'someone'} &mdash; {isReadOnly ? 'View Only' : 'Can Edit'}
-        </div>
-      )}
-
       {/* Top Bar */}
       <header className="flex-shrink-0 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 z-10">
         <div className="px-3 sm:px-6 py-2 sm:py-2.5 flex items-center gap-2 sm:gap-4">
@@ -762,7 +649,7 @@ export function TranscriptViewerPage() {
           <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
             <MetadataEditor
               transcript={transcript}
-              onUpdate={isReadOnly ? undefined : (updates) => updateTranscript(transcript.id, updates)} />
+              onUpdate={(updates) => updateTranscript(transcript.id, updates)} />
             <div className="hidden sm:block flex-shrink-0">
               <StatusBadge status={transcript.status} />
             </div>
@@ -787,10 +674,7 @@ export function TranscriptViewerPage() {
             ))}
             onShowSummaries={() => setShowSummaryPanel(true)}
             summaryCount={summaries.length}
-            onSendToMattrMindr={mattrmindrConnected && transcript.status === 'completed' ? () => setShowSendToMattrMindr(true) : undefined}
-            readOnly={isReadOnly}
-            onShare={!isSharedView ? () => setShowShareModal(true) : undefined}
-            mediaType={transcript.type} />
+            onSendToMattrMindr={mattrmindrConnected && transcript.status === 'completed' ? () => setShowSendToMattrMindr(true) : undefined} />
         </div>
       </header>
 
@@ -858,7 +742,6 @@ export function TranscriptViewerPage() {
                 <span className="hidden sm:inline">{showBookmarksOnly ? 'All' : 'Bookmarks'}</span>
               </button>
             )}
-            {!isReadOnly && (
             <div className="relative flex-shrink-0" ref={speakerManagerRef}>
               <button
                 onClick={() => {
@@ -1068,7 +951,6 @@ export function TranscriptViewerPage() {
                 </div>
               }
             </div>
-            )}
           </div>
         </div>
       }
@@ -1128,20 +1010,20 @@ export function TranscriptViewerPage() {
                 currentTime={currentTime}
                 isPlaying={isPlaying}
                 onSeek={seek}
-                onUpdateSegment={isReadOnly ? undefined : handleUpdateSegment}
-                onMergeSegments={isReadOnly ? undefined : handleMergeSegments}
-                onSplitSegment={isReadOnly ? undefined : handleSplitSegment}
+                onUpdateSegment={handleUpdateSegment}
+                onMergeSegments={handleMergeSegments}
+                onSplitSegment={handleSplitSegment}
                 allSpeakers={uniqueSpeakers}
-                onChangeSegmentSpeaker={isReadOnly ? undefined : handleChangeSegmentSpeaker}
+                onChangeSegmentSpeaker={handleChangeSegmentSpeaker}
                 speakerColors={speakerColors}
-                onAddSpeakerFromDropdown={isReadOnly ? undefined : handleAddSpeakerFromDropdown}
+                onAddSpeakerFromDropdown={handleAddSpeakerFromDropdown}
                 annotations={annotations}
-                onToggleBookmark={isReadOnly ? undefined : handleToggleBookmark}
-                onAddNote={isReadOnly ? undefined : handleAddNote}
-                onUpdateNote={isReadOnly ? undefined : handleUpdateNote}
-                onDeleteNote={isReadOnly ? undefined : handleDeleteNote}
-                onDeleteSegment={isReadOnly ? undefined : handleDeleteSegment}
-                onAddSegmentAfter={isReadOnly ? undefined : handleAddSegmentAfter}
+                onToggleBookmark={handleToggleBookmark}
+                onAddNote={handleAddNote}
+                onUpdateNote={handleUpdateNote}
+                onDeleteNote={handleDeleteNote}
+                onDeleteSegment={handleDeleteSegment}
+                onAddSegmentAfter={handleAddSegmentAfter}
                 showBookmarksOnly={showBookmarksOnly} />
 
               </div>
@@ -1233,20 +1115,20 @@ export function TranscriptViewerPage() {
                 currentTime={currentTime}
                 isPlaying={isPlaying}
                 onSeek={seek}
-                onUpdateSegment={isReadOnly ? undefined : handleUpdateSegment}
-                onMergeSegments={isReadOnly ? undefined : handleMergeSegments}
-                onSplitSegment={isReadOnly ? undefined : handleSplitSegment}
+                onUpdateSegment={handleUpdateSegment}
+                onMergeSegments={handleMergeSegments}
+                onSplitSegment={handleSplitSegment}
                 allSpeakers={uniqueSpeakers}
-                onChangeSegmentSpeaker={isReadOnly ? undefined : handleChangeSegmentSpeaker}
+                onChangeSegmentSpeaker={handleChangeSegmentSpeaker}
                 speakerColors={speakerColors}
-                onAddSpeakerFromDropdown={isReadOnly ? undefined : handleAddSpeakerFromDropdown}
+                onAddSpeakerFromDropdown={handleAddSpeakerFromDropdown}
                 annotations={annotations}
-                onToggleBookmark={isReadOnly ? undefined : handleToggleBookmark}
-                onAddNote={isReadOnly ? undefined : handleAddNote}
-                onUpdateNote={isReadOnly ? undefined : handleUpdateNote}
-                onDeleteNote={isReadOnly ? undefined : handleDeleteNote}
-                onDeleteSegment={isReadOnly ? undefined : handleDeleteSegment}
-                onAddSegmentAfter={isReadOnly ? undefined : handleAddSegmentAfter}
+                onToggleBookmark={handleToggleBookmark}
+                onAddNote={handleAddNote}
+                onUpdateNote={handleUpdateNote}
+                onDeleteNote={handleDeleteNote}
+                onDeleteSegment={handleDeleteSegment}
+                onAddSegmentAfter={handleAddSegmentAfter}
                 showBookmarksOnly={showBookmarksOnly} />
 
                 </div>
@@ -1315,26 +1197,13 @@ export function TranscriptViewerPage() {
         }} />
       }
 
-      {showShareModal && transcript && (
-        <ShareModal
-          resourceType="transcript"
-          resourceId={transcript.id}
-          resourceName={transcript.filename}
-          onClose={() => setShowShareModal(false)}
-        />
-      )}
-
       {!isProcessing &&
       <AudioPlayer
         isPlaying={isPlaying}
         currentTime={currentTime}
         duration={transcript.duration}
         playbackRate={playbackRate}
-        rewindSpeed={rewindSpeed}
-        fastForwardSpeed={fastForwardSpeed}
         onTogglePlay={togglePlayPause}
-        onToggleRewind={toggleRewind}
-        onToggleFastForward={toggleFastForward}
         onSkip={skip}
         onSeek={seek}
         onRateChange={setPlaybackRate} />

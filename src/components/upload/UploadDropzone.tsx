@@ -1,6 +1,6 @@
 import React, { useCallback, useState } from 'react';
 import { motion } from 'framer-motion';
-import { UploadIcon, XIcon, UsersIcon, FileAudioIcon, GavelIcon, MicIcon, ShieldIcon, FileTextIcon, ChevronDownIcon, CameraIcon } from 'lucide-react';
+import { UploadIcon, XIcon, UsersIcon, FileAudioIcon, GavelIcon, MicIcon, ShieldIcon, FileTextIcon, ChevronDownIcon } from 'lucide-react';
 import { useTranscripts } from '../../hooks/useTranscripts';
 import { toast } from 'sonner';
 
@@ -22,7 +22,6 @@ const RECORDING_TYPES = [
   { value: 'court_hearing', label: 'Court Hearing', icon: GavelIcon },
   { value: 'recorded_statement', label: 'Recorded Statement', icon: MicIcon },
   { value: 'police_interrogation', label: 'Police Interrogation', icon: ShieldIcon },
-  { value: 'body_cam', label: 'Body Cam', icon: CameraIcon },
   { value: 'other', label: 'Other', icon: FileAudioIcon },
 ];
 

@@ -38,9 +38,6 @@ export interface Transcript {
   segments: TranscriptSegment[];
   versions: TranscriptVersion[];
   pipelineLog?: PipelineLog | null;
-  sharePermission?: 'view' | 'edit' | null;
-  sharedBy?: string | null;
-  errorMessage?: string | null;
 }
 
 export interface TranscriptSegment {
@@ -82,53 +79,4 @@ export interface UploadEntry {
   progress: number;
   status: 'uploading' | 'complete' | 'error';
   errorMessage?: string;
-}
-
-export interface ShareInfo {
-  id: string;
-  permission: 'view' | 'edit';
-  createdAt: string;
-  email: string;
-  fullName: string;
-}
-
-export interface SharedTranscriptItem {
-  shareId: string;
-  permission: 'view' | 'edit';
-  sharedAt: string;
-  ownerName: string;
-  ownerEmail: string;
-  ownerId: string;
-  resourceType: 'transcript';
-  transcript: {
-    id: string;
-    filename: string;
-    description: string;
-    status: string;
-    type: string;
-    duration: number;
-    fileSize: number;
-    fileUrl: string;
-    folderId: string | null;
-    recordingType: string | null;
-    practiceArea: string | null;
-    createdAt: string;
-    updatedAt: string;
-  };
-}
-
-export interface SharedFolderItem {
-  shareId: string;
-  permission: 'view' | 'edit';
-  sharedAt: string;
-  ownerName: string;
-  ownerEmail: string;
-  ownerId: string;
-  resourceType: 'folder';
-  folder: {
-    id: string;
-    name: string;
-    caseNumber: string;
-    parentId: string | null;
-  };
 }

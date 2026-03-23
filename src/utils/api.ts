@@ -58,15 +58,6 @@ async function request(endpoint: string, options: RequestInit = {}) {
     throw new Error(body?.error || 'Authentication required');
   }
 
-  if (res.status === 409) {
-    let body: any = null;
-    try { body = await res.json(); } catch {}
-    const err: any = new Error(body?.error || 'Conflict: resource was modified');
-    err.status = 409;
-    err.serverUpdatedAt = body?.serverUpdatedAt;
-    throw err;
-  }
-
   if (res.status === 502 || res.status === 503 || res.status === 504) {
     throw new Error('The server is temporarily unavailable. Please try again in a moment.');
   }
@@ -456,25 +447,5 @@ export const api = {
       request(`/transcripts/${transcriptId}/annotations/${annotationId}`, { method: 'PATCH', body: JSON.stringify({ text }) }),
     delete: (transcriptId: string, annotationId: string) =>
       request(`/transcripts/${transcriptId}/annotations/${annotationId}`, { method: 'DELETE' }),
-  },
-  shares: {
-    create: (email: string, resourceType: 'transcript' | 'folder', resourceId: string, permission: 'view' | 'edit') =>
-      request('/shares', { method: 'POST', body: JSON.stringify({ email, resourceType, resourceId, permission }) }),
-    listForResource: (resourceType: 'transcript' | 'folder', resourceId: string) =>
-      request(`/shares/resource/${resourceType}/${resourceId}`),
-    updatePermission: (shareId: string, permission: 'view' | 'edit') =>
-      request(`/shares/${shareId}`, { method: 'PATCH', body: JSON.stringify({ permission }) }),
-    revoke: (shareId: string) =>
-      request(`/shares/${shareId}`, { method: 'DELETE' }),
-    sharedWithMe: () =>
-      request('/shares/shared-with-me'),
-    sharedFolderTranscripts: (folderId: string) =>
-      request(`/shares/folder/${folderId}/transcripts`),
-    moveCheck: (transcriptIds: string[], fromFolderId?: string | null, toFolderId?: string | null) => {
-      const params = new URLSearchParams({ transcriptIds: transcriptIds.join(',') });
-      if (fromFolderId) params.set('fromFolderId', fromFolderId);
-      if (toFolderId) params.set('toFolderId', toFolderId);
-      return request(`/shares/move-check?${params.toString()}`);
-    },
   },
 };

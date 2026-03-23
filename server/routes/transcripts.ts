@@ -7,7 +7,6 @@ import { authenticateToken, AuthRequest } from '../middleware/auth.js';
 import { processTranscription, deduplicateExistingSegments } from '../transcription.js';
 import { s3Configured, uploadFileToS3, deleteFromS3, isCloudStorageUrl, getKeyFromStorageUrl, getPresignedUploadUrl, createMultipartUpload, getPresignedPartUrl, completeMultipartUpload, abortMultipartUpload } from '../s3.js';
 import { LEGAL_AGENTS, getAgentById, RecordingSubType } from '../legalAgents.js';
-import { checkAccess } from '../checkAccess.js';
 import OpenAI from 'openai';
 import fs from 'fs/promises';
 import { mkdirSync } from 'fs';
@@ -158,12 +157,6 @@ router.get('/', async (req: AuthRequest, res: Response) => {
 router.get('/:id/detail', async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
-    const access = await checkAccess(req.userId!, 'transcript', id);
-
-    if (access.permission === 'none') {
-      return res.status(404).json({ error: 'Transcript not found' });
-    }
-
     const result = await pool.query(
       `SELECT t.*, 
         COALESCE(json_agg(
@@ -172,9 +165,9 @@ router.get('/:id/detail', async (req: AuthRequest, res: Response) => {
         ) FILTER (WHERE s.id IS NOT NULL), '[]') as segments
       FROM transcripts t
       LEFT JOIN transcript_segments s ON s.transcript_id = t.id
-      WHERE t.id = $1
+      WHERE t.id = $1 AND t.user_id = $2
       GROUP BY t.id`,
-      [id]
+      [id, req.userId]
     );
 
     if (result.rows.length === 0) {
@@ -199,9 +192,6 @@ router.get('/:id/detail', async (req: AuthRequest, res: Response) => {
       segments: row.segments,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
-      sharePermission: access.isOwner ? undefined : access.permission,
-      sharedBy: access.isOwner ? undefined : access.ownerName,
-      sharedVia: access.isOwner ? undefined : access.sharedVia,
     });
   } catch (err) {
     console.error('Get transcript detail error:', err);
@@ -565,17 +555,14 @@ router.post('/upload', (req, res: Response, next) => {
 router.patch('/:id', async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
-    const { filename, description, status, folderId, segments, speakers, expectedUpdatedAt } = req.body;
+    const { filename, description, status, folderId, segments, speakers } = req.body;
 
-    const access = await checkAccess(req.userId!, 'transcript', id);
-    if (access.permission === 'none') {
+    const existing = await pool.query(
+      'SELECT id FROM transcripts WHERE id = $1 AND user_id = $2',
+      [id, req.userId]
+    );
+    if (existing.rows.length === 0) {
       return res.status(404).json({ error: 'Transcript not found' });
-    }
-    if (!access.isOwner && access.permission !== 'edit') {
-      return res.status(403).json({ error: 'You do not have edit permission for this transcript' });
-    }
-    if (!access.isOwner && (folderId !== undefined || status !== undefined)) {
-      return res.status(403).json({ error: 'Only the owner can move or change status of a transcript' });
     }
 
     const updates: string[] = [];
@@ -589,26 +576,10 @@ router.patch('/:id', async (req: AuthRequest, res: Response) => {
     updates.push(`updated_at = NOW()`);
 
     if (updates.length > 1) {
-      let whereClause = `WHERE id = $${paramCount++}`;
-      values.push(id);
-
-      if (expectedUpdatedAt && segments !== undefined) {
-        whereClause += ` AND updated_at = $${paramCount++}`;
-        values.push(new Date(expectedUpdatedAt));
-      }
-
-      const updateResult = await pool.query(
-        `UPDATE transcripts SET ${updates.join(', ')} ${whereClause}`,
-        values
+      await pool.query(
+        `UPDATE transcripts SET ${updates.join(', ')} WHERE id = $${paramCount++} AND user_id = $${paramCount}`,
+        [...values, id, req.userId]
       );
-
-      if (expectedUpdatedAt && segments !== undefined && updateResult.rowCount === 0) {
-        const currentRow = await pool.query('SELECT updated_at FROM transcripts WHERE id = $1', [id]);
-        return res.status(409).json({
-          error: 'This transcript was modified by another user. Please reload.',
-          serverUpdatedAt: currentRow.rows[0]?.updated_at ? new Date(currentRow.rows[0].updated_at).toISOString() : null,
-        });
-      }
     }
 
     if (segments !== undefined) {
@@ -667,7 +638,7 @@ router.patch('/:id', async (req: AuthRequest, res: Response) => {
             );
           }
           await client.query(
-            `DELETE FROM transcript_annotations WHERE transcript_id = $1 AND segment_id NOT IN (SELECT id::text FROM transcript_segments WHERE transcript_id = $1)`,
+            `DELETE FROM transcript_annotations WHERE transcript_id = $1 AND segment_id NOT IN (SELECT id FROM transcript_segments WHERE transcript_id = $1)`,
             [id]
           );
         }
@@ -739,17 +710,18 @@ router.post('/:id/merge-speaker', async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ error: 'fromSpeaker and toSpeaker must be different' });
     }
 
-    const access = await checkAccess(req.userId!, 'transcript', id);
-    if (access.permission === 'none') {
-      return res.status(404).json({ error: 'Transcript not found' });
-    }
-    if (!access.isOwner && access.permission !== 'edit') {
-      return res.status(403).json({ error: 'You do not have edit permission' });
-    }
-
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
+
+      const existing = await client.query(
+        'SELECT id FROM transcripts WHERE id = $1 AND user_id = $2',
+        [id, req.userId]
+      );
+      if (existing.rows.length === 0) {
+        await client.query('ROLLBACK');
+        return res.status(404).json({ error: 'Transcript not found' });
+      }
 
       const segmentsResult = await client.query(
         `SELECT id, start_time as "startTime", end_time as "endTime", speaker, text
@@ -825,13 +797,9 @@ router.post('/:id/merge-speaker', async (req: AuthRequest, res: Response) => {
 router.get('/:id/status', async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
-    const access = await checkAccess(req.userId!, 'transcript', id);
-    if (access.permission === 'none') {
-      return res.status(404).json({ error: 'Transcript not found' });
-    }
     const result = await pool.query(
-      'SELECT status, error_message, duration, pipeline_log FROM transcripts WHERE id = $1',
-      [id]
+      'SELECT status, error_message, duration, pipeline_log FROM transcripts WHERE id = $1 AND user_id = $2',
+      [id, req.userId]
     );
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Transcript not found' });
@@ -852,12 +820,12 @@ router.get('/:id/status', async (req: AuthRequest, res: Response) => {
 router.post('/:id/retranscribe', async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
-    const access = await checkAccess(req.userId!, 'transcript', id);
-    if (access.permission === 'none') {
+    const existing = await pool.query(
+      'SELECT id, file_url FROM transcripts WHERE id = $1 AND user_id = $2',
+      [id, req.userId]
+    );
+    if (existing.rows.length === 0) {
       return res.status(404).json({ error: 'Transcript not found' });
-    }
-    if (!access.isOwner) {
-      return res.status(403).json({ error: 'Only the owner can retranscribe' });
     }
 
     await pool.query(
@@ -879,12 +847,12 @@ router.post('/:id/retranscribe', async (req: AuthRequest, res: Response) => {
 router.post('/:id/deduplicate', async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
-    const access = await checkAccess(req.userId!, 'transcript', id);
-    if (access.permission === 'none') {
+    const existing = await pool.query(
+      'SELECT id FROM transcripts WHERE id = $1 AND user_id = $2',
+      [id, req.userId]
+    );
+    if (existing.rows.length === 0) {
       return res.status(404).json({ error: 'Transcript not found' });
-    }
-    if (!access.isOwner) {
-      return res.status(403).json({ error: 'Only the owner can deduplicate' });
     }
 
     const removed = await deduplicateExistingSegments(id);
@@ -944,13 +912,6 @@ router.delete('/', async (req: AuthRequest, res: Response) => {
     );
 
     await pool.query(
-      `UPDATE shares SET revoked_at = NOW()
-       WHERE resource_type = 'transcript' AND resource_id = ANY($1)
-       AND owner_user_id = $2 AND revoked_at IS NULL`,
-      [ids, req.userId]
-    );
-
-    await pool.query(
       `DELETE FROM transcripts WHERE id IN (${placeholders}) AND user_id = $${ids.length + 1}`,
       [...ids, req.userId]
     );
@@ -979,12 +940,12 @@ router.post('/:id/versions', async (req: AuthRequest, res: Response) => {
     const { id } = req.params;
     const { changeDescription } = req.body;
 
-    const access = await checkAccess(req.userId!, 'transcript', id);
-    if (access.permission === 'none') {
+    const existing = await pool.query(
+      'SELECT id FROM transcripts WHERE id = $1 AND user_id = $2',
+      [id, req.userId]
+    );
+    if (existing.rows.length === 0) {
       return res.status(404).json({ error: 'Transcript not found' });
-    }
-    if (!access.isOwner && access.permission !== 'edit') {
-      return res.status(403).json({ error: 'You do not have edit permission' });
     }
 
     const segmentsResult = await pool.query(
@@ -1016,8 +977,11 @@ router.get('/:id/versions', async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
 
-    const access = await checkAccess(req.userId!, 'transcript', id);
-    if (access.permission === 'none') {
+    const existing = await pool.query(
+      'SELECT id FROM transcripts WHERE id = $1 AND user_id = $2',
+      [id, req.userId]
+    );
+    if (existing.rows.length === 0) {
       return res.status(404).json({ error: 'Transcript not found' });
     }
 
@@ -1083,12 +1047,12 @@ router.post('/:id/summarize', async (req: AuthRequest, res: Response) => {
       subTypeInfo.promptModifier = `This transcript is from: ${customDescription}. Analyze it thoroughly using the framework for this practice area, adapting your analysis to fit this specific recording type.`;
     }
 
-    const access = await checkAccess(req.userId!, 'transcript', id);
-    if (access.permission === 'none') {
+    const existing = await pool.query(
+      'SELECT id FROM transcripts WHERE id = $1 AND user_id = $2',
+      [id, req.userId]
+    );
+    if (existing.rows.length === 0) {
       return res.status(404).json({ error: 'Transcript not found' });
-    }
-    if (!access.isOwner && access.permission !== 'edit') {
-      return res.status(403).json({ error: 'You do not have edit permission' });
     }
 
     const segmentsResult = await pool.query(
@@ -1180,8 +1144,11 @@ router.get('/:id/summaries', async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
 
-    const access = await checkAccess(req.userId!, 'transcript', id);
-    if (access.permission === 'none') {
+    const existing = await pool.query(
+      'SELECT id FROM transcripts WHERE id = $1 AND user_id = $2',
+      [id, req.userId]
+    );
+    if (existing.rows.length === 0) {
       return res.status(404).json({ error: 'Transcript not found' });
     }
 
@@ -1224,14 +1191,9 @@ router.get('/:id/export/:format', async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ error: 'Invalid format. Use txt, docx, or pdf.' });
     }
 
-    const access = await checkAccess(req.userId!, 'transcript', id);
-    if (access.permission === 'none') {
-      return res.status(404).json({ error: 'Transcript not found' });
-    }
-
     const tResult = await pool.query(
-      'SELECT id, filename, duration FROM transcripts WHERE id = $1',
-      [id]
+      'SELECT id, filename, duration FROM transcripts WHERE id = $1 AND user_id = $2',
+      [id, req.userId]
     );
     if (tResult.rows.length === 0) {
       return res.status(404).json({ error: 'Transcript not found' });

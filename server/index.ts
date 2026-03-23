@@ -1,21 +1,4 @@
 import 'dotenv/config';
-
-const REQUIRED_ENV_VARS = [
-  'DATABASE_URL',
-  'OPENAI_API_KEY',
-  'ANTHROPIC_API_KEY',
-  'ASSEMBLYAI_API_KEY',
-  'AUPHONIC_API_KEY',
-];
-
-for (const key of REQUIRED_ENV_VARS) {
-  if (!process.env[key]) {
-    console.error(`FATAL: Missing required environment variable: ${key}`);
-    console.error(`Check your .env file at ${process.cwd()}/.env`);
-    process.exit(1);
-  }
-}
-
 import express from 'express';
 import cors from 'cors';
 import path from 'path';
@@ -24,18 +7,15 @@ import os from 'os';
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import { fileURLToPath } from 'url';
-import { isCloudStorageUrl, getKeyFromStorageUrl, getS3PublicUrl, getPresignedDownloadUrl, downloadFromS3, uploadFileToS3 } from './s3.js';
-import { spawn } from 'child_process';
+import { isCloudStorageUrl, getKeyFromStorageUrl, getS3PublicUrl, getPresignedDownloadUrl } from './s3.js';
 import authRoutes from './routes/auth.js';
 import transcriptRoutes from './routes/transcripts.js';
 import folderRoutes from './routes/folders.js';
 import mattrmindrRoutes from './routes/mattrmindr.js';
 import externalRoutes from './routes/external.js';
 import annotationRoutes from './routes/annotations.js';
-import shareRoutes from './routes/shares.js';
 import { authenticateToken } from './middleware/auth.js';
 import pool from './db.js';
-import { checkTranscriptAccessByFileUrl } from './checkAccess.js';
 import { deduplicateExistingSegments, processTranscription } from './transcription.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -70,69 +50,21 @@ app.use('/uploads', authenticateToken as any, express.static(path.join(__dirname
 
 const mediaTokens = new Map<string, { userId: string; filename: string; expires: number; isCloudStorage: boolean }>();
 
-const BROWSER_PLAYABLE_EXTS = new Set(['.mp3', '.wav', '.ogg', '.m4a', '.aac', '.flac', '.webm', '.mp4', '.oga']);
-
 app.post('/api/media/token', authenticateToken as any, async (req: any, res) => {
   const { filename } = req.body;
   if (!filename) return res.status(400).json({ error: 'Filename required' });
 
-  const access = await checkTranscriptAccessByFileUrl(req.userId, filename);
-  if (access.permission === 'none') {
-    console.warn('[Media] Access denied for user', req.userId, 'file_url:', filename);
+  const { rows } = await pool.query(
+    'SELECT id FROM transcripts WHERE file_url = $1 AND user_id = $2 LIMIT 1',
+    [filename, req.userId]
+  );
+  if (rows.length === 0) {
     return res.status(403).json({ error: 'Access denied' });
   }
 
   if (isCloudStorageUrl(filename)) {
     try {
       const storageKey = getKeyFromStorageUrl(filename);
-      const ext = path.extname(storageKey).toLowerCase();
-
-      if (!BROWSER_PLAYABLE_EXTS.has(ext)) {
-        console.log(`[Media] File ${ext} not browser-playable, converting on-the-fly to MP3...`);
-        const workDir = path.join(os.tmpdir(), `media_convert_${crypto.randomUUID()}`);
-        await fs.promises.mkdir(workDir, { recursive: true });
-        try {
-          const sourcePath = await downloadFromS3(storageKey);
-          const convertedPath = path.join(workDir, 'converted.mp3');
-          await new Promise<void>((resolve, reject) => {
-            const proc = spawn('ffmpeg', [
-              '-y', '-i', sourcePath,
-              '-vn', '-ar', '44100', '-ac', '2',
-              '-b:a', '128k', '-f', 'mp3',
-              convertedPath,
-            ]);
-            proc.stderr.on('data', () => {});
-            proc.on('close', (code) => {
-              if (code !== 0) return reject(new Error(`ffmpeg conversion failed with code ${code}`));
-              resolve();
-            });
-            proc.on('error', reject);
-          });
-
-          const mp3Key = storageKey.replace(/\.[^.]+$/, '.mp3');
-          const newFileUrl = await uploadFileToS3(convertedPath, mp3Key, 'audio/mpeg');
-          console.log(`[Media] Converted and uploaded MP3: ${mp3Key}`);
-
-          if (access.permission === 'edit' || access.isOwner) {
-            await pool.query(
-              `UPDATE transcripts SET file_url = $1, updated_at = NOW() WHERE id = $2`,
-              [newFileUrl, access.transcriptId]
-            );
-            console.log(`[Media] Updated transcript ${access.transcriptId} file_url to MP3`);
-          }
-
-          try { fs.unlinkSync(sourcePath); } catch {}
-          try { fs.unlinkSync(convertedPath); } catch {}
-          try { fs.rmdirSync(workDir); } catch {}
-
-          const presignedUrl = await getPresignedDownloadUrl(mp3Key);
-          return res.json({ mediaUrl: presignedUrl });
-        } catch (convErr: any) {
-          console.error('[Media] On-the-fly conversion failed:', convErr.message);
-          try { fs.rmSync(workDir, { recursive: true, force: true }); } catch {}
-        }
-      }
-
       const presignedUrl = await getPresignedDownloadUrl(storageKey);
       return res.json({ mediaUrl: presignedUrl });
     } catch (err: any) {
@@ -190,7 +122,6 @@ app.use('/api/transcripts', transcriptRoutes);
 app.use('/api/folders', folderRoutes);
 app.use('/api/mattrmindr', mattrmindrRoutes);
 app.use('/api/transcripts', annotationRoutes);
-app.use('/api/shares', shareRoutes);
 app.use('/api/external', externalRoutes);
 
 app.get('/api/health', (_req, res) => {
@@ -300,29 +231,6 @@ pool.query(`
   ALTER TABLE transcript_annotations ADD CONSTRAINT chk_annotation_type CHECK (type IN ('note', 'bookmark'));
 `).catch((err: any) => {
   if (!err.message.includes('already exists')) console.error('Migration error (transcript_annotations):', err.message);
-});
-
-pool.query(`
-  CREATE TABLE IF NOT EXISTS shares (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    resource_type VARCHAR(20) NOT NULL,
-    resource_id UUID NOT NULL,
-    owner_user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    shared_with_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    permission VARCHAR(10) NOT NULL DEFAULT 'view',
-    created_at TIMESTAMP DEFAULT NOW(),
-    revoked_at TIMESTAMP DEFAULT NULL,
-    revoked_by UUID DEFAULT NULL REFERENCES users(id) ON DELETE SET NULL,
-    CONSTRAINT chk_share_resource_type CHECK (resource_type IN ('transcript', 'folder')),
-    CONSTRAINT chk_share_permission CHECK (permission IN ('view', 'edit')),
-    CONSTRAINT chk_share_not_self CHECK (owner_user_id != shared_with_id)
-  );
-  CREATE INDEX IF NOT EXISTS idx_shares_resource ON shares(resource_type, resource_id);
-  CREATE INDEX IF NOT EXISTS idx_shares_owner ON shares(owner_user_id);
-  CREATE INDEX IF NOT EXISTS idx_shares_active_shared_with
-    ON shares(shared_with_id) WHERE revoked_at IS NULL;
-`).catch((err: any) => {
-  if (!err.message.includes('already exists')) console.error('Migration error (shares):', err.message);
 });
 
 async function seedAdminAccounts() {

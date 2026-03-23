@@ -1,5 +1,5 @@
 import React, { useRef, useCallback, useState } from 'react';
-import { PlayIcon, PauseIcon, ChevronUpIcon, RewindIcon, FastForwardIcon } from 'lucide-react';
+import { PlayIcon, PauseIcon, Undo2Icon, Redo2Icon, ChevronUpIcon } from 'lucide-react';
 import { formatDuration } from '../../utils/formatters';
 
 interface AudioPlayerProps {
@@ -7,11 +7,7 @@ interface AudioPlayerProps {
   currentTime: number;
   duration: number;
   playbackRate: number;
-  rewindSpeed: number;
-  fastForwardSpeed: number;
   onTogglePlay: () => void;
-  onToggleRewind: () => void;
-  onToggleFastForward: () => void;
   onSkip: (seconds: number) => void;
   onSeek: (time: number) => void;
   onRateChange: (rate: number) => void;
@@ -24,11 +20,7 @@ export function AudioPlayer({
   currentTime,
   duration,
   playbackRate,
-  rewindSpeed,
-  fastForwardSpeed,
   onTogglePlay,
-  onToggleRewind,
-  onToggleFastForward,
   onSkip,
   onSeek,
   onRateChange
@@ -67,8 +59,6 @@ export function AudioPlayer({
   }, []);
 
   const displayPercent = isDragging ? dragPercent : progressPercent;
-
-  const skipBtnClass = "relative p-1.5 sm:p-2 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white active:text-indigo-600 transition-colors rounded-full active:bg-indigo-50 dark:active:bg-indigo-950/30 flex flex-col items-center justify-center";
 
   return (
     <div className="bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 px-3 sm:px-6 py-2 sm:py-3 pb-[max(0.5rem,env(safe-area-inset-bottom))] sm:pb-3 flex flex-col gap-1.5 sm:gap-2 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] dark:shadow-none z-10 flex-shrink-0">
@@ -149,63 +139,18 @@ export function AudioPlayer({
           )}
         </div>
 
-        <div className="flex items-center gap-1 sm:gap-2">
+        <div className="flex items-center gap-3 sm:gap-5">
           <button
-            onClick={() => onSkip(-30)}
-            className={skipBtnClass}
-            aria-label="Skip back 30 seconds"
+            onClick={() => onSkip(-15)}
+            className="p-2 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white active:text-indigo-600 transition-colors rounded-full active:bg-indigo-50 dark:active:bg-indigo-950/30"
+            aria-label="Skip back 15 seconds"
           >
-            <svg className="h-4 w-4 sm:h-5 sm:w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M2.5 2v6h6" />
-              <path d="M2.5 8a10 10 0 1 1 1.46 5" />
-            </svg>
-            <span className="text-[9px] sm:text-[10px] font-bold leading-none -mt-0.5">30</span>
-          </button>
-
-          <button
-            onClick={() => onSkip(-10)}
-            className={skipBtnClass}
-            aria-label="Skip back 10 seconds"
-          >
-            <svg className="h-4 w-4 sm:h-5 sm:w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M2.5 2v6h6" />
-              <path d="M2.5 8a10 10 0 1 1 1.46 5" />
-            </svg>
-            <span className="text-[9px] sm:text-[10px] font-bold leading-none -mt-0.5">10</span>
-          </button>
-
-          <button
-            onClick={() => onSkip(-5)}
-            className={skipBtnClass}
-            aria-label="Skip back 5 seconds"
-          >
-            <svg className="h-4 w-4 sm:h-5 sm:w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M2.5 2v6h6" />
-              <path d="M2.5 8a10 10 0 1 1 1.46 5" />
-            </svg>
-            <span className="text-[9px] sm:text-[10px] font-bold leading-none -mt-0.5">5</span>
-          </button>
-
-          <button
-            onClick={onToggleRewind}
-            className={`relative p-1.5 sm:p-2 rounded-full transition-colors ${
-              rewindSpeed > 0
-                ? 'text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/30'
-                : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white active:text-indigo-600 active:bg-indigo-50 dark:active:bg-indigo-950/30'
-            }`}
-            aria-label={rewindSpeed > 0 ? `Rewinding at ${rewindSpeed}x` : 'Rewind'}
-          >
-            <RewindIcon className="h-4 w-4 sm:h-5 sm:w-5" />
-            {rewindSpeed > 0 && (
-              <span className="absolute -top-1 -right-1 text-[9px] font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 rounded-full px-1">
-                {rewindSpeed}x
-              </span>
-            )}
+            <Undo2Icon className="h-5 w-5" />
           </button>
 
           <button
             onClick={onTogglePlay}
-            className="h-11 w-11 sm:h-12 sm:w-12 bg-indigo-600 text-white rounded-full flex items-center justify-center hover:bg-indigo-700 active:bg-indigo-800 active:scale-95 transition-all shadow-md focus:outline-none mx-1"
+            className="h-11 w-11 sm:h-12 sm:w-12 bg-indigo-600 text-white rounded-full flex items-center justify-center hover:bg-indigo-700 active:bg-indigo-800 active:scale-95 transition-all shadow-md focus:outline-none"
             aria-label={isPlaying ? 'Pause' : 'Play'}
           >
             {isPlaying ?
@@ -215,56 +160,11 @@ export function AudioPlayer({
           </button>
 
           <button
-            onClick={onToggleFastForward}
-            className={`relative p-1.5 sm:p-2 rounded-full transition-colors ${
-              fastForwardSpeed > 0
-                ? 'text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/30'
-                : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white active:text-indigo-600 active:bg-indigo-50 dark:active:bg-indigo-950/30'
-            }`}
-            aria-label={fastForwardSpeed > 0 ? `Fast forwarding at ${fastForwardSpeed}x` : 'Fast forward'}
+            onClick={() => onSkip(15)}
+            className="p-2 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white active:text-indigo-600 transition-colors rounded-full active:bg-indigo-50 dark:active:bg-indigo-950/30"
+            aria-label="Skip forward 15 seconds"
           >
-            <FastForwardIcon className="h-4 w-4 sm:h-5 sm:w-5" />
-            {fastForwardSpeed > 0 && (
-              <span className="absolute -top-1 -right-1 text-[9px] font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 rounded-full px-1">
-                {fastForwardSpeed}x
-              </span>
-            )}
-          </button>
-
-          <button
-            onClick={() => onSkip(5)}
-            className={skipBtnClass}
-            aria-label="Skip forward 5 seconds"
-          >
-            <svg className="h-4 w-4 sm:h-5 sm:w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M21.5 2v6h-6" />
-              <path d="M21.5 8a10 10 0 1 0-1.46 5" />
-            </svg>
-            <span className="text-[9px] sm:text-[10px] font-bold leading-none -mt-0.5">5</span>
-          </button>
-
-          <button
-            onClick={() => onSkip(10)}
-            className={skipBtnClass}
-            aria-label="Skip forward 10 seconds"
-          >
-            <svg className="h-4 w-4 sm:h-5 sm:w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M21.5 2v6h-6" />
-              <path d="M21.5 8a10 10 0 1 0-1.46 5" />
-            </svg>
-            <span className="text-[9px] sm:text-[10px] font-bold leading-none -mt-0.5">10</span>
-          </button>
-
-          <button
-            onClick={() => onSkip(30)}
-            className={skipBtnClass}
-            aria-label="Skip forward 30 seconds"
-          >
-            <svg className="h-4 w-4 sm:h-5 sm:w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M21.5 2v6h-6" />
-              <path d="M21.5 8a10 10 0 1 0-1.46 5" />
-            </svg>
-            <span className="text-[9px] sm:text-[10px] font-bold leading-none -mt-0.5">30</span>
+            <Redo2Icon className="h-5 w-5" />
           </button>
         </div>
 

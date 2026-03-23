@@ -19,20 +19,12 @@ import {
   SearchIcon,
   LoaderIcon,
   SendIcon,
-  MicIcon,
-  ShareIcon,
-  Share2Icon,
-  UsersIcon,
-  FileTextIcon,
-  EyeIcon,
-  PencilIcon } from
+  MicIcon } from
 'lucide-react';
 import { toast } from 'sonner';
 import { useTranscripts } from '../../hooks/useTranscripts';
-import { useShared } from '../../hooks/useShared';
 import { useAuth } from '../../contexts/AuthContext';
 import { SettingsPanel, ChangePasswordModal } from './SettingsPanel';
-import { ShareModal } from '../sharing/ShareModal';
 import { Logo } from '../brand/Logo';
 import { Folder } from '../../types/transcript';
 import { api } from '../../utils/api';
@@ -67,7 +59,6 @@ export function Sidebar({
 }: SidebarProps) {
   const { folders, transcripts, addFolder, deleteFolder, renameFolder } =
   useTranscripts();
-  const { sharedTranscripts, sharedFolders } = useShared();
   const { user } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
@@ -93,9 +84,6 @@ export function Sidebar({
   const [sendConflicts, setSendConflicts] = useState<SendConflict[]>([]);
   const [sendConflictFolderId, setSendConflictFolderId] = useState<string | null>(null);
   const [selectedReplacements, setSelectedReplacements] = useState<Set<string>>(new Set());
-  const [shareModalTarget, setShareModalTarget] = useState<{ type: 'transcript' | 'folder'; id: string; name: string } | null>(null);
-  const [sharedSectionExpanded, setSharedSectionExpanded] = useState(true);
-
 
   useEffect(() => {
     api.mattrmindr.status().then((res) => {
@@ -396,15 +384,6 @@ export function Sidebar({
                 Send to MattrMindr
               </button>
               }
-              <button
-              onClick={() => {
-                setMenuFolderId(null);
-                setShareModalTarget({ type: 'folder', id: folder.id, name: folder.name });
-              }}
-              className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-700 hover:text-white transition-colors">
-                <Share2Icon className="h-3.5 w-3.5" />
-                Share Folder
-              </button>
               <div className="h-px bg-slate-700 my-1" />
               <button
               onClick={() => handleDeleteFromMenu(folder.id)}
@@ -646,80 +625,6 @@ export function Sidebar({
         <div className="space-y-0.5 px-1">
           {rootFolders.map((folder) => renderFolder(folder))}
         </div>
-
-        {/* Shared with Me section */}
-        {(sharedTranscripts.length > 0 || sharedFolders.length > 0) && (
-          <>
-            <div className="pt-6 pb-2 flex items-center justify-between px-3">
-              <button
-                onClick={() => setSharedSectionExpanded(!sharedSectionExpanded)}
-                className="flex items-center gap-1 text-xs font-semibold text-slate-500 uppercase tracking-wider hover:text-slate-400 transition-colors">
-                {sharedSectionExpanded ?
-                  <ChevronDownIcon className="h-3 w-3" /> :
-                  <ChevronRightIcon className="h-3 w-3" />
-                }
-                Shared with Me
-              </button>
-              <UsersIcon className="h-3.5 w-3.5 text-slate-500" />
-            </div>
-
-            {sharedSectionExpanded && (
-              <div className="space-y-0.5 px-1">
-                {(() => {
-                  const byOwner: Record<string, { name: string; folders: typeof sharedFolders; transcripts: typeof sharedTranscripts }> = {};
-                  for (const sf of sharedFolders) {
-                    if (!byOwner[sf.ownerId]) byOwner[sf.ownerId] = { name: sf.ownerName, folders: [], transcripts: [] };
-                    byOwner[sf.ownerId].folders.push(sf);
-                  }
-                  for (const st of sharedTranscripts) {
-                    if (!byOwner[st.ownerId]) byOwner[st.ownerId] = { name: st.ownerName, folders: [], transcripts: [] };
-                    byOwner[st.ownerId].transcripts.push(st);
-                  }
-                  return Object.entries(byOwner).map(([ownerId, data]) => (
-                    <div key={ownerId} className="mb-2">
-                      <p className="text-[10px] font-semibold text-slate-600 uppercase tracking-wider px-2 py-1 truncate">
-                        From {data.name}
-                      </p>
-                      {data.folders.map(sf => {
-                        const isSelected = selectedFolderId === sf.folder.id && isDashboard;
-                        return (
-                          <div key={sf.shareId}>
-                            <button
-                              onClick={() => handleNavClick(sf.folder.id)}
-                              className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-sm font-medium transition-colors ${isSelected ? 'bg-slate-800 text-white' : 'hover:bg-slate-800 hover:text-white'}`}
-                            >
-                              <FolderIcon className="h-4 w-4 text-indigo-400 flex-shrink-0" />
-                              <span className="truncate text-left flex-1">{sf.folder.name}</span>
-                              <span className={`text-[10px] px-1.5 py-0.5 rounded-full flex-shrink-0 ${sf.permission === 'edit' ? 'bg-emerald-900/50 text-emerald-300' : 'bg-slate-700 text-slate-400'}`}>
-                                {sf.permission === 'edit' ? 'Edit' : 'View'}
-                              </span>
-                            </button>
-                          </div>
-                        );
-                      })}
-                      {data.transcripts.map(st => (
-                        <button
-                          key={st.shareId}
-                          onClick={() => {
-                            navigate(`/app/transcript/${st.transcript.id}`);
-                            if (isMobile && onClose) onClose();
-                          }}
-                          className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-sm font-medium transition-colors hover:bg-slate-800 hover:text-white"
-                        >
-                          <FileTextIcon className="h-4 w-4 text-slate-400 flex-shrink-0" />
-                          <span className="truncate text-left flex-1">{st.transcript.filename}</span>
-                          <span className={`text-[10px] px-1.5 py-0.5 rounded-full flex-shrink-0 ${st.permission === 'edit' ? 'bg-emerald-900/50 text-emerald-300' : 'bg-slate-700 text-slate-400'}`}>
-                            {st.permission === 'edit' ? 'Edit' : 'View'}
-                          </span>
-                        </button>
-                      ))}
-                    </div>
-                  ));
-                })()}
-              </div>
-            )}
-          </>
-        )}
       </nav>
 
       <div className="p-4 border-t border-slate-800 relative">
@@ -750,15 +655,6 @@ export function Sidebar({
           <ChangePasswordModal onClose={() => setShowChangePassword(false)} />
         )}
       </AnimatePresence>
-
-      {shareModalTarget && (
-        <ShareModal
-          resourceType={shareModalTarget.type}
-          resourceId={shareModalTarget.id}
-          resourceName={shareModalTarget.name}
-          onClose={() => setShareModalTarget(null)}
-        />
-      )}
 
       {sendConflicts.length > 0 && sendConflictFolderId && (
         <>
