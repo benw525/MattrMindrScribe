@@ -1,0 +1,408 @@
+{\rtf1\ansi\ansicpg1252\cocoartf2639
+{\fonttbl\f0\fswiss\fcharset0 Helvetica-Bold;\f1\fswiss\fcharset0 Helvetica;\f2\fmodern\fcharset0 CourierNewPSMT;\f3\fswiss\fcharset0 Helvetica-Oblique;\f4\fswiss\fcharset0 Helvetica-BoldOblique;}
+{\colortbl;\red255\green255\blue255;\red0\green0\blue0;\red180\green0\blue0;\red0\green100\blue0;\red0\green0\blue180;\red128\green128\blue128;\red50\green50\blue50;\red220\green220\blue220;}
+\paperw12240\paperh15840\margl1440\margr1440\margt1440\margb1440
+
+\pard\tx560\tx1120\qc
+
+{\f0\fs44 MattrMindrScribe\line All Changes After Checkpoint:\line "Add Body Cam Recording Type to the Upload Form"}
+\par\pard\tx560\tx1120\qc
+{\f1\fs22\cf6 Baseline Commit: 25bbfe4\line Date Range: March 21, 2026 \u8211 March 22, 2026\line Total Commits: 31\line Total Files Changed: 45+\line Total Lines Added: ~6,200+}
+\par\pard\tx560\tx1120
+\par
+{\f0\fs18 ________________________________________________________________________________}
+\par\par
+
+{\f0\fs32 TABLE OF CONTENTS}
+\par\par
+{\f1\fs22 1.  Change Summary (Chronological)\line 2.  Feature: Segment Editing & Empty Text Handling\line 3.  Feature: Coworking & Sharing (Task #19)\line 4.  Feature: Media Playback Diagnostics & Audio Conversion\line 5.  Feature: Shared Folder Navigation\line 6.  Feature: Audio Player Rewind/Fast-Forward Controls\line 7.  Feature: Fullscreen Video Presentation Mode (Task #20)\line 8.  Feature: Synchronized Pop-Out Presenter Window\line 9.  Fix: AssemblyAI Diarization (speech_model)\line 10. Fix: Speaker Refinement for Large Transcripts (Task #21)\line 11. Fix: Whisper Hallucination Detection\line 12. Files Changed Reference}
+\par\par
+{\f0\fs18 ________________________________________________________________________________}
+\par\par
+
+{\f0\fs32 1. CHANGE SUMMARY (CHRONOLOGICAL)}
+\par\par
+{\f2\fs16 DATE         COMMIT   DESCRIPTION                                              CATEGORY\line \u8212\u8212\u8212\u8212\u8212     \u8212\u8212\u8212    \u8212\u8212\u8212\u8212\u8212\u8212\u8212\u8212\u8212\u8212\u8212\u8212\u8212\u8212\u8212\u8212\u8212\u8212           \u8212\u8212\u8212\u8212\u8212\line Mar 21 13:45  526b964  Improve segment editing for empty text                    Segment Editing\line Mar 21 13:46  3c8c1cf  Fix type casting error when editing segments              Segment Editing\line Mar 21 13:54  93e7e04  Add ability to add/edit dialogue in new boxes             Segment Editing\line Mar 21 13:55  ebcf8fc  Add edit button to segments with highlight                Segment Editing\line Mar 21 14:55  31eea63  Auto-save notes and bookmarks with transcript edits       Auto-Save\line Mar 21 15:05  ea852d7  Complete coworking & sharing feature (Task #19)           Sharing\line Mar 21 15:06  2373718  Add automatic saving for notes and bookmarks              Auto-Save\line Mar 21 15:30  ce33384  Fix transcript viewer hooks restructure error             Bug Fix\line Mar 21 15:46  c3f9791  Add diagnostic logging for media playback                 Diagnostics\line Mar 21 16:07  c5bab60  Add detailed logging to media playback                    Diagnostics\line Mar 21 16:13  12f1738  Convert audio files to playable format automatically      Audio\line Mar 21 16:36  ae90035  Make shared folders navigable like regular folders         Sharing\line Mar 22 01:46  b0f5f84  Add rewind and skip functionality to audio player         Audio Player\line Mar 22 01:52  3fefeca  Add fast-forward functionality to audio player            Audio Player\line Mar 22 02:03  c397abf  Add fullscreen video presentation mode (Task #20)         Present Mode\line Mar 22 02:06  3d9db2d  Add fullscreen video presentation mode (Task #20)         Present Mode\line Mar 22 02:07  a9b7844  Add fullscreen video presentation mode (Task #20)         Present Mode\line Mar 22 02:09  55a515a  Add fullscreen video presentation mode (Task #20)         Present Mode\line Mar 22 02:10  be60ec8  Add fullscreen video presentation mode (Task #20)         Present Mode\line Mar 22 02:30  ae276e2  Add synchronized pop-out presenter window                 Present Mode\line Mar 22 21:04  1fab0d1  Improve audio processing & speaker refinement accuracy    Pipeline\line Mar 22 21:13  d15efcf  Increase token limits & repair truncated JSON             Pipeline\line Mar 22 22:06  84d4791  Fix speaker refinement for large transcripts              Pipeline\line Mar 22 22:07  cd11447  Fix speaker refinement for large transcripts              Pipeline\line Mar 22 22:10  9f956ab  Make hallucination detection more aggressive              Pipeline}
+\par\par
+
+{\f0\fs18 ________________________________________________________________________________}
+\par\par
+
+{\f0\fs32 2. FEATURE: SEGMENT EDITING & EMPTY TEXT HANDLING}
+\par\par
+{\f1\fs22\cf6 Commits: 526b964, 3c8c1cf, 93e7e04, ebcf8fc\line Date: March 21, 2026 13:45\u821314:00\line Files: }{\f2\fs20\cf6 src/components/viewer/TranscriptText.tsx}
+\par\par
+
+{\f0\fs24 2.1 What Was Changed}
+\par\par
+{\f1\fs22 Four changes to the transcript segment editing UI in }{\f2\fs20 TranscriptText.tsx}{\f1\fs22 :}
+\par\par
+{\f0\fs22 A. Empty text segments auto-enter edit mode.}{\f1\fs22  Previously, when a new empty segment was added to the transcript, the user had to click on it to start typing. Now, segments with empty text and IDs starting with }{\f2\fs20 'new-'}{\f1\fs22  automatically enter edit mode on render.}
+\par\par
+{\f2\fs18 // Before:\line const [isEditing, setIsEditing] = useState(false);\line\line // After:\line const isNewEmpty = segment.text === '' && segment.id.startsWith('new-');\line const [isEditing, setIsEditing] = useState(isNewEmpty);}
+\par\par
+{\f0\fs22 B. Save handler allows empty text.}{\f1\fs22  The save handler previously required }{\f2\fs20 editValue.trim()}{\f1\fs22  to be truthy (non-empty) before saving. This prevented users from clearing a segment's text. Changed to check }{\f2\fs20 editValue.trim() !== segment.text}{\f1\fs22  instead, allowing saves of empty strings and deletions.}
+\par\par
+{\f2\fs18 // Before:\line if (editValue.trim() && editValue.trim() !== segment.text)\line\line // After:\line if (editValue.trim() !== segment.text)}
+\par\par
+{\f0\fs22 C. Empty text placeholder display.}{\f1\fs22  Segments with no text now show italic gray placeholder text "Click to add text..." instead of rendering as invisible empty space. The CSS class dynamically switches between normal text styling and placeholder styling based on whether }{\f2\fs20 segment.text}{\f1\fs22  is truthy.}
+\par\par
+{\f0\fs22 D. Type casting fix.}{\f1\fs22  Fixed a TypeScript error where editing a dialogue segment's properties passed incorrect types to the update handler.}
+\par\par
+
+{\f0\fs24 2.2 Why}
+\par\par
+{\f1\fs22 Users needed to add new dialogue segments (e.g., when a speaker's line was missing from the transcript) and immediately start typing. The previous behavior required an extra click and couldn't handle empty segments without errors.}
+\par\par
+
+{\f0\fs18 ________________________________________________________________________________}
+\par\par
+
+{\f0\fs32 3. FEATURE: COWORKING & SHARING (TASK #19)}
+\par\par
+{\f1\fs22\cf6 Commits: 31eea63, ea852d7, 2373718\line Date: March 21, 2026 14:55\u821315:06\line New Files (6):\line }{\f2\fs20\cf6 server/checkAccess.ts\line server/routes/shares.ts\line src/components/sharing/ShareModal.tsx\line src/contexts/SharedContext.tsx\line src/hooks/useShared.ts\line src/types/transcript.ts}
+\par\par
+{\f1\fs22\cf6 Modified Files (9):\line }{\f2\fs20\cf6 server/index.ts, server/routes/annotations.ts, server/routes/folders.ts,\line server/routes/transcripts.ts, src/App.tsx, src/components/layout/Sidebar.tsx,\line src/components/viewer/MetadataEditor.tsx, src/components/viewer/TranscriptText.tsx,\line src/components/viewer/TranscriptToolbar.tsx, src/contexts/TranscriptContext.tsx,\line src/pages/TranscriptViewerPage.tsx, src/utils/api.ts}
+\par\par
+{\f1\fs22\cf6 Lines Added: ~1,481}
+\par\par
+
+{\f0\fs24 3.1 What Was Changed}
+\par\par
+{\f1\fs22 A complete coworking and sharing system was implemented, allowing users to share individual transcripts or entire folders with other users at different permission levels (view or edit).}
+\par\par
+
+{\f0\fs22 3.1.1 Backend: Access Control System (}{\f2\fs20 server/checkAccess.ts}{\f0\fs22 )}
+\par
+{\f1\fs22 A centralized access control function }{\f2\fs20 checkAccess(userId, resourceType, resourceId)}{\f1\fs22  was created. It checks:}
+{\f2\fs18 \line 1. Is the user the owner of the resource? -> Full access\line 2. Does a share record exist granting this user access? -> Permission-based access\line 3. For transcripts in a shared folder: does a folder-level share exist? -> Inherited access\line\line Returns: \{ allowed: boolean, permission: 'owner' | 'edit' | 'view' | null \}}
+\par\par
+
+{\f0\fs22 3.1.2 Backend: Share Routes (}{\f2\fs20 server/routes/shares.ts}{\f0\fs22 , 401 lines)}
+\par
+{\f1\fs22 A full REST API for sharing:}
+{\f2\fs18 \line POST   /api/shares              Create a share (email, resourceType, resourceId, permission)\line GET    /api/shares/by-resource   List shares for a specific resource\line GET    /api/shares/shared-with-me  List all resources shared with the current user\line PATCH  /api/shares/:id            Update share permission\line DELETE /api/shares/:id            Revoke a share (soft delete via revoked_at)\line\line Security features:\line - Only the resource owner can create/modify/revoke shares\line - Email-based sharing: if the target email doesn't have an account, the share\line   silently succeeds (no information disclosure about user existence)\line - Self-sharing is rejected\line - Duplicate shares are detected and updated rather than duplicated\line - Revoked shares can be re-activated with a new permission level}
+\par\par
+
+{\f0\fs22 3.1.3 Backend: Transcript Route Security Hardening}
+\par
+{\f1\fs22 The }{\f2\fs20 server/routes/transcripts.ts}{\f1\fs22  file was significantly modified (~148 line changes) to integrate access control checks into every endpoint:}
+{\f2\fs18 \line - GET /api/transcripts/:id       Now checks checkAccess() before returning data\line - PUT /api/transcripts/:id       Only allows edits if permission is 'owner' or 'edit'\line - DELETE /api/transcripts/:id    Only allows deletion by owner\line - PUT /api/transcripts/:id/segments  Edit-permission required for segment saves\line - Annotation routes: access-controlled}
+\par\par
+
+{\f0\fs22 3.1.4 Frontend: ShareModal Component (}{\f2\fs20 src/components/sharing/ShareModal.tsx}{\f0\fs22 , 180 lines)}
+\par
+{\f1\fs22 A modal dialog for managing shares:}
+{\f2\fs18 \line - Email input to share with a user\line - Permission dropdown (View / Edit)\line - List of current shares with permission badges\line - Revoke button for each share\line - Integrated into TranscriptToolbar via a "Share" button}
+\par\par
+
+{\f0\fs22 3.1.5 Frontend: Shared Context & Sidebar}
+\par
+{\f1\fs22 A }{\f2\fs20 SharedContext}{\f1\fs22  (}{\f2\fs20 src/contexts/SharedContext.tsx}{\f1\fs22 ) provides a }{\f2\fs20 useShared()}{\f1\fs22  hook that fetches and caches }{\f2\fs20 /api/shares/shared-with-me}{\f1\fs22 . The sidebar (}{\f2\fs20 Sidebar.tsx}{\f1\fs22 ) was modified to show a "Shared with Me" section listing transcripts and folders shared by other users, with visual indicators for permission level (view/edit badge).}
+\par\par
+
+{\f0\fs22 3.1.6 Frontend: Permission-Aware UI}
+\par
+{\f1\fs22 Multiple components were updated to respect permissions:}
+{\f2\fs18 \line - TranscriptToolbar: Share button visible only to owners\line - TranscriptText: Edit controls hidden for view-only users\line - MetadataEditor: Read-only mode for view-only users\line - TranscriptViewerPage: Permission state threaded through all child components}
+\par\par
+
+{\f0\fs22 3.1.7 Auto-Save for Notes and Bookmarks}
+\par
+{\f1\fs22 Notes and bookmarks are now automatically saved when the user modifies them, instead of requiring a manual save action. This was implemented alongside the sharing feature to ensure shared collaborators see real-time updates.}
+\par\par
+
+{\f0\fs18 ________________________________________________________________________________}
+\par\par
+
+{\f0\fs32 4. FEATURE: MEDIA PLAYBACK DIAGNOSTICS & AUDIO CONVERSION}
+\par\par
+{\f1\fs22\cf6 Commits: ce33384, c3f9791, c5bab60, 12f1738\line Date: March 21, 2026 15:30\u821316:13\line Files: }{\f2\fs20\cf6 src/pages/TranscriptViewerPage.tsx, src/hooks/useAudioPlayer.ts,\line server/index.ts, server/transcription.ts}
+\par\par
+
+{\f0\fs24 4.1 What Was Changed}
+\par\par
+
+{\f0\fs22 4.1.1 Transcript Viewer Hooks Restructure (ce33384)}
+\par
+{\f1\fs22 Fixed a React error caused by conditional hook calls in }{\f2\fs20 TranscriptViewerPage.tsx}{\f1\fs22 . Hooks were restructured to be called unconditionally at the top level of the component, with early returns moved after all hooks.}
+\par\par
+
+{\f0\fs22 4.1.2 Media Playback Diagnostic Logging (c3f9791, c5bab60)}
+\par
+{\f1\fs22 Added extensive console logging throughout the media playback pipeline to debug issues where audio/video wouldn't play in the browser:}
+{\f2\fs18 \line - useAudioPlayer.ts: Logs audio element creation, source URL, load events,\line   play/pause state changes, error events with error codes, and duration detection\line - TranscriptViewerPage.tsx: Logs media URL resolution, file type detection,\line   and player initialization\line - Server: Added media-type-aware response headers for audio streaming}
+\par\par
+
+{\f0\fs22 4.1.3 Automatic Browser-Playable Audio Conversion (12f1738)}
+\par
+{\f1\fs22 Added a }{\f2\fs20 convertToBrowserPlayable()}{\f1\fs22  function to the transcription pipeline in }{\f2\fs20 server/transcription.ts}{\f1\fs22 :}
+\par\par
+{\f2\fs18 BROWSER_PLAYABLE_FORMATS = ['.mp3', '.wav', '.ogg', '.m4a', '.aac', '.flac', '.webm', '.mp4', '.oga']\line\line If the source file is NOT in a browser-playable format:\line 1. Convert to MP3 at 44.1kHz stereo 128kbps via ffmpeg\line 2. Upload the MP3 to S3 with the same key but .mp3 extension\line 3. Update the transcript's file_url in the database to point to the MP3\line\line If the source file IS browser-playable: no conversion (return null)}
+\par\par
+{\f1\fs22 This ensures that all transcripts have browser-playable audio URLs regardless of the original upload format. The conversion runs at the beginning of the pipeline, before Whisper processing, and is non-fatal (errors are caught and logged).}
+\par\par
+{\f1\fs22 A }{\f2\fs20 /api/media/:key(*)}{\f1\fs22  endpoint was also added to }{\f2\fs20 server/index.ts}{\f1\fs22  to proxy S3 media files to the browser with appropriate content-type headers (54 line change). This allows the frontend audio player to stream audio directly from the server without CORS issues from S3.}
+\par\par
+
+{\f0\fs18 ________________________________________________________________________________}
+\par\par
+
+{\f0\fs32 5. FEATURE: SHARED FOLDER NAVIGATION}
+\par\par
+{\f1\fs22\cf6 Commit: ae90035\line Date: March 21, 2026 16:36\line Files: }{\f2\fs20\cf6 server/checkAccess.ts, src/pages/TranscriptViewerPage.tsx}
+\par\par
+
+{\f0\fs24 5.1 What Was Changed}
+\par\par
+{\f1\fs22 When a folder was shared with a user, they could see it in the "Shared with Me" sidebar section but could not click into it to see its contents. The folder appeared as a flat, non-navigable item.}
+\par\par
+{\f1\fs22 This change made shared folders behave like regular folders in the sidebar \u8212 clicking a shared folder navigates into it and displays all transcripts within that folder that the user has access to. The }{\f2\fs20 checkAccess}{\f1\fs22  function was updated to properly cascade folder-level permissions down to the transcripts inside the folder.}
+\par\par
+
+{\f0\fs18 ________________________________________________________________________________}
+\par\par
+
+{\f0\fs32 6. FEATURE: AUDIO PLAYER REWIND/FAST-FORWARD CONTROLS}
+\par\par
+{\f1\fs22\cf6 Commits: b0f5f84, 3fefeca\line Date: March 22, 2026 01:46\u821301:52\line Files: }{\f2\fs20\cf6 src/hooks/useAudioPlayer.ts, src/components/viewer/AudioPlayer.tsx}
+\par\par
+
+{\f0\fs24 6.1 What Was Changed}
+\par\par
+{\f1\fs22 The audio player hook (}{\f2\fs20 useAudioPlayer.ts}{\f1\fs22 , +136 lines) was extended with rewind and fast-forward functionality:}
+\par\par
+{\f2\fs18 New state variables:\line   rewindSpeed: number       (0 = off, 1 = 2x, 2 = 4x, 3 = 8x, 4 = 16x)\line   fastForwardSpeed: number  (0 = off, 1 = 2x, 2 = 4x, 3 = 8x, 4 = 16x)\line\line New functions:\line   toggleRewind()        Cycles through rewind speeds, cancels fast-forward\line   toggleFastForward()   Cycles through fast-forward speeds, cancels rewind\line   skipForward(seconds)  Jump forward by N seconds\line   skipBackward(seconds) Jump backward by N seconds}
+\par\par
+{\f1\fs22 When rewind or fast-forward is active, a }{\f2\fs20 setInterval}{\f1\fs22  runs every 100ms adjusting }{\f2\fs20 audio.currentTime}{\f1\fs22  by the appropriate rate. The interval is cleared when the speed returns to 0 or the component unmounts.}
+\par\par
+{\f1\fs22 The }{\f2\fs20 AudioPlayer.tsx}{\f1\fs22  component (+122 lines) was updated with visual controls:}
+{\f2\fs18 \line - Rewind button with speed indicator badge (2x, 4x, 8x, 16x)\line - Fast-forward button with speed indicator badge\line - Skip backward 10s button\line - Skip forward 30s button\line - Active speed indicators with visual highlighting}
+\par\par
+
+{\f0\fs18 ________________________________________________________________________________}
+\par\par
+
+{\f0\fs32 7. FEATURE: FULLSCREEN VIDEO PRESENTATION MODE (TASK #20)}
+\par\par
+{\f1\fs22\cf6 Commits: c397abf, 3d9db2d, a9b7844, 55a515a, be60ec8\line Date: March 22, 2026 02:03\u821302:10\line New Files (1):\line }{\f2\fs20\cf6 src/pages/VideoPresentModePage.tsx (441 lines)}
+\par\par
+{\f1\fs22\cf6 Modified Files (4):\line }{\f2\fs20\cf6 src/App.tsx, src/components/layout/Sidebar.tsx, src/components/viewer/TranscriptToolbar.tsx,\line src/pages/PresentModePage.tsx}
+\par\par
+
+{\f0\fs24 7.1 What Was Changed}
+\par\par
+{\f1\fs22 A new dedicated presentation mode for video transcripts was created. Previously, the "Present" button on video transcripts opened the audio-only presentation page, which showed a text-scrolling view without video playback.}
+\par\par
+
+{\f0\fs22 7.1.1 VideoPresentModePage (}{\f2\fs20 src/pages/VideoPresentModePage.tsx}{\f0\fs22 , 441 lines)}
+\par
+{\f1\fs22 A full-page video presentation view with:}
+{\f2\fs18 \line - Video player at the top of the screen with native HTML5 controls\line - Synchronized transcript scroll below the video\line - Active segment highlighting (current segment visually distinguished)\line - Click-to-seek on any segment (clicking a segment jumps the video to that timestamp)\line - Auto-scroll: active segment automatically scrolls into view as video plays\line - Playback speed control with 8 speed options (0.25x through 2x)\line - Keyboard shortcuts:\line     Space: play/pause\line     Left/Right arrows: skip backward/forward 10s/30s\line     Escape: exit presentation mode\line - Auto-hiding controls: transport controls fade after inactivity\line - Light/dark theme support following the app's theme setting\line - Direct transcript fetch: works even when opened as a direct URL\line   (fetches transcript from API if not in React context)}
+\par\par
+
+{\f0\fs22 7.1.2 Routing & Navigation}
+\par
+{\f1\fs22 New route added to }{\f2\fs20 App.tsx}{\f1\fs22 :}
+\par
+{\f2\fs18 /app/transcript/:id/video-present -> VideoPresentModePage}
+\par\par
+{\f1\fs22 The TranscriptToolbar's "Present" button was updated to detect the transcript's media type. For video transcripts, it navigates to }{\f2\fs20 /video-present}{\f1\fs22  instead of }{\f2\fs20 /present}{\f1\fs22 .}
+\par\par
+
+{\f0\fs22 7.1.3 PresentModePage Updates}
+\par
+{\f1\fs22 The existing audio-only }{\f2\fs20 PresentModePage.tsx}{\f1\fs22  was refactored with:}
+{\f2\fs18 \line - Fixed audio playback (audio element was not properly connecting to source)\line - Light/dark theme support\line - Progress bar at the top of the screen\line - Keyboard shortcuts (Space, Left, Right, Escape)\line - Click-to-seek on segments\line - Visual improvements to the segment display}
+\par\par
+
+{\f0\fs18 ________________________________________________________________________________}
+\par\par
+
+{\f0\fs32 8. FEATURE: SYNCHRONIZED POP-OUT PRESENTER WINDOW}
+\par\par
+{\f1\fs22\cf6 Commit: ae276e2\line Date: March 22, 2026 02:30\line New Files (2):\line }{\f2\fs20\cf6 src/hooks/usePresentSync.ts (98 lines)\line src/pages/PresenterPopout.tsx (278 lines)}
+\par\par
+{\f1\fs22\cf6 Modified Files (5):\line }{\f2\fs20\cf6 src/App.tsx, src/components/viewer/TranscriptToolbar.tsx,\line src/pages/TranscriptViewerPage.tsx, src/pages/DashboardPage.tsx, replit.md}
+\par\par
+{\f1\fs22\cf6 Lines Added: ~1,333}
+\par\par
+
+{\f0\fs24 8.1 Architecture}
+\par\par
+{\f1\fs22 This feature converts the presentation mode from a full-page navigation (leaving the transcript viewer) to a synced pop-out window (opens a new browser window while the main app stays open). The main app owns all audio/video playback and broadcasts state to the pop-out window via the BroadcastChannel API.}
+\par\par
+
+{\f0\fs22 8.1.1 BroadcastChannel Sync Hook (}{\f2\fs20 src/hooks/usePresentSync.ts}{\f0\fs22 )}
+\par\par
+{\f1\fs22 Two hooks for cross-window communication:}
+\par\par
+{\f0\fs20 }{\f2\fs18 usePresentBroadcaster(transcriptId)}{\f0\fs20  \u8212 used by the main app:}
+{\f2\fs18 \line - Opens a BroadcastChannel named 'mms-present-sync'\line - broadcast(state): sends current playback state to all listeners\line - onCommand(handler): registers a handler for commands from the pop-out\line - Responds to 'request_state' handshake from pop-out on mount\line\line State broadcast payload (PresentState):\line   transcriptId, currentTime, isPlaying, playbackRate, duration,\line   filename, mediaType, mediaUrl, segments[]}
+\par\par
+{\f0\fs20 }{\f2\fs18 usePresentReceiver(transcriptId)}{\f0\fs20  \u8212 used by the pop-out window:}
+{\f2\fs18 \line - Opens a BroadcastChannel on the same name\line - Receives state updates, exposes state as React state\line - sendCommand(cmd): sends commands back to the main app\line - On mount: sends 'request_state' handshake to get initial state\line\line Commands (PresentCommand):\line   play, pause, toggle, seek, skip, rate, request_state}
+\par\par
+
+{\f0\fs22 8.1.2 Presenter Pop-Out Page (}{\f2\fs20 src/pages/PresenterPopout.tsx}{\f0\fs22 , 278 lines)}
+\par\par
+{\f1\fs22 A unified pop-out window that handles both audio and video transcripts:}
+\par\par
+{\f0\fs20 Audio Mode:}
+{\f2\fs18 \line - Full-screen scrolling transcript with active segment highlighting\line - Large, readable text optimized for courtroom/deposition display\line - Progress bar at the top\line - Play/pause control button\line - Click-to-seek on any segment (sends seek command to main app)}
+\par\par
+{\f0\fs20 Video Mode:}
+{\f2\fs18 \line - Split layout: video player at top, transcript scroll below\line - Video element syncs to main app's playback state (time, play/pause, rate)\line - Resizable video area with a drag handle (user can drag to resize video vs. text)\line - "Show/hide text" toggle to show video only\line - Click-to-seek on segments (seeks both video and main app)\line - Video height persisted as percentage of viewport}
+\par\par
+{\f0\fs20 Shared Features:}
+{\f2\fs18 \line - Light/dark theme: reads from localStorage ('mms-theme'), listens for\line   storage events so theme changes in the main app propagate to the pop-out\line - Active segment auto-scroll: smoothly scrolls the current segment into view\line - Window title set to transcript filename\line - Keyboard shortcuts: Space (play/pause)}
+\par\par
+
+{\f0\fs22 8.1.3 Main App Integration}
+\par\par
+{\f1\fs22 }{\f2\fs20 TranscriptViewerPage.tsx}{\f1\fs22  was modified to:}
+{\f2\fs18 \line - Call usePresentBroadcaster(id) to create the broadcast channel\line - Broadcast playback state on every audio player state change\line   (currentTime, isPlaying, playbackRate, duration updates)\line - Listen for commands from the pop-out and execute them\line   (play, pause, seek, skip, rate changes)\line - State broadcasts are scoped by transcript ID to prevent cross-talk\line   when multiple transcript tabs are open}
+\par\par
+{\f1\fs22 }{\f2\fs20 TranscriptToolbar.tsx}{\f1\fs22  was modified to:}
+{\f2\fs18 \line - "Present" button now calls window.open() to open a pop-out window\line   at /app/presenter/\{id\} instead of navigating to a new page\line - Pop-out window size: 800x900 pixels, resizable}
+\par\par
+{\f1\fs22 }{\f2\fs20 App.tsx}{\f1\fs22  was modified to:}
+{\f2\fs18 \line - Add route: /app/presenter/:id -> PresenterPopout component\line - Existing /app/transcript/:id/present and /video-present routes retained\line   as fallbacks}
+\par\par
+
+{\f0\fs18 ________________________________________________________________________________}
+\par\par
+
+{\f0\fs32 9. FIX: ASSEMBLYAI DIARIZATION (speech_model)}
+\par\par
+{\f1\fs22\cf6 Part of commit: 1fab0d1\line Date: March 22, 2026 21:04\line File: }{\f2\fs20\cf6 server/diarization.ts}{\f1\fs22\cf6  (+1 line)}
+\par\par
+
+{\f0\fs24 9.1 What Was Changed}
+\par\par
+{\f1\fs22 Added }{\f2\fs20 speech_model: 'universal-3-pro'}{\f1\fs22  to the AssemblyAI transcription configuration object.}
+\par\par
+{\f2\fs18 // Before:\line const config: any = \{\line   audio_url: uploadUrl,\line   speaker_labels: true,\line   sentiment_analysis: true,\line   ...\line \};\line\line // After:\line const config: any = \{\line   audio_url: uploadUrl,\line   speech_model: 'universal-3-pro',\line   speaker_labels: true,\line   sentiment_analysis: true,\line   ...\line \};}
+\par\par
+
+{\f0\fs24 9.2 Why}
+\par\par
+{\f1\fs22 The AssemblyAI API began requiring an explicit }{\f2\fs20 speech_model}{\f1\fs22  value. Without it, the API returned the validation error }{\f3\fs22 "speech_models" must be a non-empty list}{\f1\fs22 , causing diarization to fail for every transcription. This meant no speaker identification, no enriched data (word-level confidence, sentiment, entities), and the Claude enriched refinement path was unavailable \u8212 forcing the pipeline to use the inferior standard refinement path with heuristic speaker assignment.}
+\par\par
+
+{\f0\fs18 ________________________________________________________________________________}
+\par\par
+
+{\f0\fs32 10. FIX: SPEAKER REFINEMENT FOR LARGE TRANSCRIPTS (TASK #21)}
+\par\par
+{\f1\fs22\cf6 Commits: 1fab0d1, d15efcf, 84d4791, cd11447\line Date: March 22, 2026 21:04\u821322:07\line File: }{\f2\fs20\cf6 server/speakerRefinement.ts}{\f1\fs22\cf6  (+107 lines, -14 lines)}
+\par\par
+
+{\f0\fs24 10.1 What Was Changed}
+\par\par
+{\f1\fs22 Five interconnected changes to fix Claude Opus 4 speaker refinement for transcripts exceeding 350 segments:}
+\par\par
+
+{\f0\fs22 10.1.1 Batch Size Reduction}
+\par
+{\f2\fs18 SINGLE_CALL_LIMIT: 800 -> 350\line BATCH_SIZE:        700 -> 200}
+\par\par
+{\f1\fs22 Previously, transcripts up to 800 segments were sent to Claude in a single API call. This frequently exceeded Claude's effective output capacity, causing truncated JSON responses that lost the end of the transcript. Lowered to 350 for single calls and 200 per batch for large transcripts. These numbers ensure Claude's response fits within }{\f2\fs20 max_tokens}{\f1\fs22  limits.}
+\par\par
+
+{\f0\fs22 10.1.2 Max Tokens Increase}
+\par
+{\f2\fs18 max_tokens formula: min(32000, max(8192, segments * 80 + 2000))\line                                   was: segments * 40 + 2000}
+\par\par
+{\f1\fs22 Doubled the per-segment token allocation from 40 to 80. For a 200-segment batch, this produces }{\f2\fs20 max_tokens = 18,000}{\f1\fs22  (previously 10,000). This accounts for Claude's verbose JSON output format which includes the "i" index field, quoted labels, quoted text, and whitespace.}
+\par\par
+
+{\f0\fs22 10.1.3 Segment Index Anchoring}
+\par
+{\f1\fs22 Each segment sent to Claude now includes an }{\f2\fs20 "i"}{\f1\fs22  (index) field:}
+\par
+{\f2\fs18 // Segment data sent to Claude:\line [\{"i": 0, "s": "Speaker 1", "t": "This begins the video deposition..."\},\line  \{"i": 1, "s": "Speaker 1", "t": "Please state your name."\},\line  ...]}
+\par\par
+{\f1\fs22 The system prompt was updated to instruct Claude to echo the }{\f2\fs20 "i"}{\f1\fs22  index in each output segment, creating a 1:1 mapping between input and output that survives segment count mismatches. The prompt also includes a CRITICAL instruction: }{\f3\fs22 "The array length MUST EXACTLY equal the number of input segments \u8212 no more, no fewer."}
+\par\par
+{\f1\fs22 The }{\f2\fs20 ParsedSegment}{\f1\fs22  interface was updated:}
+\par
+{\f2\fs18 // Before:\line interface ParsedSegment \{ label: string; text: string; \}\line\line // After:\line interface ParsedSegment \{ i?: number; label: string; text: string; \}}
+\par\par
+
+{\f0\fs22 10.1.4 Index-Based Mismatch Recovery}
+\par
+{\f1\fs22 The }{\f2\fs20 parseResponse()}{\f1\fs22  function was rewritten with tiered recovery for when Claude returns the wrong number of segments:}
+\par\par
+{\f2\fs18 Exact match or within 10%: accept directly (existing behavior)\line\line Oversized (Claude returned MORE segments than expected):\line   1. Build a Map<index, segment> from the "i" field of each response segment\line   2. If >= 80% of expected indices are present: reconstruct by index\line      (missing indices get empty label/text)\line   3. If < 80%: fall back to identifications map\line\line Undersized (Claude returned FEWER segments than expected):\line   1. If >= 50% present: pad with empty segments\line   2. If < 50%: fall back to identifications map\line\line All paths: identifications map (\{"Speaker 1": "Officer Ken"\}) is always\line extracted and can be applied as a last resort even if no per-segment data\line is usable.}
+\par\par
+
+{\f0\fs22 10.1.5 Truncated JSON Repair}
+\par
+{\f1\fs22 A new }{\f2\fs20 tryRepairTruncatedJson()}{\f1\fs22  function handles Claude responses that are cut off mid-JSON due to token limits:}
+\par\par
+{\f2\fs18 1. Find the "segments" key in the JSON string\line 2. Find the last complete segment object boundary (pattern: \},\{)\line 3. Truncate at that point\line 4. Count unclosed brackets and braces\line 5. Append the necessary closing characters\line 6. Return the repaired JSON string for re-parsing\line\line Example: If Claude's response ends mid-segment at token limit:\line   \{"segments": [\{"i":0, "label":"Ken", "text":"Hello"\}, \{"i":1, "label":"R\line   -> Repaired to:\line   \{"segments": [\{"i":0, "label":"Ken", "text":"Hello"\}]\}}
+\par\par
+
+{\f0\fs18 ________________________________________________________________________________}
+\par\par
+
+{\f0\fs32 11. FIX: WHISPER HALLUCINATION DETECTION}
+\par\par
+{\f1\fs22\cf6 Commit: 9f956ab\line Date: March 22, 2026 22:10\line File: }{\f2\fs20\cf6 server/transcription.ts}{\f1\fs22\cf6  (+30 lines, -6 lines)}
+\par\par
+
+{\f0\fs24 11.1 What Was Changed}
+\par\par
+{\f1\fs22 The }{\f2\fs20 removeHallucinatedSegments()}{\f1\fs22  function in }{\f2\fs20 server/transcription.ts}{\f1\fs22  was enhanced with a new detection method and relaxed tolerances.}
+\par\par
+
+{\f0\fs22 11.1.1 Dominant Hallucination Detection (NEW)}
+\par
+{\f1\fs22 Before the existing run-based detection, a new pre-scan counts how often each short phrase (\u8804 3 words) appears across ALL segments:}
+\par\par
+{\f2\fs18 const textCounts = new Map<string, number>();\line for (const seg of segments) \{\line   const t = seg.text.trim().toLowerCase();\line   const wc = t.split(/\\s+/).length;\line   if (wc <= 3) textCounts.set(t, (textCounts.get(t) || 0) + 1);\line \}\line\line Trigger condition: count >= 50% of total segments AND count >= 10\line Action: Remove ALL instances (not just consecutive runs)}
+\par\par
+{\f1\fs22 This catches the pattern seen in the body cam hallucination: 403 out of 407 segments were "Mm-hmm." (99%). The previous run-based detector missed this because occasional "Ah." and "hrnm" segments broke the consecutive runs, and some sub-runs had timing deviation beyond the old 0.5-second tolerance.}
+\par\par
+
+{\f0\fs22 11.1.2 Spacing Tolerance Increase}
+\par
+{\f2\fs18 // Run-based uniform spacing check:\line maxDeviation <= 0.5  ->  maxDeviation <= 1.5}
+\par\par
+{\f1\fs22 The run-based detector requires uniform time spacing between repeated segments to identify hallucinations. Whisper's timestamp jitter on long recordings (35+ minutes) can exceed 0.5 seconds, causing legitimate hallucination runs to be missed. Increased to 1.5 seconds.}
+\par\par
+
+{\f0\fs22 11.1.3 Empty Transcript Handling}
+\par
+{\f1\fs22 If the dominant hallucination filter removes ALL segments (i.e., the entire transcript is hallucinated), the function now returns an empty array with a log message instead of proceeding to the run-based detector with an empty array (which would have thrown an error).}
+\par\par
+
+{\f0\fs24 11.2 Why}
+\par\par
+{\f1\fs22 A body cam recording (Axon Body 3, 2022-01-01, ~35 minutes) produced 407 segments from Whisper, of which 403 were "Mm-hmm.", 3 were "hrnm", and 1 was "Ah." \u8212 pure hallucination with no actual speech content. This garbage reached Claude refinement, wasting API cost and producing a useless transcript. The same file had been successfully transcribed 7 days earlier with 364 real segments, indicating non-deterministic Whisper behavior on noisy audio.}
+\par\par
+
+{\f0\fs18 ________________________________________________________________________________}
+\par\par
+
+{\f0\fs32 12. FILES CHANGED REFERENCE}
+\par\par
+{\f1\fs22 Complete list of source files created or modified across all changes:}
+\par\par
+
+{\f0\fs22 New Files Created:}
+\par
+{\f2\fs18 server/checkAccess.ts                          Access control system\line server/routes/shares.ts                        Sharing REST API (401 lines)\line src/components/sharing/ShareModal.tsx           Share management UI (180 lines)\line src/contexts/SharedContext.tsx                  Shared resources context (67 lines)\line src/hooks/useShared.ts                         Shared resources hook (10 lines)\line src/hooks/usePresentSync.ts                    BroadcastChannel sync hook (98 lines)\line src/pages/PresenterPopout.tsx                   Pop-out presenter window (278 lines)\line src/pages/VideoPresentModePage.tsx              Video presentation mode (441 lines)\line src/types/transcript.ts                        Transcript type definitions (52 lines)\line scripts/post-merge.sh                          Post-merge setup script (9 lines)}
+\par\par
+
+{\f0\fs22 Modified Files:}
+\par
+{\f2\fs18 server/diarization.ts                           +1 line  (speech_model fix)\line server/index.ts                                 +87 lines (media proxy, route registration)\line server/routes/annotations.ts                    +34 lines (access control)\line server/routes/folders.ts                         +7 lines  (sharing support)\line server/routes/transcripts.ts                     +148 lines (access control, permissions)\line server/speakerRefinement.ts                      +107 lines (batching, recovery, repair)\line server/transcription.ts                          +95 lines (conversion, hallucination)\line src/App.tsx                                      +69 lines (new routes)\line src/components/layout/Sidebar.tsx                +168 lines (shared section, controls)\line src/components/viewer/AudioPlayer.tsx             +122 lines (rewind/ff controls)\line src/components/viewer/MetadataEditor.tsx          +19 lines (permissions)\line src/components/viewer/TranscriptText.tsx          +181 lines (editing, permissions)\line src/components/viewer/TranscriptToolbar.tsx       +68 lines (share, present buttons)\line src/contexts/TranscriptContext.tsx                +55 lines (sharing integration)\line src/hooks/useAudioPlayer.ts                      +169 lines (rewind/ff, diagnostics)\line src/pages/DashboardPage.tsx                       +51 lines (shared items)\line src/pages/PresentModePage.tsx                     +143 lines (audio fix, theme, controls)\line src/pages/TranscriptViewerPage.tsx                +315 lines (permissions, broadcast, hooks)\line src/utils/api.ts                                 +29 lines (share API calls)\line replit.md                                        +23 lines (documentation)}
+\par\par
+
+{\f0\fs18 ________________________________________________________________________________}
+\par\par
+{\f1\fs20\cf6 End of changes report.\line\line Estimated total lines of production code added: ~4,700+\line (excludes attached assets, screenshots, documentation RTFs, and auto-generated files)}
+\par
+}
