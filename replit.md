@@ -16,7 +16,13 @@ A full-stack application for managing legal case recordings/transcripts. Feature
 - Synced audio player for recordings
 - Version history for transcripts (persisted to DB, loaded on page open)
 - Per-segment speaker reassignment (click speaker name to change via dropdown)
-- Present mode for hearings
+- Present mode for hearings (text-only + video presentation mode with synced transcript)
+- Pop-out presenter window with BroadcastChannel sync for dual-screen workflows
+- Sharing system: share transcripts/folders with other users (view or edit permissions), cascading folder→transcript permissions
+- "Shared with Me" sidebar section showing shared folders and transcripts
+- Audio player with cycling rewind/fast-forward speeds (2x/4x/8x/16x), skip 10s/30s buttons
+- Empty segment auto-edit mode with placeholder text and empty save support
+- Browser-playable audio conversion in transcription pipeline
 - Admin user with unlimited access
 
 ## Tech Stack
@@ -38,11 +44,16 @@ A full-stack application for managing legal case recordings/transcripts. Feature
 - `src/pages/AuthPage.tsx` - Login/register page
 - `src/pages/DashboardPage.tsx` - Main app dashboard
 - `src/pages/TranscriptViewerPage.tsx` - Transcript editor
-- `src/pages/PresentModePage.tsx` - Presentation mode
+- `src/pages/PresentModePage.tsx` - Presentation mode (text-only)
+- `src/pages/VideoPresentModePage.tsx` - Video presentation mode with synced transcript
+- `src/pages/PresenterPopout.tsx` - Pop-out presenter window (BroadcastChannel sync)
 - `src/components/` - Reusable UI components
+- `src/components/sharing/ShareModal.tsx` - Share transcript/folder modal
 - `src/contexts/AuthContext.tsx` - Auth state management
 - `src/contexts/TranscriptContext.tsx` - Transcript/folder state management
+- `src/contexts/SharedContext.tsx` - Shared items state management
 - `src/contexts/ThemeContext.tsx` - Dark/light theme
+- `src/hooks/usePresentSync.ts` - BroadcastChannel hooks for presenter sync
 - `src/utils/api.ts` - API client utility
 - `src/hooks/useAudioPlayer.ts` - Real HTML5 audio/video playback hook with secure media token
 - `src/hooks/` - Custom hooks
@@ -61,6 +72,8 @@ A full-stack application for managing legal case recordings/transcripts. Feature
 - `server/routes/folders.ts` - Folder CRUD + move transcripts + MattrMindr case linking
 - `server/routes/mattrmindr.ts` - MattrMindr integration API (connect, disconnect, status, case search proxy, send files)
 - `server/routes/annotations.ts` - CRUD for transcript annotations (notes between segments, bookmarks on segments)
+- `server/routes/shares.ts` - Sharing CRUD routes (create/list/update/revoke shares)
+- `server/checkAccess.ts` - Cascading permission check (folder→transcript inheritance)
 - `server/routes/external.ts` - External API for inbound integrations (auth, receive files for transcription, transcription status)
 - `server/replit_integrations/` - OpenAI AI Integrations (audio, chat, image, batch utilities)
 
@@ -72,6 +85,8 @@ A full-stack application for managing legal case recordings/transcripts. Feature
 - `/app` - Dashboard (protected)
 - `/app/transcript/:id` - Transcript viewer (protected)
 - `/app/transcript/:id/present` - Present mode (protected)
+- `/app/transcript/:id/video-present` - Video presentation mode (protected)
+- `/app/presenter/:id` - Pop-out presenter window (protected)
 
 ### API Routes
 - `POST /api/auth/register` - Register new user
@@ -116,7 +131,12 @@ A full-stack application for managing legal case recordings/transcripts. Feature
 - `GET /api/external/transcripts` - List all transcripts for API key user (lightweight metadata, no segments); auth: X-Api-Key header or JWT
 - `GET /api/external/transcripts/:id/full` - Full transcript with segments, summaries, presigned media URL; auth: X-Api-Key or JWT
 - `GET /api/external/transcripts/:id/media` - Presigned S3 media download URL only; auth: X-Api-Key or JWT
-- `POST /api/media/token` - Get short-lived media access token (authenticated)
+- `POST /api/shares` - Create a share (body: {resourceType, resourceId, email, permission})
+- `GET /api/shares/:resourceType/:resourceId` - List shares for a resource
+- `PATCH /api/shares/:id` - Update share permission
+- `DELETE /api/shares/:id` - Revoke a share
+- `GET /api/shares/shared-with-me` - List items shared with current user
+- `POST /api/media/token` - Get short-lived media access token (authenticated, supports shared access)
 - `GET /api/media/:filename?token=` - Serve media file with secure token
 
 ## Database Schema (PostgreSQL)
@@ -127,6 +147,7 @@ A full-stack application for managing legal case recordings/transcripts. Feature
 - `transcript_segments` - Individual transcription segments
 - `transcript_versions` - Version snapshots
 - `transcript_summaries` - AI-generated legal summaries (per-agent, per-transcript)
+- `shares` - Sharing permissions (owner_id, shared_with_id, resource_type, resource_id, permission, revoked_at)
 - `transcripts.pipeline_log` - JSONB column storing per-step results (whisper, diarization, refinement) with status, stats, and errors
 - `mattrmindr_connections` - MattrMindr integration connections (one per user, stores base_url, email, auth_token)
 - `folders.mattrmindr_case_id` / `folders.mattrmindr_case_name` - Links a folder to a MattrMindr case

@@ -163,8 +163,9 @@ const SegmentRow = React.memo(function SegmentRow({
   onDeleteSegment,
   onAddSegmentAfter,
 }: SegmentRowProps) {
-  const [isEditing, setIsEditing] = useState(false);
-  const [editValue, setEditValue] = useState('');
+  const isNewEmpty = segment.text === '' && segment.id.startsWith('new-');
+  const [isEditing, setIsEditing] = useState(isNewEmpty);
+  const [editValue, setEditValue] = useState(isNewEmpty ? '' : '');
   const [showDropdown, setShowDropdown] = useState(false);
   const [addingSpeakerInDropdown, setAddingSpeakerInDropdown] = useState(false);
   const [newSpeakerName, setNewSpeakerName] = useState('');
@@ -214,7 +215,7 @@ const SegmentRow = React.memo(function SegmentRow({
   }, [segment.text]);
 
   const handleSave = useCallback(() => {
-    if (editValue.trim() && editValue.trim() !== segment.text) {
+    if (editValue.trim() !== segment.text) {
       onUpdateSegment(segment.id, editValue.trim());
     }
     setIsEditing(false);
@@ -411,8 +412,10 @@ const SegmentRow = React.memo(function SegmentRow({
             </div> :
           <p
             onClick={handleEditStart}
-            className="text-sm sm:text-base text-slate-700 dark:text-slate-300 leading-relaxed cursor-text hover:bg-white dark:hover:bg-slate-800 hover:shadow-sm rounded px-1 -mx-1 transition-all">
-              {segment.text}
+            className={`text-sm sm:text-base leading-relaxed cursor-text hover:bg-white dark:hover:bg-slate-800 hover:shadow-sm rounded px-1 -mx-1 transition-all ${
+              segment.text ? 'text-slate-700 dark:text-slate-300' : 'text-slate-400 dark:text-slate-500 italic'
+            }`}>
+              {segment.text || 'Click to add text...'}
             </p>
           }
         </div>

@@ -448,4 +448,13 @@ export const api = {
     delete: (transcriptId: string, annotationId: string) =>
       request(`/transcripts/${transcriptId}/annotations/${annotationId}`, { method: 'DELETE' }),
   },
+  createShare: (email: string, resourceType: string, resourceId: string, permission: string) =>
+    request('/shares', { method: 'POST', body: JSON.stringify({ email, resourceType, resourceId, permission }) }),
+  getSharesByResource: (resourceType: string, resourceId: string) =>
+    request(`/shares/by-resource?resourceType=${resourceType}&resourceId=${resourceId}`),
+  getSharedWithMe: () => request('/shares/shared-with-me'),
+  updateSharePermission: (shareId: string, permission: string) =>
+    request(`/shares/${shareId}`, { method: 'PATCH', body: JSON.stringify({ permission }) }),
+  revokeShare: (shareId: string) =>
+    request(`/shares/${shareId}`, { method: 'DELETE' }),
 };

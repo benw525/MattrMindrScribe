@@ -27,14 +27,19 @@ async function getMediaUrl(fileUrl: string): Promise<string | null> {
   }
 }
 
+const SPEED_LEVELS = [0, 2, 4, 8, 16];
+
 export function useAudioPlayer(totalDuration: number, fileUrl?: string, mediaType?: string) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [playbackRate, setPlaybackRateState] = useState(1);
+  const [rewindSpeed, setRewindSpeed] = useState(0);
+  const [fastForwardSpeed, setFastForwardSpeed] = useState(0);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const hasRealAudio = useRef(false);
   const [mediaUrl, setMediaUrl] = useState<string | null>(null);
   const isVideo = mediaType === 'video';
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     if (!fileUrl) return;
@@ -90,6 +95,37 @@ export function useAudioPlayer(totalDuration: number, fileUrl?: string, mediaTyp
     }
   }, [playbackRate]);
 
+  useEffect(() => {
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+
+    const activeSpeed = rewindSpeed || fastForwardSpeed;
+    if (activeSpeed === 0) return;
+
+    const direction = rewindSpeed > 0 ? -1 : 1;
+    const rate = SPEED_LEVELS[activeSpeed] || 2;
+
+    intervalRef.current = setInterval(() => {
+      const audio = audioRef.current;
+      if (audio && hasRealAudio.current) {
+        const newTime = Math.max(0, Math.min(audio.currentTime + direction * rate * 0.1, totalDuration));
+        audio.currentTime = newTime;
+        setCurrentTime(newTime);
+      } else {
+        setCurrentTime((prev) => Math.max(0, Math.min(prev + direction * rate * 0.1, totalDuration)));
+      }
+    }, 100);
+
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+    };
+  }, [rewindSpeed, fastForwardSpeed, totalDuration]);
+
   const togglePlayPause = useCallback(() => {
     const audio = audioRef.current;
     if (audio && hasRealAudio.current) {
@@ -100,7 +136,19 @@ export function useAudioPlayer(totalDuration: number, fileUrl?: string, mediaTyp
       }
     }
     setIsPlaying((prev) => !prev);
+    setRewindSpeed(0);
+    setFastForwardSpeed(0);
   }, [isPlaying]);
+
+  const toggleRewind = useCallback(() => {
+    setFastForwardSpeed(0);
+    setRewindSpeed((prev) => (prev + 1) % SPEED_LEVELS.length);
+  }, []);
+
+  const toggleFastForward = useCallback(() => {
+    setRewindSpeed(0);
+    setFastForwardSpeed((prev) => (prev + 1) % SPEED_LEVELS.length);
+  }, []);
 
   const skip = useCallback(
     (seconds: number) => {
@@ -112,6 +160,9 @@ export function useAudioPlayer(totalDuration: number, fileUrl?: string, mediaTyp
     },
     [totalDuration]
   );
+
+  const skipBackward = useCallback((seconds: number = 10) => skip(-seconds), [skip]);
+  const skipForward = useCallback((seconds: number = 30) => skip(seconds), [skip]);
 
   const seek = useCallback(
     (time: number) => {
@@ -135,9 +186,15 @@ export function useAudioPlayer(totalDuration: number, fileUrl?: string, mediaTyp
     playbackRate,
     togglePlayPause,
     skip,
+    skipBackward,
+    skipForward,
     seek,
     setPlaybackRate,
     audioRef,
     mediaUrl,
+    rewindSpeed,
+    fastForwardSpeed,
+    toggleRewind,
+    toggleFastForward,
   };
 }

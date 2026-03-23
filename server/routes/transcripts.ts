@@ -4,6 +4,7 @@ import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
 import pool from '../db.js';
 import { authenticateToken, AuthRequest } from '../middleware/auth.js';
+import { checkAccess } from '../checkAccess.js';
 import { processTranscription, deduplicateExistingSegments } from '../transcription.js';
 import { s3Configured, uploadFileToS3, deleteFromS3, isCloudStorageUrl, getKeyFromStorageUrl, getPresignedUploadUrl, createMultipartUpload, getPresignedPartUrl, completeMultipartUpload, abortMultipartUpload } from '../s3.js';
 import { LEGAL_AGENTS, getAgentById, RecordingSubType } from '../legalAgents.js';
@@ -119,12 +120,31 @@ router.get('/', async (req: AuthRequest, res: Response) => {
         COALESCE(json_agg(
           json_build_object('id', s.id, 'startTime', s.start_time, 'endTime', s.end_time, 'speaker', s.speaker, 'text', s.text)
           ORDER BY s.segment_order
-        ) FILTER (WHERE s.id IS NOT NULL), '[]') as segments
+        ) FILTER (WHERE s.id IS NOT NULL), '[]') as segments,
+        'owner' as permission
       FROM transcripts t
       LEFT JOIN transcript_segments s ON s.transcript_id = t.id
       WHERE t.user_id = $1
       GROUP BY t.id
-      ORDER BY t.created_at DESC`,
+      
+      UNION ALL
+      
+      SELECT t.*, 
+        COALESCE(json_agg(
+          json_build_object('id', s.id, 'startTime', s.start_time, 'endTime', s.end_time, 'speaker', s.speaker, 'text', s.text)
+          ORDER BY s.segment_order
+        ) FILTER (WHERE s.id IS NOT NULL), '[]') as segments,
+        sh.permission as permission
+      FROM transcripts t
+      LEFT JOIN transcript_segments s ON s.transcript_id = t.id
+      JOIN shares sh ON (
+        (sh.resource_type = 'transcript' AND sh.resource_id = t.id::text)
+        OR (sh.resource_type = 'folder' AND sh.resource_id = t.folder_id::text)
+      )
+      WHERE sh.shared_with_id = $1 AND sh.revoked_at IS NULL AND t.user_id != $1
+      GROUP BY t.id, sh.permission
+      
+      ORDER BY created_at DESC`,
       [req.userId]
     );
 
@@ -145,6 +165,7 @@ router.get('/', async (req: AuthRequest, res: Response) => {
       segments: row.segments,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
+      permission: row.permission,
     }));
 
     res.json(transcripts);
@@ -157,18 +178,36 @@ router.get('/', async (req: AuthRequest, res: Response) => {
 router.get('/:id/detail', async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
-    const result = await pool.query(
-      `SELECT t.*, 
-        COALESCE(json_agg(
-          json_build_object('id', s.id, 'startTime', s.start_time, 'endTime', s.end_time, 'speaker', s.speaker, 'text', s.text)
-          ORDER BY s.segment_order
-        ) FILTER (WHERE s.id IS NOT NULL), '[]') as segments
-      FROM transcripts t
-      LEFT JOIN transcript_segments s ON s.transcript_id = t.id
-      WHERE t.id = $1 AND t.user_id = $2
-      GROUP BY t.id`,
-      [id, req.userId]
-    );
+    const access = await checkAccess(req.userId, 'transcript', id);
+    
+    let result;
+    if (access.allowed) {
+      result = await pool.query(
+        `SELECT t.*, 
+          COALESCE(json_agg(
+            json_build_object('id', s.id, 'startTime', s.start_time, 'endTime', s.end_time, 'speaker', s.speaker, 'text', s.text)
+            ORDER BY s.segment_order
+          ) FILTER (WHERE s.id IS NOT NULL), '[]') as segments
+        FROM transcripts t
+        LEFT JOIN transcript_segments s ON s.transcript_id = t.id
+        WHERE t.id = $1
+        GROUP BY t.id`,
+        [id]
+      );
+    } else {
+      result = await pool.query(
+        `SELECT t.*, 
+          COALESCE(json_agg(
+            json_build_object('id', s.id, 'startTime', s.start_time, 'endTime', s.end_time, 'speaker', s.speaker, 'text', s.text)
+            ORDER BY s.segment_order
+          ) FILTER (WHERE s.id IS NOT NULL), '[]') as segments
+        FROM transcripts t
+        LEFT JOIN transcript_segments s ON s.transcript_id = t.id
+        WHERE t.id = $1 AND t.user_id = $2
+        GROUP BY t.id`,
+        [id, req.userId]
+      );
+    }
 
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Transcript not found' });
@@ -192,6 +231,7 @@ router.get('/:id/detail', async (req: AuthRequest, res: Response) => {
       segments: row.segments,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
+      permission: access.permission,
     });
   } catch (err) {
     console.error('Get transcript detail error:', err);

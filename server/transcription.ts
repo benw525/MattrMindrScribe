@@ -76,6 +76,56 @@ async function getAudioDuration(filePath: string): Promise<number | null> {
 
 const WHISPER_SUPPORTED_FORMATS = new Set(['.flac', '.m4a', '.mp3', '.mp4', '.mpeg', '.mpga', '.oga', '.ogg', '.wav', '.webm']);
 
+const BROWSER_PLAYABLE_FORMATS = new Set(['.mp3', '.wav', '.ogg', '.m4a', '.aac', '.flac', '.webm', '.mp4', '.oga']);
+
+async function convertToBrowserPlayable(
+  sourcePath: string,
+  fileUrl: string,
+  transcriptId: string
+): Promise<string | null> {
+  const ext = path.extname(sourcePath).toLowerCase();
+  if (BROWSER_PLAYABLE_FORMATS.has(ext)) {
+    console.log(`[Transcription] File already browser-playable (${ext}), skipping conversion`);
+    return null;
+  }
+
+  console.log(`[Transcription] Converting ${ext} to MP3 for browser playback...`);
+  const mp3Path = sourcePath.replace(/\.[^.]+$/, '.mp3');
+
+  await new Promise<void>((resolve, reject) => {
+    const proc = spawn('ffmpeg', [
+      '-i', sourcePath,
+      '-vn',
+      '-ar', '44100',
+      '-ac', '2',
+      '-b:a', '128k',
+      '-f', 'mp3',
+      '-y',
+      mp3Path,
+    ]);
+    let stderr = '';
+    proc.stderr.on('data', (d) => { stderr += d.toString(); });
+    proc.on('close', (code) => {
+      if (code === 0) resolve();
+      else reject(new Error(`ffmpeg conversion failed (code ${code}): ${stderr.slice(-500)}`));
+    });
+    proc.on('error', reject);
+  });
+
+  if (isCloudStorageUrl(fileUrl)) {
+    const originalKey = getKeyFromStorageUrl(fileUrl);
+    const mp3Key = originalKey.replace(/\.[^.]+$/, '.mp3');
+    console.log(`[Transcription] Uploading browser-playable MP3 to S3: ${mp3Key}`);
+    const { uploadFileToS3: uploadFile } = await import('./s3.js');
+    const newUrl = await uploadFile(mp3Path, mp3Key, 'audio/mpeg');
+    await pool.query('UPDATE transcripts SET file_url = $1, updated_at = NOW() WHERE id = $2', [newUrl, transcriptId]);
+    console.log(`[Transcription] Updated file_url to browser-playable MP3`);
+    return mp3Path;
+  }
+
+  return null;
+}
+
 async function ensureWhisperCompatible(
   sourcePath: string,
   workDir: string,
@@ -569,6 +619,19 @@ export async function processTranscription(transcriptId: string): Promise<void> 
       }
 
       await checkCancelled();
+
+      try {
+        const convertedPath = await convertToBrowserPlayable(sourcePath, file_url, transcriptId);
+        if (convertedPath) {
+          pipelineLog.browserConversion = { status: 'success', format: 'mp3' };
+          console.log(`[Transcription] Browser-playable conversion complete`);
+        } else {
+          pipelineLog.browserConversion = { status: 'skipped', reason: 'Already browser-playable' };
+        }
+      } catch (convErr: any) {
+        console.error(`[Transcription] Browser-playable conversion failed (non-fatal):`, convErr.message);
+        pipelineLog.browserConversion = { status: 'error', error: convErr.message };
+      }
 
       duration = await getAudioDuration(sourcePath);
       if (duration !== null) {

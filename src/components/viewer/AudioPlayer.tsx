@@ -1,5 +1,5 @@
 import React, { useRef, useCallback, useState } from 'react';
-import { PlayIcon, PauseIcon, Undo2Icon, Redo2Icon, ChevronUpIcon } from 'lucide-react';
+import { PlayIcon, PauseIcon, Undo2Icon, Redo2Icon, ChevronUpIcon, RewindIcon, FastForwardIcon, SkipBackIcon, SkipForwardIcon } from 'lucide-react';
 import { formatDuration } from '../../utils/formatters';
 
 interface AudioPlayerProps {
@@ -11,9 +11,16 @@ interface AudioPlayerProps {
   onSkip: (seconds: number) => void;
   onSeek: (time: number) => void;
   onRateChange: (rate: number) => void;
+  rewindSpeed?: number;
+  fastForwardSpeed?: number;
+  onToggleRewind?: () => void;
+  onToggleFastForward?: () => void;
+  onSkipBackward?: (seconds?: number) => void;
+  onSkipForward?: (seconds?: number) => void;
 }
 
 const SPEED_OPTIONS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
+const SPEED_LABELS = ['', '2x', '4x', '8x', '16x'];
 
 export function AudioPlayer({
   isPlaying,
@@ -23,7 +30,13 @@ export function AudioPlayer({
   onTogglePlay,
   onSkip,
   onSeek,
-  onRateChange
+  onRateChange,
+  rewindSpeed = 0,
+  fastForwardSpeed = 0,
+  onToggleRewind,
+  onToggleFastForward,
+  onSkipBackward,
+  onSkipForward
 }: AudioPlayerProps) {
   const progressPercent = duration > 0 ? currentTime / duration * 100 : 0;
   const progressBarRef = useRef<HTMLDivElement>(null);
@@ -139,13 +152,32 @@ export function AudioPlayer({
           )}
         </div>
 
-        <div className="flex items-center gap-3 sm:gap-5">
+        <div className="flex items-center gap-1.5 sm:gap-3">
+          {onToggleRewind && (
+            <button
+              onClick={onToggleRewind}
+              className={`relative p-2 rounded-full transition-colors ${
+                rewindSpeed > 0
+                  ? 'text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/50'
+                  : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white active:text-indigo-600'
+              }`}
+              aria-label="Toggle rewind"
+            >
+              <RewindIcon className="h-4 w-4" />
+              {rewindSpeed > 0 && (
+                <span className="absolute -top-1 -right-1 bg-indigo-600 text-white text-[9px] font-bold rounded-full px-1 min-w-[18px] h-[18px] flex items-center justify-center">
+                  {SPEED_LABELS[rewindSpeed]}
+                </span>
+              )}
+            </button>
+          )}
+
           <button
-            onClick={() => onSkip(-15)}
+            onClick={() => onSkipBackward ? onSkipBackward(10) : onSkip(-10)}
             className="p-2 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white active:text-indigo-600 transition-colors rounded-full active:bg-indigo-50 dark:active:bg-indigo-950/30"
-            aria-label="Skip back 15 seconds"
+            aria-label="Skip back 10 seconds"
           >
-            <Undo2Icon className="h-5 w-5" />
+            <SkipBackIcon className="h-5 w-5" />
           </button>
 
           <button
@@ -160,12 +192,31 @@ export function AudioPlayer({
           </button>
 
           <button
-            onClick={() => onSkip(15)}
+            onClick={() => onSkipForward ? onSkipForward(30) : onSkip(30)}
             className="p-2 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white active:text-indigo-600 transition-colors rounded-full active:bg-indigo-50 dark:active:bg-indigo-950/30"
-            aria-label="Skip forward 15 seconds"
+            aria-label="Skip forward 30 seconds"
           >
-            <Redo2Icon className="h-5 w-5" />
+            <SkipForwardIcon className="h-5 w-5" />
           </button>
+
+          {onToggleFastForward && (
+            <button
+              onClick={onToggleFastForward}
+              className={`relative p-2 rounded-full transition-colors ${
+                fastForwardSpeed > 0
+                  ? 'text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/50'
+                  : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white active:text-indigo-600'
+              }`}
+              aria-label="Toggle fast forward"
+            >
+              <FastForwardIcon className="h-4 w-4" />
+              {fastForwardSpeed > 0 && (
+                <span className="absolute -top-1 -right-1 bg-indigo-600 text-white text-[9px] font-bold rounded-full px-1 min-w-[18px] h-[18px] flex items-center justify-center">
+                  {SPEED_LABELS[fastForwardSpeed]}
+                </span>
+              )}
+            </button>
+          )}
         </div>
 
         <div className="hidden sm:block w-[200px]" />

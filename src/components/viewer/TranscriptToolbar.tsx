@@ -17,7 +17,9 @@ import {
   ChevronDownIcon,
   SendIcon,
   ToggleLeftIcon,
-  ToggleRightIcon } from
+  ToggleRightIcon,
+  ShareIcon,
+  ExternalLinkIcon } from
 'lucide-react';
 import { toast } from 'sonner';
 
@@ -35,6 +37,9 @@ interface TranscriptToolbarProps {
   onShowSummaries?: () => void;
   summaryCount?: number;
   onSendToMattrMindr?: () => void;
+  onShare?: () => void;
+  mediaType?: string;
+  permission?: 'owner' | 'edit' | 'view' | null;
 }
 
 const EXPORT_FORMATS = [
@@ -56,7 +61,10 @@ export function TranscriptToolbar({
   hasPipelineIssue,
   onShowSummaries,
   summaryCount,
-  onSendToMattrMindr
+  onSendToMattrMindr,
+  onShare,
+  mediaType,
+  permission
 }: TranscriptToolbarProps) {
   const navigate = useNavigate();
   const [showExportMenu, setShowExportMenu] = useState(false);
@@ -258,10 +266,22 @@ export function TranscriptToolbar({
         <span className="hidden lg:inline">History</span>
       </button>
 
+      {permission === 'owner' && onShare && (
+        <button
+          onClick={onShare}
+          className="inline-flex items-center gap-1.5 p-2 sm:px-2.5 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 active:bg-slate-200 dark:active:bg-slate-700 rounded-md transition-colors">
+          <ShareIcon className="h-4 w-4" />
+          <span className="hidden lg:inline">Share</span>
+        </button>
+      )}
+
       <button
-        onClick={() => navigate(`/app/transcript/${transcriptId}/present`)}
+        onClick={() => {
+          const url = `/app/presenter/${transcriptId}`;
+          window.open(url, `presenter-${transcriptId}`, 'width=800,height=900,resizable=yes');
+        }}
         className="inline-flex items-center gap-1.5 p-2 sm:px-3 sm:py-2 text-sm font-medium text-white bg-slate-900 dark:bg-slate-700 hover:bg-slate-800 dark:hover:bg-slate-600 active:bg-slate-700 dark:active:bg-slate-500 rounded-md transition-colors shadow-sm">
-        <MaximizeIcon className="h-4 w-4" />
+        <ExternalLinkIcon className="h-4 w-4" />
         <span className="hidden lg:inline">Present</span>
       </button>
     </div>);

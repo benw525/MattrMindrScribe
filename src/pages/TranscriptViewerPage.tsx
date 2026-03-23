@@ -21,8 +21,10 @@ import { AISummarizeModal } from '../components/viewer/AISummarizeModal';
 import { AISummaryPanel } from '../components/viewer/AISummaryPanel';
 import { PipelineSummary } from '../components/viewer/PipelineSummary';
 import { SendToMattrMindrModal } from '../components/viewer/SendToMattrMindrModal';
+import { ShareModal } from '../components/sharing/ShareModal';
 import { Transcript, TranscriptSegment, TranscriptVersion, TranscriptAnnotation } from '../types/transcript';
 import { api } from '../utils/api';
+import { usePresentBroadcaster } from '../hooks/usePresentSync';
 interface UndoEntry {
   segments: TranscriptSegment[];
   description: string;
@@ -90,6 +92,7 @@ export function TranscriptViewerPage() {
   const [showSendToMattrMindr, setShowSendToMattrMindr] = useState(false);
   const [mattrmindrConnected, setMattrmindrConnected] = useState(false);
   const [annotations, setAnnotations] = useState<TranscriptAnnotation[]>([]);
+  const [showShareModal, setShowShareModal] = useState(false);
   const [showBookmarksOnly, setShowBookmarksOnly] = useState(false);
   const [agents, setAgents] = useState<{ id: string; name: string; icon: string; description: string; subTypes: { id: string; name: string; description: string }[] }[]>([]);
   const [summaries, setSummaries] = useState<{ id: string; agentType: string; subType: string | null; subTypeName: string | null; summary: string; modelUsed: string; createdAt: string }[]>([]);
@@ -162,11 +165,62 @@ export function TranscriptViewerPage() {
     playbackRate,
     togglePlayPause,
     skip,
+    skipBackward,
+    skipForward,
     seek,
     setPlaybackRate,
     audioRef,
     mediaUrl,
+    rewindSpeed,
+    fastForwardSpeed,
+    toggleRewind,
+    toggleFastForward,
   } = useAudioPlayer(transcript?.duration || 0, transcript?.fileUrl, transcript?.type);
+
+  const { broadcast, onCommand } = usePresentBroadcaster(id);
+
+  useEffect(() => {
+    if (!transcript || !id) return;
+    broadcast({
+      transcriptId: id,
+      currentTime,
+      isPlaying,
+      playbackRate,
+      duration: transcript.duration || 0,
+      filename: transcript.filename || '',
+      mediaType: transcript.type || 'audio',
+      mediaUrl: mediaUrl,
+      segments: transcript.segments || [],
+    });
+  }, [id, currentTime, isPlaying, playbackRate, mediaUrl, transcript, broadcast]);
+
+  useEffect(() => {
+    onCommand((cmd) => {
+      switch (cmd.type) {
+        case 'play': if (!isPlaying) togglePlayPause(); break;
+        case 'pause': if (isPlaying) togglePlayPause(); break;
+        case 'toggle': togglePlayPause(); break;
+        case 'seek': seek(cmd.time); break;
+        case 'skip': skip(cmd.seconds); break;
+        case 'rate': setPlaybackRate(cmd.rate); break;
+        case 'request_state':
+          if (transcript && id) {
+            broadcast({
+              transcriptId: id,
+              currentTime,
+              isPlaying,
+              playbackRate,
+              duration: transcript.duration || 0,
+              filename: transcript.filename || '',
+              mediaType: transcript.type || 'audio',
+              mediaUrl: mediaUrl,
+              segments: transcript.segments || [],
+            });
+          }
+          break;
+      }
+    });
+  }, [onCommand, isPlaying, togglePlayPause, seek, skip, setPlaybackRate, currentTime, playbackRate, mediaUrl, transcript, id, broadcast]);
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     isDraggingRef.current = true;
@@ -674,7 +728,10 @@ export function TranscriptViewerPage() {
             ))}
             onShowSummaries={() => setShowSummaryPanel(true)}
             summaryCount={summaries.length}
-            onSendToMattrMindr={mattrmindrConnected && transcript.status === 'completed' ? () => setShowSendToMattrMindr(true) : undefined} />
+            onSendToMattrMindr={mattrmindrConnected && transcript.status === 'completed' ? () => setShowSendToMattrMindr(true) : undefined}
+            onShare={() => setShowShareModal(true)}
+            mediaType={transcript.type}
+            permission="owner" />
         </div>
       </header>
 
@@ -1206,9 +1263,22 @@ export function TranscriptViewerPage() {
         onTogglePlay={togglePlayPause}
         onSkip={skip}
         onSeek={seek}
-        onRateChange={setPlaybackRate} />
+        onRateChange={setPlaybackRate}
+        rewindSpeed={rewindSpeed}
+        fastForwardSpeed={fastForwardSpeed}
+        onToggleRewind={toggleRewind}
+        onToggleFastForward={toggleFastForward}
+        onSkipBackward={skipBackward}
+        onSkipForward={skipForward} />
 
       }
+      <ShareModal
+        isOpen={showShareModal}
+        onClose={() => setShowShareModal(false)}
+        resourceType="transcript"
+        resourceId={transcript.id}
+        resourceName={transcript.filename || 'Transcript'}
+      />
     </div>);
 
 }

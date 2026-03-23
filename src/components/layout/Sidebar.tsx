@@ -28,6 +28,7 @@ import { SettingsPanel, ChangePasswordModal } from './SettingsPanel';
 import { Logo } from '../brand/Logo';
 import { Folder } from '../../types/transcript';
 import { api } from '../../utils/api';
+import { useShared } from '../../contexts/SharedContext';
 
 interface MattrMindrCase {
   id: string;
@@ -59,6 +60,7 @@ export function Sidebar({
 }: SidebarProps) {
   const { folders, transcripts, addFolder, deleteFolder, renameFolder } =
   useTranscripts();
+  const { sharedItems } = useShared();
   const { user } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
@@ -625,6 +627,61 @@ export function Sidebar({
         <div className="space-y-0.5 px-1">
           {rootFolders.map((folder) => renderFolder(folder))}
         </div>
+
+        {sharedItems.length > 0 && (
+          <div className="pt-6 pb-2">
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider px-3 mb-2">
+              Shared with Me
+            </p>
+            <div className="space-y-0.5">
+              {sharedItems.filter(s => s.resource_type === 'folder').map((item) => (
+                <button
+                  key={item.share_id}
+                  onClick={() => {
+                    onSelectFolder(item.resource_id);
+                    if (!isDashboard) navigate('/app');
+                    if (isMobile && onClose) onClose();
+                  }}
+                  className={`w-full flex items-center gap-2 px-3 py-1.5 rounded-md text-sm transition-colors ${
+                    selectedFolderId === item.resource_id && isDashboard
+                      ? 'bg-slate-800 text-white'
+                      : 'hover:bg-slate-800 hover:text-white'
+                  }`}
+                >
+                  <FolderIcon className="h-4 w-4 text-amber-500 flex-shrink-0" />
+                  <span className="truncate">{item.resource_name || 'Folder'}</span>
+                  <span className={`ml-auto text-[10px] font-medium px-1.5 py-0.5 rounded-full ${
+                    item.permission === 'edit'
+                      ? 'bg-emerald-500/20 text-emerald-400'
+                      : 'bg-slate-700 text-slate-400'
+                  }`}>
+                    {item.permission}
+                  </span>
+                </button>
+              ))}
+              {sharedItems.filter(s => s.resource_type === 'transcript').map((item) => (
+                <button
+                  key={item.share_id}
+                  onClick={() => {
+                    navigate(`/app/transcript/${item.resource_id}`);
+                    if (isMobile && onClose) onClose();
+                  }}
+                  className="w-full flex items-center gap-2 px-3 py-1.5 rounded-md text-sm hover:bg-slate-800 hover:text-white transition-colors"
+                >
+                  <MicIcon className="h-4 w-4 text-indigo-400 flex-shrink-0" />
+                  <span className="truncate">{item.resource_name || 'Transcript'}</span>
+                  <span className={`ml-auto text-[10px] font-medium px-1.5 py-0.5 rounded-full ${
+                    item.permission === 'edit'
+                      ? 'bg-emerald-500/20 text-emerald-400'
+                      : 'bg-slate-700 text-slate-400'
+                  }`}>
+                    {item.permission}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
       </nav>
 
       <div className="p-4 border-t border-slate-800 relative">

@@ -9,8 +9,11 @@ import { AppLayout } from './components/layout/AppLayout';
 import { DashboardPage } from './pages/DashboardPage';
 import { TranscriptViewerPage } from './pages/TranscriptViewerPage';
 import { PresentModePage } from './pages/PresentModePage';
+import { VideoPresentModePage } from './pages/VideoPresentModePage';
+import { PresenterPopout } from './pages/PresenterPopout';
 import { AuthPage } from './pages/AuthPage';
 import { LandingPage } from './pages/LandingPage';
+import { SharedProvider } from './contexts/SharedContext';
 
 class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
   constructor(props: { children: ReactNode }) {
@@ -113,6 +116,7 @@ export function App() {
       <ThemeProvider>
         <MobileResumeHandler />
         <AuthProvider>
+          <SharedProvider>
           <TranscriptProvider>
             <BrowserRouter>
               <Routes>
@@ -135,11 +139,26 @@ export function App() {
                       <PresentModePage />
                     </ProtectedRoute>
                   } />
+                <Route
+                  path="/app/transcript/:id/video-present"
+                  element={
+                    <ProtectedRoute>
+                      <VideoPresentModePage />
+                    </ProtectedRoute>
+                  } />
+                <Route
+                  path="/app/presenter/:id"
+                  element={
+                    <ProtectedRoute>
+                      <PresenterPopout />
+                    </ProtectedRoute>
+                  } />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
             </BrowserRouter>
             <Toaster position="bottom-right" richColors />
           </TranscriptProvider>
+          </SharedProvider>
         </AuthProvider>
       </ThemeProvider>
     </ErrorBoundary>
