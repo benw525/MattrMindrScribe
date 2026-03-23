@@ -115,38 +115,60 @@ router.use(authenticateToken);
 
 router.get('/', async (req: AuthRequest, res: Response) => {
   try {
-    const result = await pool.query(
-      `SELECT t.*, 
-        COALESCE(json_agg(
-          json_build_object('id', s.id, 'startTime', s.start_time, 'endTime', s.end_time, 'speaker', s.speaker, 'text', s.text)
-          ORDER BY s.segment_order
-        ) FILTER (WHERE s.id IS NOT NULL), '[]') as segments,
-        'owner' as permission
-      FROM transcripts t
-      LEFT JOIN transcript_segments s ON s.transcript_id = t.id
-      WHERE t.user_id = $1
-      GROUP BY t.id
-      
-      UNION ALL
-      
-      SELECT t.*, 
-        COALESCE(json_agg(
-          json_build_object('id', s.id, 'startTime', s.start_time, 'endTime', s.end_time, 'speaker', s.speaker, 'text', s.text)
-          ORDER BY s.segment_order
-        ) FILTER (WHERE s.id IS NOT NULL), '[]') as segments,
-        sh.permission as permission
-      FROM transcripts t
-      LEFT JOIN transcript_segments s ON s.transcript_id = t.id
-      JOIN shares sh ON (
-        (sh.resource_type = 'transcript' AND sh.resource_id = t.id::text)
-        OR (sh.resource_type = 'folder' AND sh.resource_id = t.folder_id::text)
-      )
-      WHERE sh.shared_with_id = $1 AND sh.revoked_at IS NULL AND t.user_id != $1
-      GROUP BY t.id, sh.permission
-      
-      ORDER BY created_at DESC`,
-      [req.userId]
-    );
+    const sharesTableExists = await pool.query(
+      `SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'shares') as exists`
+    ).then(r => r.rows[0]?.exists).catch(() => false);
+
+    let result;
+    if (sharesTableExists) {
+      result = await pool.query(
+        `SELECT t.*, 
+          COALESCE(json_agg(
+            json_build_object('id', s.id, 'startTime', s.start_time, 'endTime', s.end_time, 'speaker', s.speaker, 'text', s.text)
+            ORDER BY s.segment_order
+          ) FILTER (WHERE s.id IS NOT NULL), '[]') as segments,
+          'owner' as permission
+        FROM transcripts t
+        LEFT JOIN transcript_segments s ON s.transcript_id = t.id
+        WHERE t.user_id = $1
+        GROUP BY t.id
+        
+        UNION ALL
+        
+        SELECT t.*, 
+          COALESCE(json_agg(
+            json_build_object('id', s.id, 'startTime', s.start_time, 'endTime', s.end_time, 'speaker', s.speaker, 'text', s.text)
+            ORDER BY s.segment_order
+          ) FILTER (WHERE s.id IS NOT NULL), '[]') as segments,
+          sh.permission as permission
+        FROM transcripts t
+        LEFT JOIN transcript_segments s ON s.transcript_id = t.id
+        JOIN shares sh ON (
+          (sh.resource_type = 'transcript' AND sh.resource_id = t.id::text)
+          OR (sh.resource_type = 'folder' AND sh.resource_id = t.folder_id::text)
+        )
+        WHERE sh.shared_with_id = $1 AND sh.revoked_at IS NULL AND t.user_id != $1
+        GROUP BY t.id, sh.permission
+        
+        ORDER BY created_at DESC`,
+        [req.userId]
+      );
+    } else {
+      result = await pool.query(
+        `SELECT t.*, 
+          COALESCE(json_agg(
+            json_build_object('id', s.id, 'startTime', s.start_time, 'endTime', s.end_time, 'speaker', s.speaker, 'text', s.text)
+            ORDER BY s.segment_order
+          ) FILTER (WHERE s.id IS NOT NULL), '[]') as segments,
+          'owner' as permission
+        FROM transcripts t
+        LEFT JOIN transcript_segments s ON s.transcript_id = t.id
+        WHERE t.user_id = $1
+        GROUP BY t.id
+        ORDER BY t.created_at DESC`,
+        [req.userId]
+      );
+    }
 
     const transcripts = result.rows.map(row => ({
       id: row.id,

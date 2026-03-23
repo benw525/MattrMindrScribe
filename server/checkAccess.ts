@@ -5,6 +5,21 @@ export interface AccessResult {
   permission: 'owner' | 'edit' | 'view' | null;
 }
 
+let _sharesTableExists: boolean | null = null;
+
+async function sharesTableExists(): Promise<boolean> {
+  if (_sharesTableExists !== null) return _sharesTableExists;
+  try {
+    const { rows } = await pool.query(
+      `SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'shares') as exists`
+    );
+    _sharesTableExists = rows[0]?.exists ?? false;
+  } catch {
+    _sharesTableExists = false;
+  }
+  return _sharesTableExists;
+}
+
 export async function checkAccess(
   userId: string,
   resourceType: 'transcript' | 'folder',
@@ -19,6 +34,10 @@ export async function checkAccess(
 
     if (ownerRows[0].user_id === userId) {
       return { allowed: true, permission: 'owner' };
+    }
+
+    if (!(await sharesTableExists())) {
+      return { allowed: false, permission: null };
     }
 
     const { rows: shareRows } = await pool.query(
@@ -58,6 +77,10 @@ export async function checkAccess(
 
     if (ownerRows[0].user_id === userId) {
       return { allowed: true, permission: 'owner' };
+    }
+
+    if (!(await sharesTableExists())) {
+      return { allowed: false, permission: null };
     }
 
     const { rows: shareRows } = await pool.query(
