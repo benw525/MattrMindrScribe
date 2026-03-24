@@ -63,6 +63,7 @@ interface SidebarProps {
   onedriveConnected?: boolean;
   connectedFolders?: ConnectedFolder[];
   onRefreshConnectedFolders?: () => void;
+  onOnedriveStatusChange?: (connected: boolean) => void;
 }
 export function Sidebar({
   onUploadClick,
@@ -76,6 +77,7 @@ export function Sidebar({
   onedriveConnected,
   connectedFolders = [],
   onRefreshConnectedFolders,
+  onOnedriveStatusChange,
 }: SidebarProps) {
   const { folders, transcripts, addFolder, deleteFolder, renameFolder } =
   useTranscripts();
@@ -772,7 +774,8 @@ export function Sidebar({
           {showSettings &&
           <SettingsPanel
             onClose={() => setShowSettings(false)}
-            onChangePassword={() => setShowChangePassword(true)} />
+            onChangePassword={() => setShowChangePassword(true)}
+            onOnedriveStatusChange={onOnedriveStatusChange} />
           }
         </AnimatePresence>
       </div>

@@ -23,6 +23,7 @@ import { toast } from 'sonner';
 interface SettingsPanelProps {
   onClose: () => void;
   onChangePassword: () => void;
+  onOnedriveStatusChange?: (connected: boolean) => void;
 }
 
 export function ChangePasswordModal({ onClose }: { onClose: () => void }) {
@@ -375,7 +376,7 @@ interface OneDriveStatus {
   connectedAt?: string;
 }
 
-function OneDriveIntegration() {
+function OneDriveIntegration({ onStatusChange }: { onStatusChange?: (connected: boolean) => void }) {
   const [status, setStatus] = useState<OneDriveStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [isConnecting, setIsConnecting] = useState(false);
@@ -409,6 +410,7 @@ function OneDriveIntegration() {
     try {
       await api.onedrive.disconnect();
       setStatus({ connected: false, configured: true });
+      onStatusChange?.(false);
       toast.success('Disconnected from OneDrive');
     } catch (err: any) {
       toast.error(err.message || 'Failed to disconnect');
@@ -483,7 +485,7 @@ function OneDriveIntegration() {
   );
 }
 
-export function SettingsPanel({ onClose, onChangePassword }: SettingsPanelProps) {
+export function SettingsPanel({ onClose, onChangePassword, onOnedriveStatusChange }: SettingsPanelProps) {
   const { theme, setTheme } = useTheme();
   const { user, logout } = useAuth();
 
@@ -584,7 +586,7 @@ export function SettingsPanel({ onClose, onChangePassword }: SettingsPanelProps)
 
         <MattrMindrIntegration />
 
-        <OneDriveIntegration />
+        <OneDriveIntegration onStatusChange={onOnedriveStatusChange} />
 
         <div className="px-4 py-3">
           <button

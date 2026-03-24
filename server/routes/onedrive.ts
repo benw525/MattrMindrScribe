@@ -234,6 +234,7 @@ router.get('/status', authenticateToken as any, async (req: AuthRequest, res: Re
 
 router.delete('/disconnect', authenticateToken as any, async (req: AuthRequest, res: Response) => {
   try {
+    await pool.query('DELETE FROM connected_folders WHERE user_id = $1', [req.userId]);
     await pool.query('DELETE FROM onedrive_connections WHERE user_id = $1', [req.userId]);
     return res.json({ success: true });
   } catch (err: any) {

@@ -76,7 +76,12 @@ export function AppLayout() {
           onSelectFolder={setSelectedFolderId}
           onedriveConnected={onedriveConnected}
           connectedFolders={connectedFolders}
-          onRefreshConnectedFolders={loadConnectedFolders} />
+          onRefreshConnectedFolders={loadConnectedFolders}
+          onOnedriveStatusChange={(connected) => {
+            setOnedriveConnected(connected);
+            if (!connected) setConnectedFolders([]);
+            else loadConnectedFolders();
+          }} />
 
         </div>
       }
@@ -140,7 +145,12 @@ export function AppLayout() {
               isMobile
               onedriveConnected={onedriveConnected}
               connectedFolders={connectedFolders}
-              onRefreshConnectedFolders={loadConnectedFolders} />
+              onRefreshConnectedFolders={loadConnectedFolders}
+              onOnedriveStatusChange={(connected) => {
+                setOnedriveConnected(connected);
+                if (!connected) setConnectedFolders([]);
+                else loadConnectedFolders();
+              }} />
 
             </motion.div>
           </>
