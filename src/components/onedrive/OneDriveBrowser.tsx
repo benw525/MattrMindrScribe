@@ -349,7 +349,7 @@ export function OneDriveBrowser({ onClose, initialFolderId, restrictToFolder, on
                 </button>
               )}
 
-              {folders.map((folder) => {
+              {!restrictToFolder && folders.map((folder) => {
                 const isConnected = connectedFolderIds.has(folder.id);
                 const isConnecting = connectingFolder === folder.id;
                 return (
