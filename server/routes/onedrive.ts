@@ -362,6 +362,11 @@ router.post('/transcribe', authenticateToken as any, async (req: AuthRequest, re
       return res.status(400).json({ error: 'fileId and fileName are required' });
     }
 
+    const allowedExtensions = /\.(mp3|wav|m4a|ogg|flac|aac|wma|amr|opus|aiff|mp4|mov|avi|mkv|wmv|flv|3gp|3g2|m4v|mpg|mpeg|ts|mts|vob|ogv|webm)$/i;
+    if (!allowedExtensions.test(fileName)) {
+      return res.status(400).json({ error: 'Unsupported file type. Only audio and video files are allowed.' });
+    }
+
     const accessToken = await refreshAccessToken(req.userId!);
     if (!accessToken) {
       return res.status(401).json({ error: 'OneDrive not connected or token expired' });
