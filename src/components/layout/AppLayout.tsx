@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Outlet } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { Outlet, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { MenuIcon } from 'lucide-react';
 import { Sidebar } from './Sidebar';
@@ -7,14 +7,39 @@ import { UploadDropzone } from '../upload/UploadDropzone';
 import { UploadProgress } from '../upload/UploadProgress';
 import { AudioRecorder } from '../upload/AudioRecorder';
 import { RecordingMetadata } from '../upload/RecordingMetadata';
+import { OneDriveBrowser } from '../onedrive/OneDriveBrowser';
 import { Logo } from '../brand/Logo';
+import { api } from '../../utils/api';
+import { toast } from 'sonner';
 export function AppLayout() {
   const [isUploadOpen, setIsUploadOpen] = useState(false);
   const [isRecorderOpen, setIsRecorderOpen] = useState(false);
+  const [isOneDriveOpen, setIsOneDriveOpen] = useState(false);
+  const [onedriveConnected, setOnedriveConnected] = useState(false);
   const [recordedFile, setRecordedFile] = useState<File | null>(null);
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
   const [sidebarHidden, setSidebarHidden] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  useEffect(() => {
+    api.onedrive.status()
+      .then((data: any) => setOnedriveConnected(!!data?.connected))
+      .catch(() => setOnedriveConnected(false));
+  }, []);
+
+  useEffect(() => {
+    const onedrive = searchParams.get('onedrive');
+    if (onedrive === 'connected') {
+      toast.success('OneDrive connected successfully!');
+      setOnedriveConnected(true);
+      setSearchParams({}, { replace: true });
+    } else if (onedrive === 'error') {
+      const msg = searchParams.get('message') || 'Failed to connect';
+      toast.error(`OneDrive: ${msg}`);
+      setSearchParams({}, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
   return (
     <div className="flex h-dvh w-full bg-slate-50 dark:bg-slate-950 overflow-hidden">
       {/* Desktop Sidebar */}
@@ -23,8 +48,10 @@ export function AppLayout() {
           <Sidebar
           onUploadClick={() => setIsUploadOpen(true)}
           onRecordClick={() => setIsRecorderOpen(true)}
+          onOneDriveClick={() => setIsOneDriveOpen(true)}
           selectedFolderId={selectedFolderId}
-          onSelectFolder={setSelectedFolderId} />
+          onSelectFolder={setSelectedFolderId}
+          onedriveConnected={onedriveConnected} />
 
         </div>
       }
@@ -72,10 +99,15 @@ export function AppLayout() {
                 setIsRecorderOpen(true);
                 setMobileMenuOpen(false);
               }}
+              onOneDriveClick={() => {
+                setIsOneDriveOpen(true);
+                setMobileMenuOpen(false);
+              }}
               selectedFolderId={selectedFolderId}
               onSelectFolder={setSelectedFolderId}
               onClose={() => setMobileMenuOpen(false)}
-              isMobile />
+              isMobile
+              onedriveConnected={onedriveConnected} />
 
             </motion.div>
           </>
@@ -131,6 +163,12 @@ export function AppLayout() {
       }
 
       <UploadProgress />
+
+      <AnimatePresence>
+        {isOneDriveOpen && (
+          <OneDriveBrowser onClose={() => setIsOneDriveOpen(false)} />
+        )}
+      </AnimatePresence>
     </div>);
 
 }

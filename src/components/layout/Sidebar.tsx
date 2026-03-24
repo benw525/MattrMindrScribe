@@ -19,7 +19,8 @@ import {
   SearchIcon,
   LoaderIcon,
   SendIcon,
-  MicIcon } from
+  MicIcon,
+  CloudIcon } from
 'lucide-react';
 import { toast } from 'sonner';
 import { useTranscripts } from '../../hooks/useTranscripts';
@@ -45,18 +46,22 @@ interface SendConflict {
 interface SidebarProps {
   onUploadClick: () => void;
   onRecordClick: () => void;
+  onOneDriveClick?: () => void;
   selectedFolderId: string | null;
   onSelectFolder: (id: string | null) => void;
   onClose?: () => void;
   isMobile?: boolean;
+  onedriveConnected?: boolean;
 }
 export function Sidebar({
   onUploadClick,
   onRecordClick,
+  onOneDriveClick,
   selectedFolderId,
   onSelectFolder,
   onClose,
-  isMobile
+  isMobile,
+  onedriveConnected
 }: SidebarProps) {
   const { folders, transcripts, addFolder, deleteFolder, renameFolder } =
   useTranscripts();
@@ -464,25 +469,38 @@ export function Sidebar({
         }
       </div>
 
-      <div className="px-4 mb-6 flex gap-2">
-        <button
-          onClick={() => {
-            onUploadClick();
-            if (isMobile && onClose) onClose();
-          }}
-          className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-2.5 rounded-md font-medium flex items-center justify-center gap-2 transition-colors shadow-sm text-sm">
-          <UploadIcon className="h-4 w-4" />
-          Upload
-        </button>
-        <button
-          onClick={() => {
-            onRecordClick();
-            if (isMobile && onClose) onClose();
-          }}
-          className="bg-red-500 hover:bg-red-600 text-white px-3 py-2.5 rounded-md font-medium flex items-center justify-center gap-2 transition-colors shadow-sm text-sm">
-          <MicIcon className="h-4 w-4" />
-          Record
-        </button>
+      <div className="px-4 mb-6 space-y-2">
+        <div className="flex gap-2">
+          <button
+            onClick={() => {
+              onUploadClick();
+              if (isMobile && onClose) onClose();
+            }}
+            className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-2.5 rounded-md font-medium flex items-center justify-center gap-2 transition-colors shadow-sm text-sm">
+            <UploadIcon className="h-4 w-4" />
+            Upload
+          </button>
+          <button
+            onClick={() => {
+              onRecordClick();
+              if (isMobile && onClose) onClose();
+            }}
+            className="bg-red-500 hover:bg-red-600 text-white px-3 py-2.5 rounded-md font-medium flex items-center justify-center gap-2 transition-colors shadow-sm text-sm">
+            <MicIcon className="h-4 w-4" />
+            Record
+          </button>
+        </div>
+        {onedriveConnected && onOneDriveClick && (
+          <button
+            onClick={() => {
+              onOneDriveClick();
+              if (isMobile && onClose) onClose();
+            }}
+            className="w-full bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-md font-medium flex items-center justify-center gap-2 transition-colors shadow-sm text-sm">
+            <CloudIcon className="h-4 w-4" />
+            OneDrive
+          </button>
+        )}
       </div>
 
       <nav className="flex-1 overflow-y-auto px-3 space-y-1">

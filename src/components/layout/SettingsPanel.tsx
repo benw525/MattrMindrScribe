@@ -12,7 +12,8 @@ import {
   LogOutIcon,
   CheckCircleIcon,
   Loader2Icon,
-  SparklesIcon } from
+  SparklesIcon,
+  CloudIcon } from
 'lucide-react';
 import { useTheme } from '../../hooks/useTheme';
 import { useAuth } from '../../contexts/AuthContext';
@@ -366,6 +367,122 @@ function AuphonicToggle() {
   );
 }
 
+interface OneDriveStatus {
+  connected: boolean;
+  configured: boolean;
+  accountEmail?: string;
+  accountName?: string;
+  connectedAt?: string;
+}
+
+function OneDriveIntegration() {
+  const [status, setStatus] = useState<OneDriveStatus | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [isConnecting, setIsConnecting] = useState(false);
+  const [isDisconnecting, setIsDisconnecting] = useState(false);
+
+  useEffect(() => {
+    api.onedrive.status()
+      .then((data: OneDriveStatus) => setStatus(data))
+      .catch(() => setStatus({ connected: false, configured: false }))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const handleConnect = async () => {
+    setIsConnecting(true);
+    try {
+      const data = await api.onedrive.getAuthUrl();
+      if (data.authUrl) {
+        window.location.href = data.authUrl;
+      } else {
+        toast.error('Failed to get authorization URL');
+      }
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to start OneDrive connection');
+    } finally {
+      setIsConnecting(false);
+    }
+  };
+
+  const handleDisconnect = async () => {
+    setIsDisconnecting(true);
+    try {
+      await api.onedrive.disconnect();
+      setStatus({ connected: false, configured: true });
+      toast.success('Disconnected from OneDrive');
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to disconnect');
+    } finally {
+      setIsDisconnecting(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-700">
+        <div className="flex items-center gap-2 text-xs text-slate-400 py-2">
+          <Loader2Icon className="h-4 w-4 animate-spin" />
+          Checking OneDrive...
+        </div>
+      </div>
+    );
+  }
+
+  if (!status?.configured) {
+    return null;
+  }
+
+  if (status?.connected) {
+    return (
+      <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-700">
+        <div className="rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 p-3 space-y-2">
+          <div className="flex items-center gap-2">
+            <CloudIcon className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+            <span className="text-xs font-medium text-blue-700 dark:text-blue-300">OneDrive Connected</span>
+          </div>
+          <div className="space-y-1 text-xs text-slate-600 dark:text-slate-400">
+            {status.accountName && (
+              <div className="flex items-center gap-1.5">
+                <span>{status.accountName}</span>
+              </div>
+            )}
+            {status.accountEmail && (
+              <div className="flex items-center gap-1.5">
+                <MailIcon className="h-3 w-3" />
+                <span className="truncate">{status.accountEmail}</span>
+              </div>
+            )}
+            {status.connectedAt && (
+              <div className="text-[10px] text-slate-400 dark:text-slate-500 mt-1">
+                Connected {new Date(status.connectedAt).toLocaleDateString()}
+              </div>
+            )}
+          </div>
+          <button
+            onClick={handleDisconnect}
+            disabled={isDisconnecting}
+            className="w-full flex items-center justify-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/40 border border-red-200 dark:border-red-800 transition-colors disabled:opacity-50">
+            {isDisconnecting ? <Loader2Icon className="h-3.5 w-3.5 animate-spin" /> : <Link2OffIcon className="h-3.5 w-3.5" />}
+            {isDisconnecting ? 'Disconnecting...' : 'Disconnect'}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-700">
+      <button
+        onClick={handleConnect}
+        disabled={isConnecting}
+        className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-900/30 hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors text-left disabled:opacity-50">
+        {isConnecting ? <Loader2Icon className="h-4 w-4 animate-spin" /> : <CloudIcon className="h-4 w-4" />}
+        {isConnecting ? 'Connecting...' : 'Connect OneDrive'}
+      </button>
+    </div>
+  );
+}
+
 export function SettingsPanel({ onClose, onChangePassword }: SettingsPanelProps) {
   const { theme, setTheme } = useTheme();
   const { user, logout } = useAuth();
@@ -466,6 +583,8 @@ export function SettingsPanel({ onClose, onChangePassword }: SettingsPanelProps)
         <AuphonicToggle />
 
         <MattrMindrIntegration />
+
+        <OneDriveIntegration />
 
         <div className="px-4 py-3">
           <button

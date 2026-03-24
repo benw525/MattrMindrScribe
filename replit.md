@@ -20,6 +20,7 @@ A full-stack application for managing legal case recordings/transcripts. Feature
 - Pop-out presenter window with BroadcastChannel sync for dual-screen workflows
 - Sharing system: share transcripts/folders with other users (view or edit permissions), cascading folder→transcript permissions
 - "Shared with Me" sidebar section showing shared folders and transcripts
+- OneDrive integration: connect Microsoft OneDrive via OAuth, browse folders/files, transcribe media directly without downloading/re-uploading
 - Audio player with cycling rewind/fast-forward speeds (2x/4x/8x/16x), skip 10s/30s buttons
 - Empty segment auto-edit mode with placeholder text and empty save support
 - Browser-playable audio conversion in transcription pipeline
@@ -73,6 +74,7 @@ A full-stack application for managing legal case recordings/transcripts. Feature
 - `server/routes/mattrmindr.ts` - MattrMindr integration API (connect, disconnect, status, case search proxy, send files)
 - `server/routes/annotations.ts` - CRUD for transcript annotations (notes between segments, bookmarks on segments)
 - `server/routes/shares.ts` - Sharing CRUD routes (create/list/update/revoke shares)
+- `server/routes/onedrive.ts` - OneDrive integration (OAuth, file browser, download→S3→transcription pipeline)
 - `server/checkAccess.ts` - Cascading permission check (folder→transcript inheritance)
 - `server/routes/external.ts` - External API for inbound integrations (auth, receive files for transcription, transcription status)
 - `server/replit_integrations/` - OpenAI AI Integrations (audio, chat, image, batch utilities)
@@ -136,6 +138,13 @@ A full-stack application for managing legal case recordings/transcripts. Feature
 - `PATCH /api/shares/:id` - Update share permission
 - `DELETE /api/shares/:id` - Revoke a share
 - `GET /api/shares/shared-with-me` - List items shared with current user
+- `GET /api/onedrive/configured` - Check if OneDrive OAuth is configured (public)
+- `GET /api/onedrive/auth` - Get Microsoft OAuth authorization URL (authenticated)
+- `GET /api/onedrive/callback` - Handle OAuth callback from Microsoft (redirects to /app)
+- `GET /api/onedrive/status` - Get OneDrive connection status (authenticated)
+- `DELETE /api/onedrive/disconnect` - Disconnect OneDrive (authenticated)
+- `GET /api/onedrive/browse?folderId=` - Browse OneDrive folders and media files (authenticated)
+- `POST /api/onedrive/transcribe` - Download file from OneDrive → S3 → start transcription (authenticated)
 - `POST /api/media/token` - Get short-lived media access token (authenticated, supports shared access)
 - `GET /api/media/:filename?token=` - Serve media file with secure token
 
@@ -148,6 +157,8 @@ A full-stack application for managing legal case recordings/transcripts. Feature
 - `transcript_versions` - Version snapshots
 - `transcript_summaries` - AI-generated legal summaries (per-agent, per-transcript)
 - `shares` - Sharing permissions (owner_id, shared_with_id, resource_type, resource_id, permission, revoked_at)
+- `onedrive_connections` - OneDrive OAuth tokens (user_id, access_token, refresh_token, token_expires_at, account_email, account_name)
+- `transcripts.source` - Source of the transcript file ('upload' default, 'onedrive' for OneDrive imports)
 - `transcripts.pipeline_log` - JSONB column storing per-step results (whisper, diarization, refinement) with status, stats, and errors
 - `mattrmindr_connections` - MattrMindr integration connections (one per user, stores base_url, email, auth_token)
 - `folders.mattrmindr_case_id` / `folders.mattrmindr_case_name` - Links a folder to a MattrMindr case
@@ -173,6 +184,18 @@ A full-stack application for managing legal case recordings/transcripts. Feature
 - Inbound: MattrMindr can send files to MattrMindrScribe for transcription via `POST /api/external/receive` (provides a download URL, Scribe fetches and runs the pipeline); MattrMindr polls status via `GET /api/external/transcripts/:id/status`
 - API contract for MattrMindr is documented in `mattrmindr-api-contract.md` (covers both outbound and inbound directions)
 - All MattrMindr API calls are proxied through the backend (server-to-server), no direct browser-to-MattrMindr requests
+
+## OneDrive Integration
+
+- Users connect their Microsoft OneDrive account via OAuth 2.0 (Authorization Code flow)
+- Requires Azure AD app registration with 3 env vars: `MICROSOFT_CLIENT_ID`, `MICROSOFT_CLIENT_SECRET`, `MICROSOFT_REDIRECT_URI`
+- If env vars are not set, OneDrive integration is hidden from the UI entirely
+- OAuth flow: GET `/api/onedrive/auth` returns Microsoft login URL → user authorizes → callback stores tokens in `onedrive_connections` table → redirects to `/app?onedrive=connected`
+- Tokens: access_token auto-refreshed via refresh_token when within 60s of expiry
+- File browser: sidebar "OneDrive" button opens modal that browses OneDrive via Graph API (`/me/drive/root/children`, `/me/drive/items/{id}/children`)
+- Only media files (audio/video matching the standard extension regex) are shown as transcribable
+- Transcription pipeline: user clicks "Transcribe" on a file → backend downloads from Graph API → uploads to S3 → creates transcript record with `source='onedrive'` → calls `processTranscription()`
+- Connection management in Settings panel (connect/disconnect)
 
 ## Development
 

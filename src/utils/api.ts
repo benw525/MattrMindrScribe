@@ -448,6 +448,18 @@ export const api = {
     delete: (transcriptId: string, annotationId: string) =>
       request(`/transcripts/${transcriptId}/annotations/${annotationId}`, { method: 'DELETE' }),
   },
+  onedrive: {
+    configured: () => request('/onedrive/configured'),
+    getAuthUrl: () => request('/onedrive/auth'),
+    status: () => request('/onedrive/status'),
+    disconnect: () => request('/onedrive/disconnect', { method: 'DELETE' }),
+    browse: (folderId?: string) => request(`/onedrive/browse${folderId ? `?folderId=${folderId}` : ''}`),
+    transcribe: (fileId: string, fileName: string, folderId?: string, expectedSpeakers?: number | null, recordingType?: string, practiceArea?: string) =>
+      request('/onedrive/transcribe', {
+        method: 'POST',
+        body: JSON.stringify({ fileId, fileName, folderId, expectedSpeakers, recordingType, practiceArea }),
+      }),
+  },
   createShare: (email: string, resourceType: string, resourceId: string, permission: string) =>
     request('/shares', { method: 'POST', body: JSON.stringify({ email, resourceType, resourceId, permission }) }),
   getSharesByResource: (resourceType: string, resourceId: string) =>

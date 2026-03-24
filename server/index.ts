@@ -15,6 +15,7 @@ import mattrmindrRoutes from './routes/mattrmindr.js';
 import externalRoutes from './routes/external.js';
 import annotationRoutes from './routes/annotations.js';
 import shareRoutes from './routes/shares.js';
+import onedriveRoutes from './routes/onedrive.js';
 import { authenticateToken } from './middleware/auth.js';
 import pool from './db.js';
 import { checkAccess } from './checkAccess.js';
@@ -136,6 +137,7 @@ app.use('/api/folders', folderRoutes);
 app.use('/api/mattrmindr', mattrmindrRoutes);
 app.use('/api/transcripts', annotationRoutes);
 app.use('/api/shares', shareRoutes);
+app.use('/api/onedrive', onedriveRoutes);
 app.use('/api/external', externalRoutes);
 
 app.get('/api/health', (_req, res) => {
@@ -245,6 +247,29 @@ pool.query(`
   ALTER TABLE transcript_annotations ADD CONSTRAINT chk_annotation_type CHECK (type IN ('note', 'bookmark'));
 `).catch((err: any) => {
   if (!err.message.includes('already exists')) console.error('Migration error (transcript_annotations):', err.message);
+});
+
+pool.query(`
+  CREATE TABLE IF NOT EXISTS onedrive_connections (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    access_token TEXT NOT NULL,
+    refresh_token TEXT,
+    token_expires_at TIMESTAMP NOT NULL,
+    account_email VARCHAR(255) DEFAULT '',
+    account_name VARCHAR(255) DEFAULT '',
+    connected_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW(),
+    UNIQUE(user_id)
+  );
+`).catch((err: any) => {
+  if (!err.message.includes('already exists')) console.error('Migration error (onedrive_connections):', err.message);
+});
+
+pool.query(`
+  ALTER TABLE transcripts ADD COLUMN IF NOT EXISTS source VARCHAR(50) DEFAULT 'upload';
+`).catch((err: any) => {
+  if (!err.message.includes('already exists')) console.error('Migration error (transcripts source):', err.message);
 });
 
 pool.query(`
