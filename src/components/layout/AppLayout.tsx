@@ -212,6 +212,7 @@ export function AppLayout() {
           <OneDriveBrowser
             onClose={() => { setIsOneDriveOpen(false); setOneDriveBrowseFolderId(undefined); }}
             initialFolderId={oneDriveBrowseFolderId}
+            restrictToFolder={!!oneDriveBrowseFolderId}
             onFoldersChanged={loadConnectedFolders} />
         )}
       </AnimatePresence>

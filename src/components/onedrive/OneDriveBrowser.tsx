@@ -34,6 +34,7 @@ interface ConnectedFolder {
 interface OneDriveBrowserProps {
   onClose: () => void;
   initialFolderId?: string;
+  restrictToFolder?: boolean;
   onFoldersChanged?: () => void;
 }
 
@@ -94,7 +95,7 @@ function isVideoFile(name: string): boolean {
   return /\.(mp4|mov|avi|mkv|wmv|flv|3gp|3g2|m4v|mpg|mpeg|ts|mts|vob|ogv)$/i.test(name);
 }
 
-export function OneDriveBrowser({ onClose, initialFolderId, onFoldersChanged }: OneDriveBrowserProps) {
+export function OneDriveBrowser({ onClose, initialFolderId, restrictToFolder, onFoldersChanged }: OneDriveBrowserProps) {
   const { refreshData } = useTranscripts();
   const [loading, setLoading] = useState(true);
   const [folders, setFolders] = useState<OneDriveItem[]>([]);
@@ -226,27 +227,36 @@ export function OneDriveBrowser({ onClose, initialFolderId, onFoldersChanged }: 
         </div>
 
         <div className="flex items-center gap-1 px-4 sm:px-6 py-2 border-b border-slate-100 dark:border-slate-800 overflow-x-auto text-sm">
-          <button
-            onClick={() => navigateToBreadcrumb(-1)}
-            className="text-indigo-600 dark:text-indigo-400 hover:underline whitespace-nowrap flex-shrink-0">
-            My Files
-          </button>
-          {breadcrumb.map((crumb, i) => (
-            <React.Fragment key={i}>
-              <ChevronRightIcon className="h-3.5 w-3.5 text-slate-400 flex-shrink-0" />
-              {i === breadcrumb.length - 1 ? (
-                <span className="text-slate-700 dark:text-slate-300 whitespace-nowrap flex-shrink-0">
-                  {crumb.name}
-                </span>
-              ) : (
-                <button
-                  onClick={() => navigateToBreadcrumb(i)}
-                  className="text-indigo-600 dark:text-indigo-400 hover:underline whitespace-nowrap flex-shrink-0">
-                  {crumb.name}
-                </button>
-              )}
-            </React.Fragment>
-          ))}
+          {!restrictToFolder && (
+            <button
+              onClick={() => navigateToBreadcrumb(-1)}
+              className="text-indigo-600 dark:text-indigo-400 hover:underline whitespace-nowrap flex-shrink-0">
+              My Files
+            </button>
+          )}
+          {breadcrumb.map((crumb, i) => {
+            const initialStackIndex = restrictToFolder && initialFolderId ? folderStack.indexOf(initialFolderId) : -1;
+            const showCrumb = !restrictToFolder || i >= initialStackIndex;
+            if (!showCrumb) return null;
+            return (
+              <React.Fragment key={i}>
+                {(i > 0 || !restrictToFolder) && (
+                  <ChevronRightIcon className="h-3.5 w-3.5 text-slate-400 flex-shrink-0" />
+                )}
+                {i === breadcrumb.length - 1 ? (
+                  <span className="text-slate-700 dark:text-slate-300 whitespace-nowrap flex-shrink-0">
+                    {crumb.name}
+                  </span>
+                ) : (
+                  <button
+                    onClick={() => navigateToBreadcrumb(i)}
+                    className="text-indigo-600 dark:text-indigo-400 hover:underline whitespace-nowrap flex-shrink-0">
+                    {crumb.name}
+                  </button>
+                )}
+              </React.Fragment>
+            );
+          })}
         </div>
 
         <div className="px-4 sm:px-6 py-2 border-b border-slate-100 dark:border-slate-800">
@@ -330,7 +340,7 @@ export function OneDriveBrowser({ onClose, initialFolderId, onFoldersChanged }: 
             </div>
           ) : (
             <div className="divide-y divide-slate-100 dark:divide-slate-800">
-              {folderStack.length > 0 && (
+              {folderStack.length > 0 && !(restrictToFolder && folderStack.length === 1 && folderStack[0] === initialFolderId) && (
                 <button
                   onClick={navigateBack}
                   className="w-full flex items-center gap-3 px-4 sm:px-6 py-3 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors text-left">
