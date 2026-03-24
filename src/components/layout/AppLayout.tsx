@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Outlet, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { MenuIcon } from 'lucide-react';
@@ -11,28 +11,50 @@ import { OneDriveBrowser } from '../onedrive/OneDriveBrowser';
 import { Logo } from '../brand/Logo';
 import { api } from '../../utils/api';
 import { toast } from 'sonner';
+
+interface ConnectedFolder {
+  id: string;
+  onedrive_folder_id: string;
+  folder_name: string;
+  folder_path: string;
+  created_at: string;
+}
+
 export function AppLayout() {
   const [isUploadOpen, setIsUploadOpen] = useState(false);
   const [isRecorderOpen, setIsRecorderOpen] = useState(false);
   const [isOneDriveOpen, setIsOneDriveOpen] = useState(false);
+  const [oneDriveBrowseFolderId, setOneDriveBrowseFolderId] = useState<string | undefined>(undefined);
   const [onedriveConnected, setOnedriveConnected] = useState(false);
+  const [connectedFolders, setConnectedFolders] = useState<ConnectedFolder[]>([]);
   const [recordedFile, setRecordedFile] = useState<File | null>(null);
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
   const [sidebarHidden, setSidebarHidden] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
 
+  const loadConnectedFolders = useCallback(() => {
+    api.onedrive.connectedFolders()
+      .then((list: ConnectedFolder[]) => setConnectedFolders(list))
+      .catch(() => setConnectedFolders([]));
+  }, []);
+
   useEffect(() => {
     api.onedrive.status()
-      .then((data: any) => setOnedriveConnected(!!data?.connected))
+      .then((data: any) => {
+        const connected = !!data?.connected;
+        setOnedriveConnected(connected);
+        if (connected) loadConnectedFolders();
+      })
       .catch(() => setOnedriveConnected(false));
-  }, []);
+  }, [loadConnectedFolders]);
 
   useEffect(() => {
     const onedrive = searchParams.get('onedrive');
     if (onedrive === 'connected') {
       toast.success('OneDrive connected successfully!');
       setOnedriveConnected(true);
+      loadConnectedFolders();
       setSearchParams({}, { replace: true });
     } else if (onedrive === 'error') {
       const msg = searchParams.get('message') || 'Failed to connect';
@@ -48,10 +70,13 @@ export function AppLayout() {
           <Sidebar
           onUploadClick={() => setIsUploadOpen(true)}
           onRecordClick={() => setIsRecorderOpen(true)}
-          onOneDriveClick={() => setIsOneDriveOpen(true)}
+          onOneDriveClick={() => { setOneDriveBrowseFolderId(undefined); setIsOneDriveOpen(true); }}
+          onOneDriveFolderClick={(folderId) => { setOneDriveBrowseFolderId(folderId); setIsOneDriveOpen(true); }}
           selectedFolderId={selectedFolderId}
           onSelectFolder={setSelectedFolderId}
-          onedriveConnected={onedriveConnected} />
+          onedriveConnected={onedriveConnected}
+          connectedFolders={connectedFolders}
+          onRefreshConnectedFolders={loadConnectedFolders} />
 
         </div>
       }
@@ -100,6 +125,12 @@ export function AppLayout() {
                 setMobileMenuOpen(false);
               }}
               onOneDriveClick={() => {
+                setOneDriveBrowseFolderId(undefined);
+                setIsOneDriveOpen(true);
+                setMobileMenuOpen(false);
+              }}
+              onOneDriveFolderClick={(folderId) => {
+                setOneDriveBrowseFolderId(folderId);
                 setIsOneDriveOpen(true);
                 setMobileMenuOpen(false);
               }}
@@ -107,7 +138,9 @@ export function AppLayout() {
               onSelectFolder={setSelectedFolderId}
               onClose={() => setMobileMenuOpen(false)}
               isMobile
-              onedriveConnected={onedriveConnected} />
+              onedriveConnected={onedriveConnected}
+              connectedFolders={connectedFolders}
+              onRefreshConnectedFolders={loadConnectedFolders} />
 
             </motion.div>
           </>
@@ -166,7 +199,10 @@ export function AppLayout() {
 
       <AnimatePresence>
         {isOneDriveOpen && (
-          <OneDriveBrowser onClose={() => setIsOneDriveOpen(false)} />
+          <OneDriveBrowser
+            onClose={() => { setIsOneDriveOpen(false); setOneDriveBrowseFolderId(undefined); }}
+            initialFolderId={oneDriveBrowseFolderId}
+            onFoldersChanged={loadConnectedFolders} />
         )}
       </AnimatePresence>
     </div>);

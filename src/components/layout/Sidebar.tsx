@@ -43,25 +43,39 @@ interface SendConflict {
   filename: string;
   existingFileId: string;
 }
+interface ConnectedFolder {
+  id: string;
+  onedrive_folder_id: string;
+  folder_name: string;
+  folder_path: string;
+  created_at: string;
+}
+
 interface SidebarProps {
   onUploadClick: () => void;
   onRecordClick: () => void;
   onOneDriveClick?: () => void;
+  onOneDriveFolderClick?: (folderId: string) => void;
   selectedFolderId: string | null;
   onSelectFolder: (id: string | null) => void;
   onClose?: () => void;
   isMobile?: boolean;
   onedriveConnected?: boolean;
+  connectedFolders?: ConnectedFolder[];
+  onRefreshConnectedFolders?: () => void;
 }
 export function Sidebar({
   onUploadClick,
   onRecordClick,
   onOneDriveClick,
+  onOneDriveFolderClick,
   selectedFolderId,
   onSelectFolder,
   onClose,
   isMobile,
-  onedriveConnected
+  onedriveConnected,
+  connectedFolders = [],
+  onRefreshConnectedFolders,
 }: SidebarProps) {
   const { folders, transcripts, addFolder, deleteFolder, renameFolder } =
   useTranscripts();
@@ -645,6 +659,44 @@ export function Sidebar({
         <div className="space-y-0.5 px-1">
           {rootFolders.map((folder) => renderFolder(folder))}
         </div>
+
+        {onedriveConnected && connectedFolders.length > 0 && (
+          <div className="pt-6 pb-2">
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider px-3 mb-2">
+              OneDrive Folders
+            </p>
+            <div className="space-y-0.5 px-1">
+              {connectedFolders.map((cf) => (
+                <div key={cf.id} className="relative group flex items-center">
+                  <button
+                    onClick={() => {
+                      onOneDriveFolderClick?.(cf.onedrive_folder_id);
+                      if (isMobile && onClose) onClose();
+                    }}
+                    className="flex-1 flex items-center gap-2 px-2 py-1.5 rounded-md text-sm font-medium transition-colors hover:bg-slate-800 hover:text-white">
+                    <CloudIcon className="h-4 w-4 text-blue-400 flex-shrink-0" />
+                    <span className="truncate text-left flex-1">{cf.folder_name}</span>
+                  </button>
+                  <button
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      try {
+                        await api.onedrive.removeConnectedFolder(cf.id);
+                        toast.success(`Unlinked: ${cf.folder_name}`);
+                        onRefreshConnectedFolders?.();
+                      } catch {
+                        toast.error('Failed to unlink folder');
+                      }
+                    }}
+                    className="flex-shrink-0 p-1 text-slate-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity rounded"
+                    title="Unlink folder">
+                    <XIcon className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {sharedItems.length > 0 && (
           <div className="pt-6 pb-2">

@@ -242,6 +242,58 @@ router.delete('/disconnect', authenticateToken as any, async (req: AuthRequest, 
   }
 });
 
+router.get('/connected-folders', authenticateToken as any, async (req: AuthRequest, res: Response) => {
+  try {
+    const { rows } = await pool.query(
+      'SELECT id, onedrive_folder_id, folder_name, folder_path, created_at FROM connected_folders WHERE user_id = $1 ORDER BY folder_name',
+      [req.userId]
+    );
+    return res.json(rows);
+  } catch (err: any) {
+    console.error('[OneDrive] List connected folders error:', err.message);
+    return res.json([]);
+  }
+});
+
+router.post('/connected-folders', authenticateToken as any, async (req: AuthRequest, res: Response) => {
+  try {
+    const { onedriveFolderId, folderName, folderPath } = req.body;
+    if (!onedriveFolderId || !folderName) {
+      return res.status(400).json({ error: 'onedriveFolderId and folderName are required' });
+    }
+
+    const { rows } = await pool.query(
+      `INSERT INTO connected_folders (user_id, onedrive_folder_id, folder_name, folder_path)
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (user_id, onedrive_folder_id) DO NOTHING
+       RETURNING id, onedrive_folder_id, folder_name, folder_path, created_at`,
+      [req.userId, onedriveFolderId, folderName, folderPath || '']
+    );
+
+    if (rows.length === 0) {
+      return res.status(409).json({ error: 'This folder is already connected' });
+    }
+
+    return res.json(rows[0]);
+  } catch (err: any) {
+    console.error('[OneDrive] Add connected folder error:', err.message);
+    return res.status(500).json({ error: 'Failed to connect folder' });
+  }
+});
+
+router.delete('/connected-folders/:id', authenticateToken as any, async (req: AuthRequest, res: Response) => {
+  try {
+    await pool.query(
+      'DELETE FROM connected_folders WHERE id = $1 AND user_id = $2',
+      [req.params.id, req.userId]
+    );
+    return res.json({ success: true });
+  } catch (err: any) {
+    console.error('[OneDrive] Remove connected folder error:', err.message);
+    return res.status(500).json({ error: 'Failed to remove connected folder' });
+  }
+});
+
 router.get('/browse', authenticateToken as any, async (req: AuthRequest, res: Response) => {
   try {
     const accessToken = await refreshAccessToken(req.userId!);

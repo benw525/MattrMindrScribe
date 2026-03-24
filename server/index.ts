@@ -273,6 +273,21 @@ pool.query(`
 });
 
 pool.query(`
+  CREATE TABLE IF NOT EXISTS connected_folders (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    onedrive_folder_id VARCHAR(255) NOT NULL,
+    folder_name VARCHAR(500) NOT NULL,
+    folder_path TEXT DEFAULT '',
+    created_at TIMESTAMP DEFAULT NOW(),
+    UNIQUE(user_id, onedrive_folder_id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_connected_folders_user ON connected_folders(user_id);
+`).catch((err: any) => {
+  if (!err.message.includes('already exists')) console.error('Migration error (connected_folders):', err.message);
+});
+
+pool.query(`
   CREATE TABLE IF NOT EXISTS shares (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     owner_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,

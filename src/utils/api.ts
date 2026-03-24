@@ -459,6 +459,14 @@ export const api = {
         method: 'POST',
         body: JSON.stringify({ fileId, fileName, folderId, expectedSpeakers, recordingType, practiceArea }),
       }),
+    connectedFolders: () => request('/onedrive/connected-folders'),
+    addConnectedFolder: (onedriveFolderId: string, folderName: string, folderPath?: string) =>
+      request('/onedrive/connected-folders', {
+        method: 'POST',
+        body: JSON.stringify({ onedriveFolderId, folderName, folderPath }),
+      }),
+    removeConnectedFolder: (id: string) =>
+      request(`/onedrive/connected-folders/${id}`, { method: 'DELETE' }),
   },
   createShare: (email: string, resourceType: string, resourceId: string, permission: string) =>
     request('/shares', { method: 'POST', body: JSON.stringify({ email, resourceType, resourceId, permission }) }),

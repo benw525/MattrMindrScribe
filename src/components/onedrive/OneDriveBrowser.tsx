@@ -16,13 +16,25 @@ import {
   ShieldIcon,
   FileIcon as FileAudioIconAlt,
   ChevronDownIcon,
+  LinkIcon,
+  CheckCircleIcon,
 } from 'lucide-react';
 import { api } from '../../utils/api';
 import { toast } from 'sonner';
 import { useTranscripts } from '../../hooks/useTranscripts';
 
+interface ConnectedFolder {
+  id: string;
+  onedrive_folder_id: string;
+  folder_name: string;
+  folder_path: string;
+  created_at: string;
+}
+
 interface OneDriveBrowserProps {
   onClose: () => void;
+  initialFolderId?: string;
+  onFoldersChanged?: () => void;
 }
 
 interface OneDriveItem {
@@ -82,21 +94,31 @@ function isVideoFile(name: string): boolean {
   return /\.(mp4|mov|avi|mkv|wmv|flv|3gp|3g2|m4v|mpg|mpeg|ts|mts|vob|ogv)$/i.test(name);
 }
 
-export function OneDriveBrowser({ onClose }: OneDriveBrowserProps) {
+export function OneDriveBrowser({ onClose, initialFolderId, onFoldersChanged }: OneDriveBrowserProps) {
   const { refreshData } = useTranscripts();
   const [loading, setLoading] = useState(true);
   const [folders, setFolders] = useState<OneDriveItem[]>([]);
   const [mediaFiles, setMediaFiles] = useState<OneDriveItem[]>([]);
   const [breadcrumb, setBreadcrumb] = useState<BreadcrumbItem[]>([]);
-  const [folderStack, setFolderStack] = useState<string[]>([]);
+  const [folderStack, setFolderStack] = useState<string[]>(initialFolderId ? [initialFolderId] : []);
   const [selectedFile, setSelectedFile] = useState<OneDriveItem | null>(null);
   const [transcribing, setTranscribing] = useState<Set<string>>(new Set());
   const [expectedSpeakers, setExpectedSpeakers] = useState<number | null>(null);
   const [recordingType, setRecordingType] = useState<string>('deposition');
   const [practiceArea, setPracticeArea] = useState<string>('personal_injury');
   const [showOptions, setShowOptions] = useState(false);
+  const [connectedFolderIds, setConnectedFolderIds] = useState<Set<string>>(new Set());
+  const [connectingFolder, setConnectingFolder] = useState<string | null>(null);
 
   const currentFolderId = folderStack.length > 0 ? folderStack[folderStack.length - 1] : undefined;
+
+  useEffect(() => {
+    api.onedrive.connectedFolders()
+      .then((list: ConnectedFolder[]) => {
+        setConnectedFolderIds(new Set(list.map(f => f.onedrive_folder_id)));
+      })
+      .catch(() => {});
+  }, []);
 
   const loadFolder = useCallback(async (folderId?: string) => {
     setLoading(true);
@@ -162,6 +184,21 @@ export function OneDriveBrowser({ onClose }: OneDriveBrowserProps) {
         next.delete(file.id);
         return next;
       });
+    }
+  };
+
+  const handleConnectFolder = async (folder: OneDriveItem) => {
+    setConnectingFolder(folder.id);
+    try {
+      const folderPath = breadcrumb.map(b => b.name).join('/');
+      await api.onedrive.addConnectedFolder(folder.id, folder.name, folderPath ? `${folderPath}/${folder.name}` : folder.name);
+      setConnectedFolderIds(prev => new Set([...prev, folder.id]));
+      toast.success(`Connected folder: ${folder.name}`);
+      onFoldersChanged?.();
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to connect folder');
+    } finally {
+      setConnectingFolder(null);
     }
   };
 
@@ -302,25 +339,51 @@ export function OneDriveBrowser({ onClose }: OneDriveBrowserProps) {
                 </button>
               )}
 
-              {folders.map((folder) => (
-                <button
-                  key={folder.id}
-                  onClick={() => navigateToFolder(folder.id)}
-                  className="w-full flex items-center gap-3 px-4 sm:px-6 py-3 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors text-left group">
-                  <FolderIcon className="h-5 w-5 text-amber-500 flex-shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-slate-900 dark:text-white truncate">
-                      {folder.name}
-                    </p>
-                    {folder.childCount > 0 && (
-                      <p className="text-xs text-slate-400">
-                        {folder.childCount} item{folder.childCount !== 1 ? 's' : ''}
-                      </p>
+              {folders.map((folder) => {
+                const isConnected = connectedFolderIds.has(folder.id);
+                const isConnecting = connectingFolder === folder.id;
+                return (
+                  <div
+                    key={folder.id}
+                    className="flex items-center gap-3 px-4 sm:px-6 py-3 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors group">
+                    <button
+                      onClick={() => navigateToFolder(folder.id)}
+                      className="flex-1 flex items-center gap-3 text-left min-w-0">
+                      <FolderIcon className="h-5 w-5 text-amber-500 flex-shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-slate-900 dark:text-white truncate">
+                          {folder.name}
+                        </p>
+                        {folder.childCount > 0 && (
+                          <p className="text-xs text-slate-400">
+                            {folder.childCount} item{folder.childCount !== 1 ? 's' : ''}
+                          </p>
+                        )}
+                      </div>
+                      <ChevronRightIcon className="h-4 w-4 text-slate-300 dark:text-slate-600 group-hover:text-slate-500 dark:group-hover:text-slate-400 transition-colors" />
+                    </button>
+                    {isConnected ? (
+                      <span className="flex items-center gap-1 text-xs text-green-600 dark:text-green-400 flex-shrink-0">
+                        <CheckCircleIcon className="h-3.5 w-3.5" />
+                        Linked
+                      </span>
+                    ) : (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handleConnectFolder(folder); }}
+                        disabled={isConnecting}
+                        className="flex items-center gap-1 px-2 py-1 text-xs rounded-md bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors opacity-0 group-hover:opacity-100 flex-shrink-0"
+                        title="Link this folder to sidebar">
+                        {isConnecting ? (
+                          <Loader2Icon className="h-3 w-3 animate-spin" />
+                        ) : (
+                          <LinkIcon className="h-3 w-3" />
+                        )}
+                        Link
+                      </button>
                     )}
                   </div>
-                  <ChevronRightIcon className="h-4 w-4 text-slate-300 dark:text-slate-600 group-hover:text-slate-500 dark:group-hover:text-slate-400 transition-colors" />
-                </button>
-              ))}
+                );
+              })}
 
               {mediaFiles.map((file) => {
                 const isVideo = isVideoFile(file.name);

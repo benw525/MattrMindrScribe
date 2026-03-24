@@ -20,7 +20,7 @@ A full-stack application for managing legal case recordings/transcripts. Feature
 - Pop-out presenter window with BroadcastChannel sync for dual-screen workflows
 - Sharing system: share transcripts/folders with other users (view or edit permissions), cascading folder→transcript permissions
 - "Shared with Me" sidebar section showing shared folders and transcripts
-- OneDrive integration: connect Microsoft OneDrive via OAuth, browse folders/files, transcribe media directly without downloading/re-uploading
+- OneDrive integration: connect Microsoft OneDrive via OAuth, browse folders/files, transcribe media directly without downloading/re-uploading; linked folders feature lets users pin specific OneDrive folders to the sidebar for quick access
 - Audio player with cycling rewind/fast-forward speeds (2x/4x/8x/16x), skip 10s/30s buttons
 - Empty segment auto-edit mode with placeholder text and empty save support
 - Browser-playable audio conversion in transcription pipeline
