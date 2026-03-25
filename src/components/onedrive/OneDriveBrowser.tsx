@@ -381,7 +381,7 @@ export function OneDriveBrowser({ onClose, initialFolderId, restrictToFolder, on
                       <button
                         onClick={(e) => { e.stopPropagation(); handleConnectFolder(folder); }}
                         disabled={isConnecting}
-                        className="flex items-center gap-1 px-2 py-1 text-xs rounded-md bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors opacity-0 group-hover:opacity-100 flex-shrink-0"
+                        className="flex items-center gap-1 px-2 py-1 text-xs rounded-md bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors flex-shrink-0"
                         title="Link this folder to sidebar">
                         {isConnecting ? (
                           <Loader2Icon className="h-3 w-3 animate-spin" />
