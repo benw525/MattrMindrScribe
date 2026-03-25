@@ -130,7 +130,7 @@ router.get('/', async (req: AuthRequest, res: Response) => {
           'owner' as permission
         FROM transcripts t
         LEFT JOIN transcript_segments s ON s.transcript_id = t.id
-        WHERE t.user_id = $1
+        WHERE t.user_id = $1 AND t.archived_at IS NULL
         GROUP BY t.id
         
         UNION ALL
@@ -147,7 +147,7 @@ router.get('/', async (req: AuthRequest, res: Response) => {
           (sh.resource_type = 'transcript' AND sh.resource_id = t.id::text)
           OR (sh.resource_type = 'folder' AND sh.resource_id = t.folder_id::text)
         )
-        WHERE sh.shared_with_id = $1 AND sh.revoked_at IS NULL AND t.user_id != $1
+        WHERE sh.shared_with_id = $1 AND sh.revoked_at IS NULL AND t.user_id != $1 AND t.archived_at IS NULL
         GROUP BY t.id, sh.permission
         
         ORDER BY created_at DESC`,
@@ -163,7 +163,7 @@ router.get('/', async (req: AuthRequest, res: Response) => {
           'owner' as permission
         FROM transcripts t
         LEFT JOIN transcript_segments s ON s.transcript_id = t.id
-        WHERE t.user_id = $1
+        WHERE t.user_id = $1 AND t.archived_at IS NULL
         GROUP BY t.id
         ORDER BY t.created_at DESC`,
         [req.userId]
@@ -968,13 +968,91 @@ router.delete('/', async (req: AuthRequest, res: Response) => {
 
     const placeholders = ids.map((_: string, i: number) => `$${i + 1}`).join(', ');
 
+    await pool.query(
+      `UPDATE transcripts SET archived_at = NOW() WHERE id IN (${placeholders}) AND user_id = $${ids.length + 1} AND archived_at IS NULL`,
+      [...ids, req.userId]
+    );
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Archive transcripts error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.get('/archived', async (req: AuthRequest, res: Response) => {
+  try {
+    const result = await pool.query(
+      `SELECT t.id, t.filename, t.description, t.status, t.type, t.duration, t.file_size, t.file_url, t.folder_id,
+              t.recording_type, t.practice_area, t.created_at, t.updated_at, t.archived_at
+       FROM transcripts t
+       WHERE t.user_id = $1 AND t.archived_at IS NOT NULL
+       ORDER BY t.archived_at DESC`,
+      [req.userId]
+    );
+
+    const transcripts = result.rows.map(row => ({
+      id: row.id,
+      filename: row.filename,
+      description: row.description,
+      status: row.status,
+      type: row.type,
+      duration: row.duration,
+      fileSize: row.file_size,
+      fileUrl: row.file_url,
+      folderId: row.folder_id,
+      recordingType: row.recording_type,
+      practiceArea: row.practice_area,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+      archivedAt: row.archived_at,
+      segments: [],
+    }));
+
+    res.json(transcripts);
+  } catch (err) {
+    console.error('Get archived transcripts error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.post('/restore', async (req: AuthRequest, res: Response) => {
+  try {
+    const { ids } = req.body;
+    if (!ids || !Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ error: 'Array of transcript IDs required' });
+    }
+
+    const placeholders = ids.map((_: string, i: number) => `$${i + 1}`).join(', ');
+
+    await pool.query(
+      `UPDATE transcripts SET archived_at = NULL WHERE id IN (${placeholders}) AND user_id = $${ids.length + 1}`,
+      [...ids, req.userId]
+    );
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Restore transcripts error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.delete('/permanent', async (req: AuthRequest, res: Response) => {
+  try {
+    const { ids } = req.body;
+    if (!ids || !Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ error: 'Array of transcript IDs required' });
+    }
+
+    const placeholders = ids.map((_: string, i: number) => `$${i + 1}`).join(', ');
+
     const fileResults = await pool.query(
-      `SELECT file_url FROM transcripts WHERE id IN (${placeholders}) AND user_id = $${ids.length + 1}`,
+      `SELECT file_url FROM transcripts WHERE id IN (${placeholders}) AND user_id = $${ids.length + 1} AND archived_at IS NOT NULL`,
       [...ids, req.userId]
     );
 
     await pool.query(
-      `DELETE FROM transcripts WHERE id IN (${placeholders}) AND user_id = $${ids.length + 1}`,
+      `DELETE FROM transcripts WHERE id IN (${placeholders}) AND user_id = $${ids.length + 1} AND archived_at IS NOT NULL`,
       [...ids, req.userId]
     );
 
@@ -992,7 +1070,7 @@ router.delete('/', async (req: AuthRequest, res: Response) => {
 
     res.json({ success: true });
   } catch (err) {
-    console.error('Delete transcripts error:', err);
+    console.error('Permanent delete transcripts error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

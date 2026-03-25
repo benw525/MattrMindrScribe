@@ -44,6 +44,7 @@ A full-stack application for managing legal case recordings/transcripts. Feature
 - `src/pages/LandingPage.tsx` - Marketing/landing page with pricing
 - `src/pages/AuthPage.tsx` - Login/register page
 - `src/pages/DashboardPage.tsx` - Main app dashboard
+- `src/pages/ArchivesPage.tsx` - Archives view for restoring/permanently deleting archived items
 - `src/pages/TranscriptViewerPage.tsx` - Transcript editor
 - `src/pages/PresentModePage.tsx` - Presentation mode (text-only)
 - `src/pages/VideoPresentModePage.tsx` - Video presentation mode with synced transcript
@@ -70,7 +71,7 @@ A full-stack application for managing legal case recordings/transcripts. Feature
 - `server/auphonic.ts` - Auphonic audio cleanup pre-processing (create production with noise/hum reduction + loudness normalization, upload file, poll for completion, download cleaned WAV); non-fatal — falls back to original audio on failure; skipped when AUPHONIC_API_KEY not set or user has not enabled Auphonic in settings
 - `server/diarization.ts` - AssemblyAI speaker diarization (upload audio, get speaker labels, map onto Whisper segments)
 - `server/speakerRefinement.ts` - Claude Opus 4 speaker refinement via Anthropic streaming API; simplified, concise prompts that leverage Claude's natural understanding of legal proceedings; two-pass deposition refinement: Pass 1 identifies speaker roster from first 80 segments, Pass 2 uses roster for full transcript refinement; Claude returns `{segments: [{label, text}], identifications}` — both corrected speaker labels AND cleaned text (punctuation, time formatting, capitalization) while preserving filler words verbatim; SINGLE_CALL_LIMIT=800, BATCH_SIZE=700 (respects Claude Opus 4's 32K max output token limit); Q&A post-processing corrects short misattributed utterances using examiner/deponent alternation logic; conditionally sends only the matching recording-type section to Claude; post-batch normalization eliminates generic "Speaker N" leakage; auto-defaults 5 expected speakers for depositions
-- `server/routes/folders.ts` - Folder CRUD + move transcripts + MattrMindr case linking
+- `server/routes/folders.ts` - Folder CRUD + move transcripts + MattrMindr case linking + archive/restore/permanent-delete
 - `server/routes/mattrmindr.ts` - MattrMindr integration API (connect, disconnect, status, case search proxy, send files)
 - `server/routes/annotations.ts` - CRUD for transcript annotations (notes between segments, bookmarks on segments)
 - `server/routes/shares.ts` - Sharing CRUD routes (create/list/update/revoke shares)
@@ -85,6 +86,7 @@ A full-stack application for managing legal case recordings/transcripts. Feature
 - `/` - Landing page (public)
 - `/login` - Auth page (public)
 - `/app` - Dashboard (protected)
+- `/app/archives` - Archives view (protected)
 - `/app/transcript/:id` - Transcript viewer (protected)
 - `/app/transcript/:id/present` - Present mode (protected)
 - `/app/transcript/:id/video-present` - Video presentation mode (protected)
@@ -109,7 +111,10 @@ A full-stack application for managing legal case recordings/transcripts. Feature
 - `POST /api/transcripts/:id/retranscribe` - Re-run transcription
 - `GET /api/transcripts/:id/export/:format` - Export transcript (txt, docx, pdf)
 - `PATCH /api/transcripts/:id` - Update transcript
-- `DELETE /api/transcripts` - Batch delete transcripts
+- `DELETE /api/transcripts` - Batch archive transcripts (soft-delete)
+- `GET /api/transcripts/archived` - List archived transcripts
+- `POST /api/transcripts/restore` - Restore archived transcripts (body: {ids})
+- `DELETE /api/transcripts/permanent` - Permanently delete archived transcripts (body: {ids})
 - `POST /api/transcripts/:id/versions` - Create version snapshot
 - `GET /api/transcripts/:id/versions` - List versions
 - `GET /api/transcripts/agents` - List available AI legal summary agents
@@ -119,7 +124,10 @@ A full-stack application for managing legal case recordings/transcripts. Feature
 - `GET /api/folders` - List folders
 - `POST /api/folders` - Create folder
 - `PATCH /api/folders/:id` - Update folder
-- `DELETE /api/folders/:id` - Delete folder
+- `DELETE /api/folders/:id` - Archive folder (soft-delete, also archives child transcripts)
+- `GET /api/folders/archived` - List archived folders
+- `POST /api/folders/:id/restore` - Restore archived folder (also restores child transcripts)
+- `DELETE /api/folders/:id/permanent` - Permanently delete archived folder and all its transcripts
 - `POST /api/folders/move-transcripts` - Move transcripts
 - `POST /api/mattrmindr/connect` - Connect to MattrMindr (baseUrl, email, password)
 - `GET /api/mattrmindr/status` - Get MattrMindr connection status
@@ -151,8 +159,8 @@ A full-stack application for managing legal case recordings/transcripts. Feature
 ## Database Schema (PostgreSQL)
 
 - `users` - User accounts with Stripe customer/subscription IDs
-- `folders` - Case folders with hierarchy support
-- `transcripts` - Media files and transcription metadata
+- `folders` - Case folders with hierarchy support (archived_at for soft-delete)
+- `transcripts` - Media files and transcription metadata (archived_at for soft-delete)
 - `transcript_segments` - Individual transcription segments
 - `transcript_versions` - Version snapshots
 - `transcript_summaries` - AI-generated legal summaries (per-agent, per-transcript)

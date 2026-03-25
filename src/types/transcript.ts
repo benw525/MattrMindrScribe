@@ -38,6 +38,7 @@ export interface Transcript {
   segments: TranscriptSegment[];
   versions: TranscriptVersion[];
   pipelineLog?: PipelineLog | null;
+  archivedAt?: string | null;
 }
 
 export interface TranscriptSegment {
@@ -71,6 +72,7 @@ export interface Folder {
   parentId: string | null;
   mattrmindrCaseId?: string | null;
   mattrmindrCaseName?: string | null;
+  archivedAt?: string | null;
 }
 
 export interface UploadEntry {

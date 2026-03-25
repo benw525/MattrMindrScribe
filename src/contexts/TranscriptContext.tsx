@@ -149,7 +149,7 @@ export function TranscriptProvider({ children }: { children: ReactNode }) {
       await api.transcripts.delete(ids);
       setTranscripts((prev) => prev.filter((t) => !ids.includes(t.id)));
     } catch (err) {
-      console.error('Failed to delete transcripts:', err);
+      console.error('Failed to archive transcripts:', err);
     }
   }, []);
 
@@ -162,11 +162,9 @@ export function TranscriptProvider({ children }: { children: ReactNode }) {
     try {
       await api.folders.delete(id);
       setFolders((prev) => prev.filter((f) => f.id !== id));
-      setTranscripts((prev) =>
-        prev.map((t) => (t.folderId === id ? { ...t, folderId: null } : t))
-      );
+      setTranscripts((prev) => prev.filter((t) => t.folderId !== id));
     } catch (err) {
-      console.error('Failed to delete folder:', err);
+      console.error('Failed to archive folder:', err);
     }
   }, []);
 

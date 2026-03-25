@@ -20,7 +20,8 @@ import {
   LoaderIcon,
   SendIcon,
   MicIcon,
-  CloudIcon } from
+  CloudIcon,
+  ArchiveIcon } from
 'lucide-react';
 import { toast } from 'sonner';
 import { useTranscripts } from '../../hooks/useTranscripts';
@@ -413,7 +414,7 @@ export function Sidebar({
               className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-red-400 hover:bg-slate-700 hover:text-red-300 transition-colors">
 
                 <TrashIcon className="h-3.5 w-3.5" />
-                Delete Folder
+                Archive Folder
               </button>
             </div>
           }
@@ -529,6 +530,16 @@ export function Sidebar({
           <span className="ml-auto bg-slate-800 text-slate-400 py-0.5 px-2 rounded-full text-xs">
             {transcripts.length}
           </span>
+        </button>
+
+        <button
+          onClick={() => {
+            navigate('/app/archives');
+            if (isMobile && onClose) onClose();
+          }}
+          className={`w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors ${location.pathname === '/app/archives' ? 'bg-slate-800 text-white' : 'hover:bg-slate-800 hover:text-white'}`}>
+          <ArchiveIcon className="h-4 w-4" />
+          Archives
         </button>
 
         <div className="pt-6 pb-2 flex items-center justify-between px-3">

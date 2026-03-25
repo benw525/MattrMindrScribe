@@ -1,7 +1,7 @@
 import React, { useMemo, useState, useEffect, useCallback } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { TrashIcon, FileIcon, FolderInputIcon } from 'lucide-react';
+import { ArchiveIcon, FileIcon, FolderInputIcon } from 'lucide-react';
 import { useTranscripts } from '../hooks/useTranscripts';
 import { TranscriptCard } from '../components/transcripts/TranscriptCard';
 import { SearchBar } from '../components/transcripts/SearchBar';
@@ -82,8 +82,8 @@ function SelectionBar({ selectedCount, showMoveMenu, onToggleMoveMenu, onBatchMo
       <button
         onClick={onBatchDelete}
         className="flex items-center gap-2 text-red-400 hover:text-red-300 font-medium transition-colors text-sm">
-        <TrashIcon className="h-4 w-4" />
-        Delete
+        <ArchiveIcon className="h-4 w-4" />
+        Archive
       </button>
       <button
         onClick={onCancel}
@@ -126,7 +126,7 @@ export function DashboardPage() {
   const handleBatchDelete = () => {
     if (selectedIds.size === 0) return;
     deleteTranscripts(Array.from(selectedIds));
-    toast.success(`Deleted ${selectedIds.size} transcript(s)`);
+    toast.success(`Archived ${selectedIds.size} transcript(s)`);
     setSelectedIds(new Set());
   };
   const handleBatchMove = (folderId: string | null) => {

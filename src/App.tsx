@@ -13,6 +13,7 @@ import { VideoPresentModePage } from './pages/VideoPresentModePage';
 import { PresenterPopout } from './pages/PresenterPopout';
 import { AuthPage } from './pages/AuthPage';
 import { LandingPage } from './pages/LandingPage';
+import ArchivesPage from './pages/ArchivesPage';
 import { SharedProvider } from './contexts/SharedContext';
 
 class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
@@ -131,6 +132,7 @@ export function App() {
                   }>
                   <Route index element={<DashboardPage />} />
                   <Route path="transcript/:id" element={<TranscriptViewerPage />} />
+                  <Route path="archives" element={<ArchivesPage />} />
                 </Route>
                 <Route
                   path="/app/transcript/:id/present"

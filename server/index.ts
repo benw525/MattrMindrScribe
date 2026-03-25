@@ -273,6 +273,18 @@ pool.query(`
 });
 
 pool.query(`
+  ALTER TABLE transcripts ADD COLUMN IF NOT EXISTS archived_at TIMESTAMP DEFAULT NULL;
+`).catch((err: any) => {
+  if (!err.message.includes('already exists')) console.error('Migration error (transcripts archived_at):', err.message);
+});
+
+pool.query(`
+  ALTER TABLE folders ADD COLUMN IF NOT EXISTS archived_at TIMESTAMP DEFAULT NULL;
+`).catch((err: any) => {
+  if (!err.message.includes('already exists')) console.error('Migration error (folders archived_at):', err.message);
+});
+
+pool.query(`
   CREATE TABLE IF NOT EXISTS connected_folders (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,

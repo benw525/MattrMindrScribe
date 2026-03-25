@@ -375,6 +375,11 @@ export const api = {
       request(`/transcripts/${id}`, { method: 'PATCH', body: JSON.stringify(updates) }),
     delete: (ids: string[]) =>
       request('/transcripts', { method: 'DELETE', body: JSON.stringify({ ids }) }),
+    archived: () => request('/transcripts/archived'),
+    restore: (ids: string[]) =>
+      request('/transcripts/restore', { method: 'POST', body: JSON.stringify({ ids }) }),
+    permanentDelete: (ids: string[]) =>
+      request('/transcripts/permanent', { method: 'DELETE', body: JSON.stringify({ ids }) }),
     createVersion: (id: string, changeDescription: string) =>
       request(`/transcripts/${id}/versions`, { method: 'POST', body: JSON.stringify({ changeDescription }) }),
     getVersions: (id: string) => request(`/transcripts/${id}/versions`),
@@ -422,6 +427,9 @@ export const api = {
     update: (id: string, updates: Record<string, any>) =>
       request(`/folders/${id}`, { method: 'PATCH', body: JSON.stringify(updates) }),
     delete: (id: string) => request(`/folders/${id}`, { method: 'DELETE' }),
+    archived: () => request('/folders/archived'),
+    restore: (id: string) => request(`/folders/${id}/restore`, { method: 'POST' }),
+    permanentDelete: (id: string) => request(`/folders/${id}/permanent`, { method: 'DELETE' }),
     moveTranscripts: (transcriptIds: string[], folderId: string | null) =>
       request('/folders/move-transcripts', { method: 'POST', body: JSON.stringify({ transcriptIds, folderId }) }),
   },
