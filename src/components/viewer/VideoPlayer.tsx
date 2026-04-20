@@ -29,18 +29,31 @@ export function VideoPlayer({
     const video = videoRef.current;
     if (!video || !mediaUrl) return;
     video.src = mediaUrl;
+    video.load();
   }, [mediaUrl]);
 
   useEffect(() => {
     const video = videoRef.current;
     if (!video || !video.src) return;
 
-    if (isPlaying) {
-      video.play().catch(console.error);
-    } else {
+    if (isPlaying && video.paused) {
+      video.play().catch((err) => console.error('Video play failed:', err));
+    } else if (!isPlaying && !video.paused) {
       video.pause();
     }
-  }, [isPlaying]);
+  }, [isPlaying, mediaUrl]);
+
+  const handleTogglePlay = useCallback(() => {
+    const video = videoRef.current;
+    if (video && video.src) {
+      if (video.paused) {
+        video.play().catch((err) => console.error('Video play failed:', err));
+      } else {
+        video.pause();
+      }
+    }
+    onTogglePlay();
+  }, [onTogglePlay]);
 
   useEffect(() => {
     if (videoRef.current) {
@@ -79,7 +92,7 @@ export function VideoPlayer({
     <div className="bg-slate-900 rounded-xl overflow-hidden shadow-lg flex flex-col">
       <div
         className="relative bg-black flex items-center justify-center group cursor-pointer aspect-video"
-        onClick={onTogglePlay}
+        onClick={handleTogglePlay}
       >
         <video
           ref={videoRef}
@@ -88,7 +101,7 @@ export function VideoPlayer({
           preload="auto"
           onTimeUpdate={handleTimeUpdate}
           onEnded={() => {
-            if (isPlaying) onTogglePlay();
+            if (isPlaying) handleTogglePlay();
           }}
         />
 
@@ -103,7 +116,7 @@ export function VideoPlayer({
 
       <div className="bg-slate-900 px-4 py-3 flex items-center gap-4">
         <button
-          onClick={onTogglePlay}
+          onClick={handleTogglePlay}
           className="text-white hover:text-indigo-400 transition-colors"
         >
           {isPlaying ? (
